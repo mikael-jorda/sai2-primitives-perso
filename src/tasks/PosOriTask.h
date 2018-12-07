@@ -19,6 +19,11 @@
 #include <string>
 #include <chrono>
 
+#ifdef USING_OTG
+	#include "trajectory_generation/OTG.h"
+	#include "trajectory_generation/OTG_ori.h"
+#endif
+
 namespace Sai2Primitives
 {
 
@@ -31,28 +36,45 @@ public:
 	//------------------------------------------------
 
 	/**
-	 * @brief Constructor that takes an Affine3d matrix for definition of the control frame. Creates a full position controller by default.
-	 * 
-	 * @param robot           A pointer to a Sai2Model object for the robot that is to be controlled	
-	 * @param link_name       The name of the link in the robot at which to attach the control frame
-	 * @param compliant_frame The position and orientation of the control frame in local link coordinates
+	 * @brief      Constructor that takes an Affine3d matrix for definition of
+	 *             the control frame. Creates a full position controller by
+	 *             default.
+	 *
+	 * @param      robot          A pointer to a Sai2Model object for the robot
+	 *                            that is to be controlled
+	 * @param      link_name      The name of the link in the robot at which to
+	 *                            attach the control frame
+	 * @param      control_frame  The position and orientation of the control
+	 *                            frame in local link coordinates
+	 * @param[in]  loop_time      time taken by a control loop. Used only in
+	 *                            trajectory generation
 	 */
 	PosOriTask(Sai2Model::Sai2Model* robot, 
 		            const std::string link_name, 
-		            const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity());
+		            const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity(),
+		            const double loop_time = 0.001);
 
 	/**
-	 * @brief Constructor that takes a Vector3d for definition of the control frame position and a Matrix3d for the frame orientation. Creates a full position controller by default.
-	 * 
-	 * @param robot           A pointer to a Sai2Model object for the robot that is to be controlled	
-	 * @param link_name       The name of the link in the robot at which to attach the control frame
-	 * @param pos_in_link     The position the control frame in local link coordinates
-	 * @param rot_in_link     The orientation of the control frame in local link coordinates
+	 * @brief      Constructor that takes a Vector3d for definition of the
+	 *             control frame position and a Matrix3d for the frame
+	 *             orientation. Creates a full position controller by default.
+	 *
+	 * @param      robot        A pointer to a Sai2Model object for the robot
+	 *                          that is to be controlled
+	 * @param      link_name    The name of the link in the robot at which to
+	 *                          attach the control frame
+	 * @param      pos_in_link  The position the control frame in local link
+	 *                          coordinates
+	 * @param      rot_in_link  The orientation of the control frame in local
+	 *                          link coordinates
+	 * @param[in]  loop_time    time taken by a control loop. Used only in
+	 *                          trajectory generation
 	 */
 	PosOriTask(Sai2Model::Sai2Model* robot, 
 		            const std::string link_name, 
 		            const Eigen::Vector3d pos_in_link, 
-		            const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity());
+		            const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity(),
+		            const double loop_time = 0.001);
 
 
 	//------------------------------------------------
@@ -88,10 +110,6 @@ public:
 	 *             configuration as well as the integrator terms
 	 */
 	void reInitializeTask();
-
-	void enableVelocitySaturation(const Eigen::Vector3d& linear_saturation_velocity, const Eigen::Vector3d& angular_saturation_velocity);
-	
-	void disableVelocitySaturation();
 
 	// -------- force control related methods --------
 
@@ -267,7 +285,6 @@ public:
 	// movement quantities
 	Eigen::Vector3d _current_position;      // robot frame
 	Eigen::Vector3d _desired_position;      // robot frame
-	Eigen::Vector3d _goal_position;         // robot frame
 	Eigen::Matrix3d _current_orientation;   // robot frame
 	Eigen::Matrix3d _desired_orientation;   // robot frame
 
@@ -315,11 +332,26 @@ public:
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
-	bool _velocity_saturation = false;
+	bool _use_velocity_saturation_flag = false;
 	Eigen::Vector3d _linear_saturation_velocity;
 	Eigen::Vector3d _angular_saturation_velocity;
 
-	double _max_velocity;
+	bool _first_iteration;
+
+	Eigen::VectorXd _step_desired_position;
+	Eigen::VectorXd _step_desired_velocity;
+	Eigen::Matrix3d _step_desired_orientation;
+	Eigen::Vector3d _step_orientation_error;
+	Eigen::Vector3d _step_desired_angular_velocity;
+
+#ifdef USING_OTG
+	double _loop_time;
+	OTG* _otg_pos;
+	OTG_ori* _otg_ori;
+
+	bool _use_interpolation_pos_flag = true;
+	bool _use_interpolation_ori_flag = false;
+#endif
 
 };
 

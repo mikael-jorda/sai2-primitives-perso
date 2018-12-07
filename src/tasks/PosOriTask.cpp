@@ -13,10 +13,17 @@ namespace Sai2Primitives
 {
 
 
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, std::string link_name, Eigen::Affine3d control_frame) :
-	PosOriTask(robot, link_name, control_frame.translation(), control_frame.linear()) {}
+PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
+			const std::string link_name, 
+			const Eigen::Affine3d control_frame,
+			const double loop_time) :
+	PosOriTask(robot, link_name, control_frame.translation(), control_frame.linear(), loop_time) {}
 
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, std::string link_name, Eigen::Vector3d pos_in_link, Eigen::Matrix3d rot_in_link)
+PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
+			const std::string link_name, 
+			const Eigen::Vector3d pos_in_link, 
+			const Eigen::Matrix3d rot_in_link,
+			const double loop_time)
 {
 
 	Eigen::Affine3d control_frame = Eigen::Affine3d::Identity();
@@ -32,7 +39,6 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, std::string link_name, Eigen
 	// motion
 	_robot->position(_current_position, _link_name, _control_frame.translation());
 	_robot->position(_desired_position, _link_name, _control_frame.translation());
-	_robot->position(_goal_position, _link_name, _control_frame.translation());
 	_robot->rotation(_current_orientation, _link_name);
 	_robot->rotation(_desired_orientation, _link_name);
 
@@ -40,10 +46,9 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, std::string link_name, Eigen
 	_desired_velocity.setZero();
 	_current_angular_velocity.setZero();
 	_desired_angular_velocity.setZero();
-	_linear_saturation_velocity.setZero();
-	_angular_saturation_velocity.setZero();
 
-	_max_velocity = 0;
+	_linear_saturation_velocity = 0.3*Eigen::Vector3d::Ones();
+	_angular_saturation_velocity = M_PI/4*Eigen::Vector3d::Ones();
 
 	_kp_pos = 50.0;
 	_kv_pos = 14.0;
@@ -94,6 +99,27 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, std::string link_name, Eigen
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
 
 	_first_iteration = true;
+
+	_step_desired_position = _desired_position;
+	_step_desired_velocity = _desired_velocity;
+	_step_desired_orientation = _desired_orientation;
+	_step_orientation_error.setZero(3);
+	_step_desired_angular_velocity.setZero(3);
+
+#ifdef USING_OTG
+	_loop_time = loop_time;
+	_otg_pos = new OTG(_current_position, _loop_time);
+	_otg_ori = new OTG_ori(_current_orientation, _loop_time);
+
+	_otg_pos->setMaxVelocity(0.3);
+	_otg_pos->setMaxAcceleration(0.6);
+	_otg_pos->setMaxJerk(1.2);
+
+	_otg_ori->setMaxVelocity(M_PI/4);
+	_otg_ori->setMaxAcceleration(M_PI/2);
+	_otg_ori->setMaxJerk(M_PI);
+
+#endif
 }
 
 
@@ -134,10 +160,19 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	Eigen::Vector3d moment_related_force = Eigen::Vector3d::Zero();
 	Eigen::Vector3d orientation_related_force = Eigen::Vector3d::Zero();
 
-	// update velocity and angular velocity for damping term
+	// update controller state
+	_robot->position(_current_position, _link_name, _control_frame.translation());
+	_robot->rotation(_current_orientation, _link_name);
+	_current_orientation = _current_orientation * _control_frame.linear(); // orientation of compliant frame in robot frame
+	Sai2Model::orientationError(_orientation_error, _desired_orientation, _current_orientation);
 	_current_velocity = _projected_jacobian.block(0,0,3,_robot->_dof) * _robot->_dq;
 	_current_angular_velocity = _projected_jacobian.block(3,0,3,_robot->_dof) * _robot->_dq;
 
+	_step_desired_position = _desired_position;
+	_step_desired_velocity = _desired_velocity;
+	_step_desired_orientation = _desired_orientation;
+	_step_orientation_error = _orientation_error;
+	_step_desired_angular_velocity = _desired_angular_velocity;
 
 	// force related terms
 	if(_closed_loop_force_control)
@@ -174,91 +209,75 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	}
 
 	// linear motion related terms
-
-	// update desired position if in velocity saturation mode
-	if(_max_velocity > 0)
+	// compute next state from trajectory generation
+#ifdef USING_OTG
+	if(_use_interpolation_pos_flag)
 	{
-		Eigen::Vector3d proxy_error = _goal_position - _desired_position;
-		if( proxy_error.norm() > 0 && proxy_error.norm() > _max_velocity*_t_diff.count() )
-		{
-			_desired_position += proxy_error/proxy_error.norm() * _max_velocity * _t_diff.count(); 
-		}
-		else
-		{
-			_desired_position = _goal_position;
-		}
-		if( proxy_error.norm() > 0 && proxy_error.norm() > 10 * _max_velocity*_t_diff.count() )
-		{
-			_desired_velocity = proxy_error/proxy_error.norm() * _max_velocity;
-		}
-		else
-		{
-			_desired_velocity.setZero();
-		}
+		_otg_pos->setGoalPosition(_desired_position);
+		_otg_pos->computeNextState(_step_desired_position, _step_desired_velocity);
 	}
-	else
-	{
-		_desired_position = _goal_position;
-	}
+#endif
 	
-	// get curent position for P term
-	_robot->position(_current_position, _link_name, _control_frame.translation());
-
 	// update integrated error for I term
-	_integrated_position_error += (_current_position - _desired_position) * _t_diff.count();
+	_integrated_position_error += (_current_position - _step_desired_position) * _t_diff.count();
 
 	// final contribution
-	if(_velocity_saturation)
+	if(_use_velocity_saturation_flag)
 	{
-		_desired_velocity = -_kp_pos / _kv_pos * (_current_position - _desired_position) - _ki_pos / _kv_pos * _integrated_position_error;
+		_step_desired_velocity = -_kp_pos / _kv_pos * (_current_position - _step_desired_position) - _ki_pos / _kv_pos * _integrated_position_error;
 		for(int i=0; i<3; i++)
 		{
-			if(_desired_velocity(i) > _linear_saturation_velocity(i))
+			if(_step_desired_velocity(i) > _linear_saturation_velocity(i))
 			{
-				_desired_velocity(i) = _linear_saturation_velocity(i);
+				_step_desired_velocity(i) = _linear_saturation_velocity(i);
 			}
-			else if(_desired_velocity(i) < -_linear_saturation_velocity(i))
+			else if(_step_desired_velocity(i) < -_linear_saturation_velocity(i))
 			{
-				_desired_velocity(i) = -_linear_saturation_velocity(i);
+				_step_desired_velocity(i) = -_linear_saturation_velocity(i);
 			}
 		}
-		position_related_force = _sigma_position * (-_kv_pos*(_current_velocity - _desired_velocity));
+		position_related_force = _sigma_position * (-_kv_pos*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		position_related_force = _sigma_position*(-_kp_pos*(_current_position - _desired_position) - _kv_pos*(_current_velocity - _desired_velocity ) - _ki_pos * _integrated_position_error);
+		position_related_force = _sigma_position*(-_kp_pos*(_current_position - _step_desired_position) - _kv_pos*(_current_velocity - _step_desired_velocity ) - _ki_pos * _integrated_position_error);
 	}
 
 
 	// angular motion related terms
-	// get curent position and orientation error for P term
-	_robot->rotation(_current_orientation, _link_name);
-	_current_orientation = _current_orientation * _control_frame.linear(); // orientation of compliant frame in robot frame
-	Sai2Model::orientationError(_orientation_error, _desired_orientation, _current_orientation);
+	// compute next state from trajectory generation
+#ifdef USING_OTG
+	if(_use_interpolation_ori_flag)
+	{
+		_otg_ori->setGoalPosition(_desired_orientation, _current_orientation);
+		_otg_ori->computeNextState(_step_desired_orientation, _step_desired_angular_velocity);
+		Sai2Model::orientationError(_step_orientation_error, _step_desired_orientation, _current_orientation);
+	}
+#endif
 
 	// update integrated error for I term
-	_integrated_orientation_error += _orientation_error * _t_diff.count();
+	_integrated_orientation_error += _step_orientation_error * _t_diff.count();
 
 	// final contribution
-	if(_velocity_saturation)
+	if(_use_velocity_saturation_flag)
 	{
-		_desired_angular_velocity = -_kp_ori / _kv_ori * _orientation_error - _ki_ori / _kv_ori * _integrated_position_error;
+		_step_desired_angular_velocity = -_kp_ori / _kv_ori * _step_orientation_error - _ki_ori / _kv_ori * _integrated_position_error;
 		for(int i=0; i<3; i++)
 		{
-			if(_desired_angular_velocity(i) > _angular_saturation_velocity(i))
+			if(_step_desired_angular_velocity(i) > _angular_saturation_velocity(i))
 			{
-				_desired_angular_velocity(i) = _angular_saturation_velocity(i);
+				_step_desired_angular_velocity(i) = _angular_saturation_velocity(i);
 			}
-			else if(_desired_angular_velocity(i) < -_angular_saturation_velocity(i))
+			else if(_step_desired_angular_velocity(i) < -_angular_saturation_velocity(i))
 			{
-				_desired_angular_velocity(i) = -_angular_saturation_velocity(i);
+				_step_desired_angular_velocity(i) = -_angular_saturation_velocity(i);
 			}
 		}
-		orientation_related_force = _sigma_orientation * (-_kv_ori*(_current_angular_velocity - _desired_angular_velocity));
+		orientation_related_force = _sigma_orientation * (-_kv_ori*(_current_angular_velocity - _step_desired_angular_velocity));
 	}
 	else
 	{
-		orientation_related_force = _sigma_orientation * ( -_kp_ori*_orientation_error - _kv_ori*(_current_angular_velocity - _desired_angular_velocity) - _ki_ori*_integrated_orientation_error);
+		orientation_related_force = _sigma_orientation * ( -_kp_ori*_step_orientation_error - _kv_ori*(_current_angular_velocity - _step_desired_angular_velocity) - _ki_ori*_integrated_orientation_error);
 	}
 
 	// compute task force
@@ -285,7 +304,6 @@ void PosOriTask::reInitializeTask()
 	// motion
 	_robot->position(_current_position, _link_name, _control_frame.translation());
 	_robot->position(_desired_position, _link_name, _control_frame.translation());
-	_robot->position(_goal_position, _link_name, _control_frame.translation());
 	_robot->rotation(_current_orientation, _link_name);
 	_robot->rotation(_desired_orientation, _link_name);
 
@@ -293,12 +311,16 @@ void PosOriTask::reInitializeTask()
 	_desired_velocity.setZero();
 	_current_angular_velocity.setZero();
 	_desired_angular_velocity.setZero();
-	_linear_saturation_velocity.setZero();
-	_angular_saturation_velocity.setZero();
 
 	_orientation_error.setZero();
 	_integrated_position_error.setZero();
 	_integrated_orientation_error.setZero();
+
+	_step_desired_position = _desired_position;
+	_step_desired_velocity = _desired_velocity;
+	_step_desired_orientation = _desired_orientation;
+	_step_orientation_error.setZero(3);
+	_step_desired_angular_velocity.setZero(3);
 
 	_sigma_position = Eigen::Matrix3d::Identity();
 	_sigma_orientation = Eigen::Matrix3d::Identity();
@@ -317,35 +339,15 @@ void PosOriTask::reInitializeTask()
 	_closed_loop_force_control = false;
 	_closed_loop_moment_control = false;
 
+	_task_force.setZero();
 	_first_iteration = true;	
+
+#ifdef USING_OTG 
+	_otg_pos->reInitialize(_current_position);
+	_otg_ori->reInitialize(_current_orientation);
+#endif
 }
 
-void PosOriTask::enableVelocitySaturation(const Eigen::Vector3d& linear_saturation_velocity, const Eigen::Vector3d& angular_saturation_velocity)
-{
-	_velocity_saturation = true;
-	_linear_saturation_velocity = linear_saturation_velocity;
-	_angular_saturation_velocity = angular_saturation_velocity;
-	for(int i=0; i<3; i++)
-	{
-		if(_linear_saturation_velocity(i) < 0)
-		{
-			std::cout << "WARNING : linear saturation velocity " << i << " should be positive. Set to zero" << std::endl;
-			_linear_saturation_velocity(i) = 0;
-		}
-		if(_angular_saturation_velocity(i) < 0)
-		{
-			std::cout << "WARNING : angular saturation velocity " << i << " should be positive. Set to zero" << std::endl;
-			_angular_saturation_velocity(i) = 0;
-		}
-	}
-}
-
-void PosOriTask::disableVelocitySaturation()
-{
-	_velocity_saturation = false;
-	_linear_saturation_velocity.setZero();
-	_angular_saturation_velocity.setZero();
-}
 
 void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link)
 {

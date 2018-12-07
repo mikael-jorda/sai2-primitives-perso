@@ -16,6 +16,10 @@
 #include <string>
 #include <chrono>
 
+#ifdef USING_OTG
+	#include "trajectory_generation/OTG.h"
+#endif
+
 namespace Sai2Primitives
 {
 
@@ -26,10 +30,12 @@ public:
 	/**
 	 * @brief      Constructor
 	 *
-	 * @param      robot  A pointer to a Sai2Model object for the robot that is
-	 *                    to be controlled
+	 * @param      robot      A pointer to a Sai2Model object for the robot that
+	 *                        is to be controlled
+	 * @param[in]  loop_time  time taken by a control loop. Used only in trajectory generation
 	 */
-	JointTask(Sai2Model::Sai2Model* robot);
+	JointTask(Sai2Model::Sai2Model* robot,
+			const double loop_time = 0.001);
 
 	/**
 	 * @brief      update the task model (only _N_prec for a joint task)
@@ -61,18 +67,29 @@ public:
 
 	Eigen::VectorXd _current_position;
 	Eigen::VectorXd _desired_position;
-	Eigen::VectorXd _goal_position;
 
 	Eigen::VectorXd _current_velocity;
 	Eigen::VectorXd _desired_velocity;
 
-	double _max_velocity;
+	bool _use_velocity_saturation_flag = false;
+	Eigen::VectorXd _saturation_velocity;
 
 	double _kp;
 	double _kv;
 	double _ki;
 
 	Eigen::VectorXd _integrated_position_error;
+
+	Eigen::VectorXd _step_desired_position;
+	Eigen::VectorXd _step_desired_velocity;
+
+#ifdef USING_OTG
+	double _loop_time;
+	OTG* _otg;
+	Eigen::VectorXd _prev_desired_position;
+
+	bool _use_interpolation_flag = true;
+#endif
 };
 
 

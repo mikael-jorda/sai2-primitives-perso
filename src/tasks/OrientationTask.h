@@ -17,6 +17,10 @@
 #include <string>
 #include <chrono>
 
+#ifdef USING_OTG
+	#include "trajectory_generation/OTG_ori.h"
+#endif
+
 namespace Sai2Primitives
 {
 
@@ -25,28 +29,43 @@ class OrientationTask : public TemplateTask
 public:
 
 	/**
-	 * @brief Constructor that takes an Affine3d matrix for definition of the control frame
-	 * 
-	 * @param robot           A pointer to a Sai2Model object for the robot that is to be controlled	
-	 * @param link_name       The name of the link in the robot at which to attach the control frame
-	 * @param compliant_frame The position and orientation of the control frame in local link coordinates
+	 * @brief      Constructor that takes an Affine3d matrix for definition of
+	 *             the control frame
+	 *
+	 * @param      robot          A pointer to a Sai2Model object for the robot
+	 *                            that is to be controlled
+	 * @param      link_name      The name of the link in the robot at which to
+	 *                            attach the control frame
+	 * @param      control_frame  The position and orientation of the control
+	 *                            frame in local link coordinates
+	 * @param[in]  loop_time      time taken by a control loop. Used only in trajectory generation
 	 */
 	OrientationTask(Sai2Model::Sai2Model* robot, 
 		            const std::string link_name, 
-		            const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity());
+		            const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity(),
+		            const double loop_time = 0.001);
 
 	/**
-	 * @brief Constructor that takes a Vector3d for definition of the control frame position and a Matrix3d for the frame orientation
-	 * 
-	 * @param robot           A pointer to a Sai2Model object for the robot that is to be controlled	
-	 * @param link_name       The name of the link in the robot at which to attach the control frame
-	 * @param pos_in_link     The position the control frame in local link coordinates
-	 * @param rot_in_link     The orientation of the control frame in local link coordinates
+	 * @brief      Constructor that takes a Vector3d for definition of the
+	 *             control frame position and a Matrix3d for the frame
+	 *             orientation
+	 *
+	 * @param      robot        A pointer to a Sai2Model object for the robot
+	 *                          that is to be controlled
+	 * @param      link_name    The name of the link in the robot at which to
+	 *                          attach the control frame
+	 * @param      pos_in_link  The position the control frame in local link
+	 *                          coordinates
+	 * @param      rot_in_link  The orientation of the control frame in local
+	 *                          link coordinates
+	 * @param[in]  loop_time    time taken by a control loop. Used only in
+	 *                          trajectory generation
 	 */
 	OrientationTask(Sai2Model::Sai2Model* robot, 
 		            const std::string link_name, 
 		            const Eigen::Vector3d pos_in_link = Eigen::Vector3d::Zero(), 
-		            const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity());
+		            const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity(),
+		            const double loop_time = 0.001);
 
 	/**
 	 * @brief update the task model (jacobians, task inertia and nullspace matrices)
@@ -70,6 +89,11 @@ public:
 	 */
 	virtual void computeTorques(Eigen::VectorXd& task_joint_torques);
 
+	/**
+	 * @brief      reinitializes the desired state to the current robot
+	 *             configuration as well as the integrator terms
+	 */
+	void reInitializeTask();
 
 	std::string _link_name;
 	Eigen::Affine3d _control_frame;
@@ -92,6 +116,20 @@ public:
 	Eigen::MatrixXd _Lambda;
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
+
+	bool _use_velocity_saturation_flag = false;
+	Eigen::Vector3d _saturation_velocity;
+
+	Eigen::Matrix3d _step_desired_orientation;
+	Eigen::Vector3d _step_orientation_error;
+	Eigen::Vector3d _step_desired_angular_velocity;
+
+#ifdef USING_OTG
+	double _loop_time;
+	OTG_ori* _otg;
+
+	bool _use_interpolation_flag = true;
+#endif
 
 };
 

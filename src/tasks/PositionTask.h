@@ -17,6 +17,10 @@
 #include <string>
 #include <chrono>
 
+#ifdef USING_OTG
+	#include "trajectory_generation/OTG.h"
+#endif
+
 namespace Sai2Primitives
 {
 
@@ -25,28 +29,42 @@ class PositionTask : public TemplateTask
 public:
 
 	/**
-	 * @brief Constructor that takes an Affine3d matrix for definition of the control frame
-	 * 
-	 * @param robot           A pointer to a Sai2Model object for the robot that is to be controlled	
-	 * @param link_name       The name of the link in the robot at which to attach the control frame
-	 * @param compliant_frame The position and orientation of the control frame in local link coordinates
+	 * @brief      Constructor that takes an Affine3d matrix for definition of
+	 *             the control frame
+	 *
+	 * @param      robot          A pointer to a Sai2Model object for the robot
+	 *                            that is to be controlled
+	 * @param      link_name      The name of the link in the robot at which to
+	 *                            attach the control frame
+	 * @param      control_frame  The position and orientation of the control
+	 *                            frame in local link coordinates
+	 * @param[in]  loop_time      time taken by a control loop. Used only in trajectory generation
 	 */
 	PositionTask(Sai2Model::Sai2Model* robot, 
 		         const std::string link_name, 
-		         const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity());
+		         const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity(),
+		         const double loop_time = 0.001);
 
 	/**
-	 * @brief Constructor that takes a Vector3d for definition of the control frame position and a Matrix3d for the frame orientation
-	 * 
-	 * @param robot           A pointer to a Sai2Model object for the robot that is to be controlled	
-	 * @param link_name       The name of the link in the robot at which to attach the control frame
-	 * @param pos_in_link     The position the control frame in local link coordinates
-	 * @param rot_in_link     The orientation of the control frame in local link coordinates
+	 * @brief      Constructor that takes a Vector3d for definition of the
+	 *             control frame position and a Matrix3d for the frame
+	 *             orientation
+	 *
+	 * @param      robot        A pointer to a Sai2Model object for the robot
+	 *                          that is to be controlled
+	 * @param      link_name    The name of the link in the robot at which to
+	 *                          attach the control frame
+	 * @param      pos_in_link  The position the control frame in local link
+	 *                          coordinates
+	 * @param      rot_in_link  The orientation of the control frame in local
+	 *                          link coordinates
+	 * @param[in]  loop_time    time taken by a control loop. Used only in trajectory generation
 	 */
 	PositionTask(Sai2Model::Sai2Model* robot, 
 		         const std::string link_name, 
 				 const Eigen::Vector3d pos_in_link = Eigen::Vector3d::Zero(), 
-				 const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity());
+				 const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity(),
+				 const double loop_time = 0.001);
 
 	/**
 	 * @brief update the task model (jacobians, task inertia and nullspace matrices)
@@ -76,16 +94,11 @@ public:
 	 */
 	void reInitializeTask();
 
-	void enableVelocitySaturation(const Eigen::Vector3d& saturation_velocity);
-	
-	void disableVelocitySaturation();
-
 	std::string _link_name;
 	Eigen::Affine3d _control_frame;
 
 	Eigen::Vector3d _current_position;
 	Eigen::Vector3d _desired_position;
-	Eigen::Vector3d _goal_position;         
 
 	Eigen::Vector3d _current_velocity;
 	Eigen::Vector3d _desired_velocity;
@@ -102,10 +115,18 @@ public:
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
-	bool _velocity_saturation = false;
+	bool _use_velocity_saturation_flag = false;
 	Eigen::Vector3d _saturation_velocity;
 
-	double _max_velocity;
+	Eigen::VectorXd _step_desired_position;
+	Eigen::VectorXd _step_desired_velocity;
+
+#ifdef USING_OTG
+	double _loop_time;
+	OTG* _otg;
+
+	bool _use_interpolation_flag = true;
+#endif
 
 };
 
