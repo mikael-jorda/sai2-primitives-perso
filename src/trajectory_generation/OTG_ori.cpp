@@ -22,14 +22,12 @@ OTG_ori::OTG_ori(const Eigen::Matrix3d& initial_orientation, const double loop_t
     _OP  = new RMLPositionOutputParameters(3);
 	_RML = new ReflexxesAPI(3, _loop_time);
 
-    setGoalPosition(initial_orientation, initial_orientation);
+    setGoalPositionAndVelocity(initial_orientation, initial_orientation, Eigen::Vector3d::Zero());
     for(int i=0 ; i<3 ; i++)
     {
     	_IP->SelectionVector->VecData[i] = true;
 		_OP->NewPositionVector->VecData[i] = 0;
     }
-
-
 }
 
 OTG_ori::~OTG_ori()
@@ -44,7 +42,7 @@ OTG_ori::~OTG_ori()
 
 void OTG_ori::reInitialize(const Eigen::Matrix3d& initial_orientation)
 {
-    setGoalPosition(initial_orientation, initial_orientation);
+    setGoalPositionAndVelocity(initial_orientation, initial_orientation, Eigen::Vector3d::Zero());
 
     for(int i=0 ; i<3 ; i++)
     {
@@ -120,7 +118,7 @@ void OTG_ori::setMaxJerk(const double max_jerk)
 	setMaxJerk(max_jerk * Eigen::VectorXd::Ones(3));
 }
 
-void OTG_ori::setGoalPosition(const Eigen::Matrix3d goal_orientation, const Eigen::Matrix3d current_orientation)
+void OTG_ori::setGoalPositionAndVelocity(const Eigen::Matrix3d goal_orientation, const Eigen::Matrix3d current_orientation, const Eigen::Vector3d goal_velocity)
 {
 	if((goal_orientation.transpose() * goal_orientation - Eigen::Matrix3d::Identity()).norm() > 1e-6)
 	{
@@ -138,12 +136,13 @@ void OTG_ori::setGoalPosition(const Eigen::Matrix3d goal_orientation, const Eige
 	{
 		throw std::invalid_argument("current orientation is not a valid rotation matrix OTG_ori::setGoalPosition\n");
 	}
-	if(_goal_orientation != goal_orientation)
+	if( (_goal_orientation != goal_orientation) || (_goal_angular_velocity_in_base_frame != goal_velocity) )
 	{
 		_goal_reached = false;
-		Eigen::Matrix3d T_new_to_previous_initial_frame = current_orientation.transpose()*_initial_orientation;
+		Eigen::Matrix3d R_new_to_previous_initial_frame = current_orientation.transpose()*_initial_orientation;
 		_initial_orientation = current_orientation;
 		_goal_orientation = goal_orientation;
+		_goal_angular_velocity_in_base_frame = goal_velocity;
 
 		Eigen::Vector3d velocity = Eigen::Vector3d::Zero();
 		Eigen::Vector3d acceleration = Eigen::Vector3d::Zero();
@@ -152,12 +151,13 @@ void OTG_ori::setGoalPosition(const Eigen::Matrix3d goal_orientation, const Eige
 			velocity(i) = _OP->NewVelocityVector->VecData[i];
 			acceleration(i) = _OP->NewAccelerationVector->VecData[i];
 		}
-		velocity = T_new_to_previous_initial_frame * velocity;
-		acceleration = T_new_to_previous_initial_frame * acceleration;
+		velocity = R_new_to_previous_initial_frame * velocity;
+		acceleration = R_new_to_previous_initial_frame * acceleration;
 
 		Eigen::Matrix3d goal_rot_relative_to_current = _initial_orientation.transpose()*goal_orientation;
 		Eigen::AngleAxisd rot_rel_aa = Eigen::AngleAxisd(goal_rot_relative_to_current);
 		Eigen::Vector3d rot_representation = rot_rel_aa.angle() * rot_rel_aa.axis();
+		Eigen::Vector3d goal_velocity_in_current_frame = _initial_orientation.transpose()*goal_velocity;
 
 		for(int i=0 ; i<3 ; i++)
 		{
@@ -165,6 +165,7 @@ void OTG_ori::setGoalPosition(const Eigen::Matrix3d goal_orientation, const Eige
 			_OP->NewVelocityVector->VecData[i] = velocity(i);
 			_OP->NewAccelerationVector->VecData[i] = acceleration(i);
 			_IP->TargetPositionVector->VecData[i] = rot_representation(i);
+			_IP->TargetVelocityVector->VecData[i] = goal_velocity_in_current_frame(i);
 		}
 	}
 
@@ -190,7 +191,7 @@ void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3
         {
         	if(_ResultValue == -102)
         	{
-        		printf("phase synchronisation not possible.\n");
+        		printf("trajectory generation : phase synchronisation not possible.\n");
         	}
         	else
         	{

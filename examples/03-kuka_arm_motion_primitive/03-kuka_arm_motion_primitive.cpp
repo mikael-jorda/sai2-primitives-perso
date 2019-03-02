@@ -196,8 +196,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Eigen::VectorXd motion_primitive_torques;
 	motion_primitive->enableGravComp();
 #ifdef USING_OTG
-	motion_primitive->_posori_task->_use_interpolation_pos_flag = false;
-	motion_primitive->_posori_task->_use_interpolation_ori_flag = false;
+	motion_primitive->_posori_task->_use_interpolation_flag = false;
 	motion_primitive->_joint_task->_use_interpolation_flag = false;
 #endif
 

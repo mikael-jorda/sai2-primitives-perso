@@ -83,11 +83,12 @@ public:
 	void setMaxJerk(const double max_jerk);
 
 	/**
-	 * @brief      Sets the goal position. The gol velocity will be zero
+	 * @brief      Sets the goal position and velocity
 	 *
 	 * @param[in]  goal_position  The goal position
+	 * @param[in]  goal_velocity  The goal velocity
 	 */
-	void setGoalPosition(const Eigen::VectorXd goal_position);
+	void setGoalPositionAndVelocity(const Eigen::VectorXd goal_position, const Eigen::VectorXd goal_velocity);
 
 	/**
 	 * @brief      Calculates the next desired position and velocity for the next step
@@ -106,7 +107,6 @@ public:
 
 	unsigned int _task_dof;
 	double _loop_time;
-
 	bool _goal_reached = false;
 
 	// Reflexxes variables

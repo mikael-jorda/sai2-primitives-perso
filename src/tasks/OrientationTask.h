@@ -95,18 +95,37 @@ public:
 	 */
 	void reInitializeTask();
 
+	//-----------------------------------------------
+	//         Member variables
+	//-----------------------------------------------
+
+	// inputs to be defined by the user
+	Eigen::Matrix3d _desired_orientation;       // defaults to the current orientation when the task is created
+	Eigen::Vector3d _desired_angular_velocity;  // defaults to Zero
+
+	double _kp;    // defaults to 50.0 
+	double _kv;    // defaults to 14.0
+	double _ki;    // defaults to 0.0
+
+	bool _use_velocity_saturation_flag;  // defaults to false
+	double _saturation_velocity;         // defaults to PI/3 Rad/s (60 degrees per second)
+
+// trajectory generation via interpolation using Reflexxes Library
+#ifdef USING_OTG
+	bool _use_interpolation_flag;   // defaults to true
+
+	// default limits for trajectory generation (same in all directions) :
+	// Velocity      - PI/3  Rad/s
+	// Acceleration  - PI    Rad/s^2
+	// Jerk          - 3PI   Rad/s^3
+#endif
+
+	// internal variables, not to be touched by the user
 	std::string _link_name;
 	Eigen::Affine3d _control_frame;
 
 	Eigen::Matrix3d _current_orientation;
-	Eigen::Matrix3d _desired_orientation;
-
 	Eigen::Vector3d _current_angular_velocity;
-	Eigen::Vector3d _desired_angular_velocity;
-
-	double _kp;
-	double _kv;
-	double _ki;
 
 	Eigen::Vector3d _orientation_error;
 	Eigen::Vector3d _integrated_orientation_error;
@@ -117,18 +136,13 @@ public:
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
-	bool _use_velocity_saturation_flag = false;
-	Eigen::Vector3d _saturation_velocity;
-
 	Eigen::Matrix3d _step_desired_orientation;
 	Eigen::Vector3d _step_orientation_error;
 	Eigen::Vector3d _step_desired_angular_velocity;
 
 #ifdef USING_OTG
 	double _loop_time;
-	OTG_ori* _otg;
-
-	bool _use_interpolation_flag = true;
+	OTG_ori* _otg;       
 #endif
 
 };

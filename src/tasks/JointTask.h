@@ -65,18 +65,35 @@ public:
 	 */
 	void reInitializeTask();
 
+
+	//-----------------------------------------------
+	//         Member variables
+	//-----------------------------------------------
+
+	// inputs to be defined by the user
+	Eigen::VectorXd _desired_position;   // defaults to the current configuration when the task is created
+	Eigen::VectorXd _desired_velocity;   // defaults to zero
+
+	double _kp;      // defaults to 50.0
+	double _kv;      // defaults to 14.0
+	double _ki;      // defaults to 0.0
+
+	bool _use_velocity_saturation_flag;    // defaults to false
+	Eigen::VectorXd _saturation_velocity;  // defaults to PI/3 for all axes
+
+// trajectory generation via interpolation using Reflexxes Library
+#ifdef USING_OTG
+	bool _use_interpolation_flag;    // defaults to true
+
+	// default limits for trajectory generation (same in all directions) :
+	// Velocity      - PI/3  Rad/s
+	// Acceleration  - PI    Rad/s^2
+	// Jerk          - 3PI   Rad/s^3
+#endif
+
+	// internal variables, not to be touched by the user
 	Eigen::VectorXd _current_position;
-	Eigen::VectorXd _desired_position;
-
 	Eigen::VectorXd _current_velocity;
-	Eigen::VectorXd _desired_velocity;
-
-	bool _use_velocity_saturation_flag = false;
-	Eigen::VectorXd _saturation_velocity;
-
-	double _kp;
-	double _kv;
-	double _ki;
 
 	Eigen::VectorXd _integrated_position_error;
 
@@ -86,9 +103,6 @@ public:
 #ifdef USING_OTG
 	double _loop_time;
 	OTG* _otg;
-	Eigen::VectorXd _prev_desired_position;
-
-	bool _use_interpolation_flag = true;
 #endif
 };
 

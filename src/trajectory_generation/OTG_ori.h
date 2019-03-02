@@ -83,11 +83,13 @@ public:
 	void setMaxJerk(const double max_jerk);
 
 	/**
-	 * @brief      Sets the goal position. The gol velocity will be zero
+	 * @brief      Sets the goal position and velocity
 	 *
-	 * @param[in]  goal_orientation  The goal position
+	 * @param[in]  goal_orientation     The goal position
+	 * @param[in]  current_orientation  The current orientation
+	 * @param[in]  goal_velocity        The goal velocity
 	 */
-	void setGoalPosition(const Eigen::Matrix3d goal_orientation, const Eigen::Matrix3d current_orientation);
+	void setGoalPositionAndVelocity(const Eigen::Matrix3d goal_orientation, const Eigen::Matrix3d current_orientation, const Eigen::Vector3d goal_velocity);
 
 	/**
 	 * @brief      Calculates the next desired position and velocity for the
@@ -110,6 +112,7 @@ public:
 
 	Eigen::Matrix3d _initial_orientation;
 	Eigen::Matrix3d _goal_orientation;
+	Eigen::Vector3d _goal_angular_velocity_in_base_frame;
 
 	// Reflexxes variables
 	int _ResultValue = 0;

@@ -197,8 +197,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	// PosOri task
 	Sai2Primitives::PosOriTask* posori_task = new Sai2Primitives::PosOriTask(robot, link_name, pos_in_link);
 #ifdef USING_OTG
-	posori_task->_use_interpolation_pos_flag = false;
-	posori_task->_use_interpolation_ori_flag = false;
+	posori_task->_use_interpolation_flag = false;
 #endif
 	Eigen::VectorXd posori_task_torques = Eigen::VectorXd::Zero(dof);
 	posori_task->_kp_pos = 100.0;

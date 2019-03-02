@@ -243,7 +243,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 #ifdef USING_OTG
 	if(_use_interpolation_pos_flag)
 	{
-		_otg_pos->setGoalPosition(_desired_object_position);
+		_otg_pos->setGoalPositionAndVelocity(_desired_object_position, _desired_object_velocity);
 		_otg_pos->computeNextState(_step_desired_object_position, _step_desired_object_velocity);
 	}
 #endif
@@ -280,7 +280,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 #ifdef USING_OTG
 	if(_use_interpolation_ori_flag)
 	{
-		_otg_ori->setGoalPosition(_desired_object_orientation, _current_object_orientation);
+		_otg_ori->setGoalPositionAndVelocity(_desired_object_orientation, _current_object_orientation, _desired_object_angular_velocity);
 		_otg_ori->computeNextState(_step_desired_object_orientation, _step_desired_object_angular_velocity);
 		Sai2Model::orientationError(_step_object_orientation_error, _step_desired_object_orientation, _current_object_orientation);
 	}

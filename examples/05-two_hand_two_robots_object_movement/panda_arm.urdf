@@ -8,13 +8,11 @@
         <inertia ixx="0.4" iyy="0.4" izz="0.4" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link0.obj"/>
         </geometry>
       </visual>
 <!--       <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link0.obj"/>
         </geometry>
@@ -27,13 +25,11 @@
         <inertia ixx="0.3" iyy="0.3" izz="0.3" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link1.obj"/>
         </geometry>
       </visual>
       <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link1.obj"/>
         </geometry>
@@ -46,13 +42,11 @@
         <inertia ixx="0.3" iyy="0.3" izz="0.3" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link2.obj"/>
         </geometry>
       </visual>
       <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link2.obj"/>
         </geometry>
@@ -65,13 +59,11 @@
         <inertia ixx="0.2" iyy="0.2" izz="0.2" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link3.obj"/>
         </geometry>
       </visual>
       <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link3.obj"/>
         </geometry>
@@ -84,13 +76,11 @@
         <inertia ixx="0.2" iyy="0.2" izz="0.2" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link4.obj"/>
         </geometry>
       </visual>
-      <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
+<!--       <collision>
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link4.obj"/>
         </geometry>
@@ -103,13 +93,11 @@
         <inertia ixx="0.2" iyy="0.2" izz="0.2" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link5.obj"/>
         </geometry>
       </visual>
-      <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
+<!--       <collision>
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link5.obj"/>
         </geometry>
@@ -122,13 +110,11 @@
         <inertia ixx="0.1" iyy="0.1" izz="0.1" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link6.obj"/>
         </geometry>
       </visual>
       <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link6.obj"/>
         </geometry>
@@ -136,18 +122,16 @@
     </link>
     <link name="link7">
       <inertial>
-        <origin xyz="0 0 0.08" rpy="0 -0 0" />
-        <mass value="0.5" />
-        <inertia ixx="0.05" iyy="0.05" izz="0.05" ixy="0" ixz="0" iyz="0" />
+        <origin xyz="0 0 0.17" rpy="0 -0 0" />
+        <mass value="1.8" />
+        <inertia ixx="0.09" iyy="0.05" izz="0.07" ixy="0" ixz="0" iyz="0" />
       </inertial>
       <visual>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/visual/link7.obj"/>
         </geometry>
       </visual>
       <!-- <collision>
-        <origin xyz="0 0 0" rpy="1.57079632679 0 0" />
         <geometry>
           <mesh filename="../../../../examples/models/panda/meshes/collision/link7.obj"/>
         </geometry>

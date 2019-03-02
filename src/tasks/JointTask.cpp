@@ -17,40 +17,51 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 			const double loop_time)
 {
 	_robot = robot;
-
 	int dof = _robot->_dof;
 
 	_current_position = _robot->_q;
-	_desired_position = _robot->_q;
-
 	_current_velocity.setZero(dof);
+
+	// default values for gains and velocity saturation
+	_kp = 50.0;
+	_kv = 14.0;
+	_ki = 0.0;
+	_use_velocity_saturation_flag = false;
+	_saturation_velocity = M_PI/3.0*Eigen::VectorXd::Ones(dof);
+
+	// initialize matrices sizes
+	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
+
+#ifdef USING_OTG 
+	_use_interpolation_flag = true;
+	_loop_time = loop_time;
+	_otg = new OTG(_current_position, _loop_time);
+
+	_otg->setMaxVelocity(M_PI/3);
+	_otg->setMaxAcceleration(M_PI);
+	_otg->setMaxJerk(3*M_PI);
+#endif
+	reInitializeTask();
+}
+
+void JointTask::reInitializeTask()
+{
+	int dof = _robot->_dof;
+
+	_desired_position = _robot->_q;
 	_desired_velocity.setZero(dof);
 
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
-	_saturation_velocity = M_PI/4.0*Eigen::VectorXd::Ones(dof);
 
-	_kp = 50.0;
-	_kv = 14.0;
-	_ki = 0.0;
-
-	_task_force.setZero(dof);
+	_task_force.setZero();
 	_integrated_position_error.setZero(dof);
+	_first_iteration = true;	
 
-	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
-
-	_first_iteration = true;
-	
 #ifdef USING_OTG 
-	_loop_time = loop_time;
-	_otg = new OTG(_current_position, _loop_time);
-
-	_otg->setMaxVelocity(M_PI/4);
-	_otg->setMaxAcceleration(M_PI/2);
-	_otg->setMaxJerk(M_PI);
+	_otg->reInitialize(_current_position);
 #endif
 }
-
 
 void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 {
@@ -93,7 +104,7 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 #ifdef USING_OTG
 	if(_use_interpolation_flag)
 	{
-		_otg->setGoalPosition(_desired_position);
+		_otg->setGoalPositionAndVelocity(_desired_position, _desired_velocity);
 		_otg->computeNextState(_step_desired_position, _step_desired_velocity);
 	}
 #endif
@@ -129,29 +140,6 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// update previous time
 	_t_prev = _t_curr;
 }
-
-void JointTask::reInitializeTask()
-{
-	int dof = _robot->_dof;
-
-	_current_position = _robot->_q;
-	_desired_position = _robot->_q;
-
-	_current_velocity.setZero(dof);
-	_desired_velocity.setZero(dof);
-
-	_step_desired_position = _desired_position;
-	_step_desired_velocity = _desired_velocity;
-
-	_task_force.setZero();
-	_integrated_position_error.setZero(dof);
-	_first_iteration = true;	
-
-#ifdef USING_OTG 
-	_otg->reInitialize(_current_position);
-#endif
-}
-
 
 } /* namespace Sai2Primitives */
 

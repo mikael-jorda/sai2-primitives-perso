@@ -100,7 +100,7 @@ int main (int argc, char** argv) {
 	T_sensor.translation() = sensor_pos_in_link;
 	auto fsensor = new ForceSensorSim(robot_name, link_name, T_sensor, robot);
 	auto fsensor_display = new ForceSensorDisplay(fsensor, graphics);
-
+	fsensor->enableFilter(0.05);
 
 	// initialize GLFW window
 	GLFWwindow* window = glfwInitialize();
@@ -225,8 +225,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Eigen::VectorXd surf_alignment_primitive_torques;
 	surf_alignment_primitive->enableGravComp();
 #ifdef USING_OTG
-	surf_alignment_primitive->_posori_task->_use_interpolation_pos_flag = false;
-	surf_alignment_primitive->_posori_task->_use_interpolation_ori_flag = false;
+	surf_alignment_primitive->_posori_task->_use_interpolation_flag = false;
 	surf_alignment_primitive->_joint_task->_use_interpolation_flag = false;
 #endif
 	// create a loop timer

@@ -18,6 +18,7 @@ if(USE_OTG)
 	SET (OTG_SOURCE 
 		${PROJECT_SOURCE_DIR}/src/trajectory_generation/OTG.cpp
 		${PROJECT_SOURCE_DIR}/src/trajectory_generation/OTG_ori.cpp
+		${PROJECT_SOURCE_DIR}/src/trajectory_generation/OTG_posori.cpp
 		)
 	INCLUDE_DIRECTORIES(${OTG_INCLUDE_DIRS})
 endif()

@@ -94,18 +94,37 @@ public:
 	 */
 	void reInitializeTask();
 
+	//-----------------------------------------------
+	//         Member variables
+	//-----------------------------------------------
+
+	// inputs to be defined by the user
+	Eigen::Vector3d _desired_position;   // defaults to the current position when the task is created
+	Eigen::Vector3d _desired_velocity;   // defaults to Zero
+
+	double _kp;                          // defaults to 50.0 
+	double _kv;                          // defaults to 14.0
+	double _ki;                          // defaults to 0.0
+
+	bool _use_velocity_saturation_flag;  // defaults to false
+	double _saturation_velocity;         // defaults to 0.3 m/s
+
+// trajectory generation via interpolation using Reflexxes Library
+#ifdef USING_OTG
+	bool _use_interpolation_flag;        // defaults to true
+
+	// default limits for trajectory generation (same in all directions) :
+	// Velocity      - 0.3   m/s
+	// Acceleration  - 1.0   m/s^2
+	// Jerk          - 3.0   m/s^3
+#endif
+
+	// internal variables, not to be touched by the user
 	std::string _link_name;
 	Eigen::Affine3d _control_frame;
 
 	Eigen::Vector3d _current_position;
-	Eigen::Vector3d _desired_position;
-
 	Eigen::Vector3d _current_velocity;
-	Eigen::Vector3d _desired_velocity;
-
-	double _kp;
-	double _kv;
-	double _ki;
 
 	Eigen::Vector3d _integrated_position_error;
 
@@ -115,21 +134,15 @@ public:
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
-	bool _use_velocity_saturation_flag = false;
-	Eigen::Vector3d _saturation_velocity;
-
 	Eigen::VectorXd _step_desired_position;
 	Eigen::VectorXd _step_desired_velocity;
 
 #ifdef USING_OTG
 	double _loop_time;
-	OTG* _otg;
-
-	bool _use_interpolation_flag = true;
+	OTG* _otg;           // default limits: Velocity - 0.3 m/s, acceleration - 1 m/s^2, jerk 3 m/s^3
 #endif
 
 };
-
 
 } /* namespace Sai2Primitives */
 

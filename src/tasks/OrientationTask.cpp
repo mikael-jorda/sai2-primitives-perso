@@ -34,27 +34,17 @@ OrientationTask::OrientationTask(Sai2Model::Sai2Model* robot,
 	_control_frame = control_frame;
 
 	int dof = _robot->_dof;
-
 	_robot->rotation(_current_orientation, _link_name);
-	_robot->rotation(_desired_orientation, _link_name);
-
 	_current_angular_velocity.setZero();
-	_desired_angular_velocity.setZero();
 
-	_step_desired_orientation = _desired_orientation;
-	_step_orientation_error.setZero();
-	_step_desired_angular_velocity.setZero();
+	// default values for gains and velocity saturation
+	_kp = 50.0;
+	_kv = 14.0;
+	_ki = 0.0;
+	_use_velocity_saturation_flag = false;
+	_saturation_velocity = M_PI/3;
 
-	_kp = 0;
-	_kv = 0;
-	_ki = 0;
-
-	_saturation_velocity = M_PI/4 * Eigen::Vector3d::Ones();
-
-	_task_force.setZero();
-	_orientation_error.setZero();
-	_integrated_orientation_error.setZero();
-
+	// initialize matrices sizes
 	_jacobian.setZero(3,dof);
 	_projected_jacobian.setZero(3,dof);
 	_Lambda.setZero(3,3);
@@ -62,15 +52,38 @@ OrientationTask::OrientationTask(Sai2Model::Sai2Model* robot,
 	_N.setZero(dof,dof);
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
 
-	_first_iteration = true;
-
 #ifdef USING_OTG 
+	_use_interpolation_flag = true;
 	_loop_time = loop_time;
 	_otg = new OTG_ori(_current_orientation, _loop_time);
 
-	_otg->setMaxVelocity(M_PI/4);
-	_otg->setMaxAcceleration(M_PI/2);
-	_otg->setMaxJerk(M_PI);
+	_otg->setMaxVelocity(M_PI/3);
+	_otg->setMaxAcceleration(M_PI);
+	_otg->setMaxJerk(3*M_PI);
+#endif
+
+	reInitializeTask();
+}
+
+void OrientationTask::reInitializeTask()
+{
+	int dof = _robot->_dof;
+
+	_robot->rotation(_desired_orientation, _link_name);
+	_desired_angular_velocity.setZero();
+
+	_step_desired_orientation = _desired_orientation;
+	_step_orientation_error.setZero(3);
+	_step_desired_angular_velocity.setZero(3);
+
+	_task_force.setZero();
+	_orientation_error.setZero();
+	_integrated_orientation_error.setZero();
+
+	_first_iteration = true;
+
+#ifdef USING_OTG 
+	_otg->reInitialize(_current_orientation);
 #endif
 }
 
@@ -124,7 +137,7 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 #ifdef USING_OTG
 	if(_use_interpolation_flag)
 	{
-		_otg->setGoalPosition(_desired_orientation, _current_orientation);
+		_otg->setGoalPositionAndVelocity(_desired_orientation, _current_orientation, _desired_angular_velocity);
 		_otg->computeNextState(_step_desired_orientation, _step_desired_angular_velocity);
 		Sai2Model::orientationError(_step_orientation_error, _step_desired_orientation, _current_orientation);
 	}
@@ -139,13 +152,9 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_step_desired_angular_velocity = -_kp / _kv * (_step_orientation_error) - _ki/_kv * _integrated_orientation_error;
 		for(int i=0; i<3; i++)
 		{
-			if(_step_desired_angular_velocity(i) > _saturation_velocity(i))
+			if(_step_desired_angular_velocity.norm() > _saturation_velocity)
 			{
-				_step_desired_angular_velocity(i) = _saturation_velocity(i);
-			}
-			else if(_step_desired_angular_velocity(i) < -_saturation_velocity(i))
-			{
-				_step_desired_angular_velocity(i) = -_saturation_velocity(i);
+				_step_desired_angular_velocity *= _saturation_velocity/_step_desired_angular_velocity.norm();
 			}
 		}
 		_task_force = _Lambda * (-_kv*(_current_angular_velocity - _step_desired_angular_velocity));
@@ -162,33 +171,6 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_t_prev = _t_curr;
 }
 
-void OrientationTask::reInitializeTask()
-{
-	int dof = _robot->_dof;
-
-	_robot->rotation(_current_orientation, _link_name);
-	_robot->rotation(_desired_orientation, _link_name);
-
-	_current_angular_velocity.setZero();
-	_desired_angular_velocity.setZero();
-
-	_step_desired_orientation = _desired_orientation;
-	_step_orientation_error.setZero(3);
-	_step_desired_angular_velocity.setZero(3);
-
-	_saturation_velocity = M_PI/4 * Eigen::Vector3d::Ones();
-
-	_task_force.setZero();
-	_orientation_error.setZero();
-	_integrated_orientation_error.setZero();
-
-	_first_iteration = true;
-
-#ifdef USING_OTG 
-	_otg->reInitialize(_current_orientation);
-#endif
-
-}
 
 } /* namespace Sai2Primitives */
 

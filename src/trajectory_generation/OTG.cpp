@@ -22,15 +22,13 @@ OTG::OTG(const Eigen::VectorXd& initial_position, const double loop_time)
     _OP  = new RMLPositionOutputParameters(_task_dof);
 	_RML = new ReflexxesAPI(_task_dof, _loop_time);
 
-    setGoalPosition(initial_position);
+    setGoalPositionAndVelocity(initial_position, Eigen::VectorXd::Zero(_task_dof));
 
     for(int i=0 ; i<_task_dof ; i++)
     {
     	_IP->SelectionVector->VecData[i] = true;
 		_OP->NewPositionVector->VecData[i] = initial_position(i);
     }
-
-
 }
 
 OTG::~OTG()
@@ -45,7 +43,7 @@ OTG::~OTG()
 
 void OTG::reInitialize(const Eigen::VectorXd& initial_position)
 {
-    setGoalPosition(initial_position);
+    setGoalPositionAndVelocity(initial_position, Eigen::VectorXd::Zero(_task_dof));
     
     for(int i=0 ; i<_task_dof ; i++)
     {
@@ -121,17 +119,22 @@ void OTG::setMaxJerk(const double max_jerk)
 	setMaxJerk(max_jerk * Eigen::VectorXd::Ones(_task_dof));
 }
 
-void OTG::setGoalPosition(const Eigen::VectorXd goal_position)
+void OTG::setGoalPositionAndVelocity(const Eigen::VectorXd goal_position, const Eigen::VectorXd goal_velocity)
 {
 	if(goal_position.size() != _task_dof)
 	{
-		throw std::invalid_argument("size of input goal position does not match task size in OTG::setGoalPosition\n");
+		throw std::invalid_argument("size of input goal position does not match task size in OTG::setGoalPositionAndVelocity\n");
+	}
+	if(goal_velocity.size() != _task_dof)
+	{
+		throw std::invalid_argument("size of input goal velocity does not match task size in OTG::setGoalPositionAndVelocity\n");
 	}
 	for(int i=0 ; i<_task_dof ; i++)
 	{
-		if(_IP->TargetPositionVector->VecData[i] != goal_position(i))
+		if( (_IP->TargetPositionVector->VecData[i] != goal_position(i)) || (_IP->TargetVelocityVector->VecData[i] != goal_velocity(i)) )
 		{
 			_IP->TargetPositionVector->VecData[i] = goal_position(i);
+			_IP->TargetVelocityVector->VecData[i] = goal_velocity(i);
 			_goal_reached = false;
 		}
 	}
@@ -157,7 +160,7 @@ void OTG::computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next
         {
         	if(_ResultValue == -102)
         	{
-        		printf("phase synchronisation not possible.\n");
+        		printf("trajectory generation : phase synchronisation not possible.\n");
         	}
         	else
         	{
