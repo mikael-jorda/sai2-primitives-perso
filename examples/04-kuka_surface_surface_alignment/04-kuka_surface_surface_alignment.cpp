@@ -87,20 +87,20 @@ int main (int argc, char** argv) {
 
 	// load robots
 	Eigen::Vector3d world_gravity = sim->_world->getGravity().eigen();
-	auto robot = new Sai2Model::Sai2Model(robot_file, false, world_gravity, sim->getRobotBaseTransform(robot_name));
+	auto robot = new Sai2Model::Sai2Model(robot_file, false, sim->getRobotBaseTransform(robot_name), world_gravity);
 
 	sim->getJointPositions(robot_name, robot->_q);
 	robot->updateModel();
 
 	// load plate
-	auto plate = new Sai2Model::Sai2Model(plate_file, false, world_gravity, sim->getRobotBaseTransform(plate_name));
+	auto plate = new Sai2Model::Sai2Model(plate_file, false, sim->getRobotBaseTransform(plate_name), world_gravity);
 
 	// load simulated force sensor
 	Eigen::Affine3d T_sensor = Eigen::Affine3d::Identity();
 	T_sensor.translation() = sensor_pos_in_link;
 	auto fsensor = new ForceSensorSim(robot_name, link_name, T_sensor, robot);
 	auto fsensor_display = new ForceSensorDisplay(fsensor, graphics);
-
+	fsensor->enableFilter(0.05);
 
 	// initialize GLFW window
 	GLFWwindow* window = glfwInitialize();
@@ -224,7 +224,10 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Sai2Primitives::SurfaceSurfaceAlignment* surf_alignment_primitive = new Sai2Primitives::SurfaceSurfaceAlignment(robot, link_name, control_frame_in_link, sensor_frame_in_link);
 	Eigen::VectorXd surf_alignment_primitive_torques;
 	surf_alignment_primitive->enableGravComp();
-
+#ifdef USING_OTG
+	surf_alignment_primitive->_posori_task->_use_interpolation_flag = false;
+	surf_alignment_primitive->_joint_task->_use_interpolation_flag = false;
+#endif
 	// create a loop timer
 	double control_freq = 1000;
 	LoopTimer timer;

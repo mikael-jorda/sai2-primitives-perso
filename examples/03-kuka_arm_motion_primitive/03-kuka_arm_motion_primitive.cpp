@@ -73,7 +73,7 @@ int main (int argc, char** argv) {
 
 	// load robots
 	Eigen::Vector3d world_gravity = sim->_world->getGravity().eigen();
-	auto robot = new Sai2Model::Sai2Model(robot_file, false, world_gravity, sim->getRobotBaseTransform(robot_name));
+	auto robot = new Sai2Model::Sai2Model(robot_file, false, sim->getRobotBaseTransform(robot_name), world_gravity);
 
 	sim->getJointPositions(robot_name, robot->_q);
 	robot->updateModel();
@@ -195,6 +195,10 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Sai2Primitives::RedundantArmMotion* motion_primitive = new Sai2Primitives::RedundantArmMotion(robot, link_name, pos_in_link);
 	Eigen::VectorXd motion_primitive_torques;
 	motion_primitive->enableGravComp();
+#ifdef USING_OTG
+	motion_primitive->_posori_task->_use_interpolation_flag = false;
+	motion_primitive->_joint_task->_use_interpolation_flag = false;
+#endif
 
 	Eigen::Matrix3d initial_orientation;
 	Eigen::Vector3d initial_position;

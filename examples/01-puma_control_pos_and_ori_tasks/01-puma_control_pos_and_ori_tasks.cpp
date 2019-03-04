@@ -77,7 +77,7 @@ int main (int argc, char** argv) {
 
 	// load robots
 	Eigen::Vector3d world_gravity = sim->_world->getGravity().eigen();
-	auto robot = new Sai2Model::Sai2Model(robot_file, false, world_gravity, sim->getRobotBaseTransform(robot_name));
+	auto robot = new Sai2Model::Sai2Model(robot_file, false, sim->getRobotBaseTransform(robot_name), world_gravity);
 
 	sim->getJointPositions(robot_name, robot->_q);
 	robot->updateModel();
@@ -213,9 +213,10 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Eigen::Vector3d initial_position;
 	robot->position(initial_position, pos_task->_link_name, pos_task->_control_frame.translation());
 
-	Eigen::MatrixXd J_test;
-	J_test .setZero(3,dof);
-	robot->Jv(J_test, link_name, pos_in_link);
+#ifdef USING_OTG
+	pos_task->_use_interpolation_flag = false;
+	ori_task->_use_interpolation_flag = false;
+#endif
 
 	// create a loop timer
 	double control_freq = 1000;
