@@ -514,8 +514,8 @@ void control(Simulation::Sai2Simulation* sim)
 
 	#ifndef USING_OTG
 		posori_tasks[i]->_use_velocity_saturation_flag = true;
-		posori_tasks[i]->_linear_saturation_velocity = 0.15*Vector3d::Ones();
-		posori_tasks[i]->_angular_saturation_velocity = 45.0/180.0*M_PI*Vector3d::Ones();
+		posori_tasks[i]->_linear_saturation_velocity = 0.15;
+		posori_tasks[i]->_angular_saturation_velocity = 45.0/180.0*M_PI;
 	#endif
 
 	}
