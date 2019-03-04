@@ -9,7 +9,8 @@ There is a function called computeTorques that computes the robot joint torques 
 There are member variable inputs like the gains and the desired position/orientation/force.
 
 ## Dependencies
-Sai2-primitives depends on Sai2-model and Eigen3.
+sai2-primitives depends on sai2-model and Eigen3.
+
 The examples depend on additional libraries : sai2-simulation, sai2-graphics, sai2-common.
 
 ## Build instructions
