@@ -38,18 +38,23 @@ add_definitions(${SAI2-URDF_DEFINITIONS})
 find_package(glfw3 QUIET)
 find_library(GLFW_LIBRARY glfw)
 
+# - hiredis
+find_library(HIREDIS_LIBRARY hiredis)
+
 set(SAI2-PRIMITIVES_EXAMPLES_COMMON_LIBRARIES
 	${SAI2-GRAPHICS_LIBARY}
 	${SAI2-SIMULATION_LIBRARY}
 	${SAI2-COMMON_LIBRARIES}
 	${SAI2-URDF_LIBRARIES}
 	${CHAI3D_LIBRARIES}
+	${HIREDIS_LIBRARY}
 	${GLFW_LIBRARY}
 	)
 
 
-ADD_SUBDIRECTORY(01-puma_control_pos_and_ori_tasks)
-ADD_SUBDIRECTORY(02-puma_control_posori_tasks)
-ADD_SUBDIRECTORY(03-kuka_arm_motion_primitive)
-ADD_SUBDIRECTORY(04-kuka_surface_surface_alignment)
-ADD_SUBDIRECTORY(05-two_hand_two_robots_object_movement)
+# ADD_SUBDIRECTORY(01-puma_control_pos_and_ori_tasks)
+# ADD_SUBDIRECTORY(02-puma_control_posori_tasks)
+# ADD_SUBDIRECTORY(03-kuka_arm_motion_primitive)
+# ADD_SUBDIRECTORY(04-kuka_surface_surface_alignment)
+# ADD_SUBDIRECTORY(05-two_hand_two_robots_object_movement)
+ADD_SUBDIRECTORY(demo_CS223A_kuka)
