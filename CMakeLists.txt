@@ -41,8 +41,24 @@ if(NOT EIGEN3_INCLUDE_DIR)
 	endif()
 endif()
 
+# include Chai3d 
+# -- this is required by Chai3d to pick the correct path for OpenGL headers
+FIND_PACKAGE(CHAI3D REQUIRED)
+ADD_DEFINITIONS(${CHAI3D_DEFINITIONS})
+if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
+  ADD_DEFINITIONS(-D_MACOSX -DMACOSX)
+elseif (CMAKE_SYSTEM_NAME MATCHES Linux)
+  ADD_DEFINITIONS(-D_LINUX -DLINUX)
+endif () #NOTE: Windows is currently unsupported
+LINK_DIRECTORIES(${CHAI3D_LIBRARY_DIRS})
+
 # include sai2-model
 find_package(SAI2-MODEL REQUIRED)
+
+# - SAI2-COMMON
+find_package(SAI2-COMMON REQUIRED)
+include_directories(${SAI2-COMMON_INCLUDE_DIRS})
+add_definitions(${SAI2-COMMON_DEFINITIONS})
 
 # add tasks
 SET(TASKS_SOURCE 
@@ -74,6 +90,7 @@ INCLUDE_DIRECTORIES (
 	${SAI2-PRIMITIVES_INCLUDE_DIRS}
 	${EIGEN3_INCLUDE_DIR}
 	${SAI2-MODEL_INCLUDE_DIRS}
+	${CHAI3D_INCLUDE_DIRS}
 	)
 
 # Create the library
@@ -81,12 +98,14 @@ if(USE_OTG)
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PRIMITIVES_SOURCE}
+		${HAPTIC_TASKS_SOURCE}
 		${OTG_SOURCE}
 		)
 else()
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PRIMITIVES_SOURCE}
+		${HAPTIC_TASKS_SOURCE}
 		)
 endif()
 
