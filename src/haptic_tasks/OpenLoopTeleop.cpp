@@ -12,6 +12,38 @@
 namespace Sai2Primitives
 {
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//// Declaration of internal functions ////
+cVector3d convertEigenToChaiVector( Eigen::Vector3d a_vec )
+{
+    double x = a_vec(0);
+    double y = a_vec(1);
+    double z = a_vec(2);
+    return cVector3d(x,y,z);
+}
+
+Eigen::Vector3d convertChaiToEigenVector( cVector3d a_vec )
+{
+    double x = a_vec.x();
+    double y = a_vec.y();
+    double z = a_vec.z();
+    return Eigen::Vector3d(x,y,z);
+}
+
+cMatrix3d convertEigenToChaiRotation( Eigen::Matrix3d a_mat )
+{
+    return cMatrix3d( a_mat(0,0), a_mat(0,1), a_mat(0,2), a_mat(1,0), a_mat(1,1), a_mat(1,2), a_mat(2,0), a_mat(2,1), a_mat(2,2) );
+}
+
+Eigen::Matrix3d convertChaiToEigenMatrix( cMatrix3d a_mat )
+{
+    Eigen::Matrix3d asdf;
+    asdf << a_mat(0,0), a_mat(0,1), a_mat(0,2),
+            a_mat(1,0), a_mat(1,1), a_mat(1,2),
+            a_mat(2,0), a_mat(2,1), a_mat(2,2);
+
+    return asdf;
+}
 
 OpenLoopTeleop::~OpenLoopTeleop ()
 {
@@ -33,7 +65,9 @@ OpenLoopTeleop::~OpenLoopTeleop ()
 	_moment_filter = NULL;
 }
 
-OpenLoopTeleop::OpenLoopTeleop()
+OpenLoopTeleop::OpenLoopTeleop(const Eigen::Vector3d centerPos_rob, 
+		            			const Eigen::Matrix3d centerRot_rob,
+		            			const Eigen::Matrix3d transformDev_Rob)
 {
 	// create a haptic device handler
     auto handler = new cHapticDeviceHandler();
@@ -74,11 +108,11 @@ OpenLoopTeleop::OpenLoopTeleop()
 	_HomeRot_op.setIdentity();
 
 	// Initialize workspace center of the controlled robot (can be upload with setRobotCenter())
-	_centerPos_rob.setZero(); 
-	_centerRot_rob.setIdentity();
+	_centerPos_rob = centerPos_rob; 
+	_centerRot_rob = centerRot_rob;
 
 	//Initialize the frame trasform from device to robot
-	_transformDev_Rob.setIdentity();
+	_transformDev_Rob = transformDev_Rob;
 
 	//Initialize the set position and orientation of the controlled robot
 	_pos_rob = _centerPos_rob;
@@ -147,6 +181,7 @@ void OpenLoopTeleop::HomingTask()
 	// Evaluate position controller force
 	_force_dev = -kp_pos*(_pos_dev - _HomePos_op) - kv_pos * _vel_dev_trans;
 	// Compute the orientation error
+	Vector3d orientation_error;
 	Sai2Model::orientationError(orientation_error, _HomeRot_op, _rot_dev);
 	// Evaluate orientation controller force
 	_torque_dev = -kp_ori*orientation_error - kv_ori * _vel_dev_rot;
@@ -176,7 +211,6 @@ void OpenLoopTeleop::HomingTask()
 void OpenLoopTeleop::computeHapticCommands_Impedance(
 				Eigen::Vector3d& pos_rob,
 				Eigen::Matrix3d& rot_rob,
-				const Eigen::VectorXd f_task_sensed,
 				const Eigen::Vector3d pos_rob_sensed, 
 		        const Eigen::Matrix3d rot_rob_sensed)
 {
@@ -204,10 +238,10 @@ void OpenLoopTeleop::computeHapticCommands_Impedance(
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
 		
-	if (f_task_sensed.norm() <= 0.0001)
+	if ((pos_rob_sensed - _pos_rob).norm() <= 0.01)
 	{
-		f_task_trans = _Red_factor_trans * f_task_sensed.head(3);
-		f_task_rot = _Red_factor_rot * f_task_sensed.tail(3);
+		f_task_trans.setZero();
+		f_task_rot.setZero();
 	}
 	else
 	{
@@ -225,6 +259,21 @@ void OpenLoopTeleop::computeHapticCommands_Impedance(
 	//Transfer task force from robot to haptic device global frame
 	_force_dev = _transformDev_Rob * f_task_trans;
 	_torque_dev = _transformDev_Rob * f_task_rot;
+
+	// Scaling of the force feedback
+	Eigen::Matrix3d scaling_factor_trans;
+	Eigen::Matrix3d scaling_factor_rot;
+
+		scaling_factor_trans << 1/_Ks, 0.0, 0.0,
+						  0.0, 1/_Ks, 0.0, 
+						  0.0, 0.0, 1/_Ks;
+		scaling_factor_rot << 1/_KsR, 0.0, 0.0, 
+						  0.0, 1/_KsR, 0.0,
+						  0.0, 0.0, 1/_KsR;
+
+	_force_dev = scaling_factor_trans * _force_dev;
+	_torque_dev = scaling_factor_rot * _torque_dev;
+
 
 	// Saturate to Force and Torque limits of the haptic device
 	if (_force_dev.norm() >= maxForce_dev)
@@ -310,6 +359,20 @@ void OpenLoopTeleop::computeHapticCommands_ForceSensor(
 	//Transfer task force from robot to haptic device global frame
 	_force_dev = _transformDev_Rob * f_task_trans;
 	_torque_dev = _transformDev_Rob * f_task_rot;
+
+	// Scaling of the force feedback
+	Eigen::Matrix3d scaling_factor_trans;
+	Eigen::Matrix3d scaling_factor_rot;
+
+		scaling_factor_trans << 1/_Ks, 0.0, 0.0,
+						  0.0, 1/_Ks, 0.0, 
+						  0.0, 0.0, 1/_Ks;
+		scaling_factor_rot << 1/_KsR, 0.0, 0.0, 
+						  0.0, 1/_KsR, 0.0,
+						  0.0, 0.0, 1/_KsR;
+
+	_force_dev = scaling_factor_trans * _force_dev;
+	_torque_dev = scaling_factor_rot * _torque_dev;
 
 	// Saturate to Force and Torque limits of the haptic device
 	if (_force_dev.norm() >= maxForce_dev)
@@ -418,7 +481,7 @@ void OpenLoopTeleop::setScalingFactors(const double Ks, const double KsR)
 	_KsR = KsR;
 }
 
-void setPosCtrlGains (const double kp_pos, const double kv_pos, const double kp_ori, const double kv_ori)
+void OpenLoopTeleop::setPosCtrlGains (const double kp_pos, const double kv_pos, const double kp_ori, const double kv_ori)
 {
 	_kp_pos = kp_pos;
 	_kv_pos = kv_pos;
@@ -426,7 +489,7 @@ void setPosCtrlGains (const double kp_pos, const double kv_pos, const double kp_
 	_kv_ori = kv_ori;
 }
 
-void setForceFeedbackCtrlGains (const double k_pos, const double k_ori,
+void OpenLoopTeleop::setForceFeedbackCtrlGains (const double k_pos, const double k_ori,
 		const Matrix3d Red_factor_rot,
 		const Matrix3d Red_factor_trans)
 {
@@ -436,7 +499,7 @@ void setForceFeedbackCtrlGains (const double k_pos, const double k_ori,
 	_Red_factor_trans = Red_factor_trans;
 }
 
-void setFilterCutOffFreq(const double fc_force, const double fc_moment)
+void OpenLoopTeleop::setFilterCutOffFreq(const double fc_force, const double fc_moment)
 {
 	_fc_force = fc_force;
 	_fc_moment = fc_moment;
@@ -481,38 +544,7 @@ void OpenLoopTeleop::ReadGripperUserSwitch()
     hapticDevice->getUserSwitch (0, gripper_state);
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//// Declaration of internal functions ////
-cVector3d convertEigenToChaiVector( Eigen::Vector3d a_vec )
-{
-    double x = a_vec(0);
-    double y = a_vec(1);
-    double z = a_vec(2);
-    return cVector3d(x,y,z);
-}
 
-Eigen::Vector3d convertChaiToEigenVector( cVector3d a_vec )
-{
-    double x = a_vec.x();
-    double y = a_vec.y();
-    double z = a_vec.z();
-    return Eigen::Vector3d(x,y,z);
-}
-
-cMatrix3d convertEigenToChaiRotation( Eigen::Matrix3d a_mat )
-{
-    return cMatrix3d( a_mat(0,0), a_mat(0,1), a_mat(0,2), a_mat(1,0), a_mat(1,1), a_mat(1,2), a_mat(2,0), a_mat(2,1), a_mat(2,2) );
-}
-
-Eigen::Matrix3d convertChaiToEigenMatrix( cMatrix3d a_mat )
-{
-    Eigen::Matrix3d asdf;
-    asdf << a_mat(0,0), a_mat(0,1), a_mat(0,2),
-            a_mat(1,0), a_mat(1,1), a_mat(1,2),
-            a_mat(2,0), a_mat(2,1), a_mat(2,2);
-
-    return asdf;
-}
 
 
 

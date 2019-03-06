@@ -40,7 +40,9 @@ public:
 	 * @param Rmax_dev        BLA
 	 *
 	 */
-	OpenLoopTeleop();
+	OpenLoopTeleop(const Eigen::Vector3d centerPos_rob, 
+		            const Eigen::Matrix3d centerRot_rob,
+		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
 	~OpenLoopTeleop();
 
 
@@ -73,9 +75,8 @@ public:
 	void computeHapticCommands_Impedance(
 				Eigen::Vector3d& pos_rob,
 				Eigen::Matrix3d& rot_rob,
-				const Eigen::VectorXd f_task_sensed = VectorXd::Zero(6),
-				const Eigen::Vector3d pos_rob_sensed = Vector3d::Zero(), 
-		        const Eigen::Matrix3d rot_rob_sensed = Matrix3d::Identity());
+				const Eigen::Vector3d pos_rob_sensed, 
+		        const Eigen::Matrix3d rot_rob_sensed);
 
 
 	void computeHapticCommands_ForceSensor(
@@ -197,12 +198,6 @@ public:
 	Vector3d _pos_rob;
 	Matrix3d _rot_rob;
 
-	//Time parameters 
-	std::chrono::high_resolution_clock::time_point _t_prev;
-	std::chrono::high_resolution_clock::time_point _t_curr;
-	std::chrono::duration<double> _t_diff;
-	bool _first_iteration;
-
 	//Position controller parameters
 	double _kp_pos;
 	double _kv_pos;
@@ -220,6 +215,12 @@ public:
 	ButterworthFilter* _moment_filter;
 	double _fc_force;
 	double _fc_moment;
+
+	//Time parameters 
+	std::chrono::high_resolution_clock::time_point _t_prev;
+	std::chrono::high_resolution_clock::time_point _t_curr;
+	std::chrono::duration<double> _t_diff;
+	bool _first_iteration;
 
 
 };
