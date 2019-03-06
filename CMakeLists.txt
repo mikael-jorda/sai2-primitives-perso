@@ -61,6 +61,11 @@ SET(PRIMITIVES_SOURCE
 	${PROJECT_SOURCE_DIR}/src/primitives/DualArmObjectMotion.cpp
 	)
 
+# add haptic_tasks
+SET(HAPTIC_TASKS_SOURCE
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
+	)
+
 # add header files
 SET(SAI2-PRIMITIVES_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src)
 
