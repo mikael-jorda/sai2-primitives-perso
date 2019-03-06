@@ -42,7 +42,8 @@ public:
 	 */
 	OpenLoopTeleop(const Eigen::Vector3d centerPos_rob, 
 		            const Eigen::Matrix3d centerRot_rob,
-		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
+		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity()
+        			const int device_number = 0);
 	~OpenLoopTeleop();
 
 
@@ -140,7 +141,7 @@ public:
 
 
 	void EnableGripperUserSwitch();
-	void ReadGripperUserSwitch();
+	bool ReadGripperUserSwitch();
 
 	void setDeviceRobotTransform(const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
 

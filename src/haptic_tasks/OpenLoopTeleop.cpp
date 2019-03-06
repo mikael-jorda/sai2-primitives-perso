@@ -67,13 +67,14 @@ OpenLoopTeleop::~OpenLoopTeleop ()
 
 OpenLoopTeleop::OpenLoopTeleop(const Eigen::Vector3d centerPos_rob, 
 		            			const Eigen::Matrix3d centerRot_rob,
-		            			const Eigen::Matrix3d transformDev_Rob)
+		            			const Eigen::Matrix3d transformDev_Rob
+		            			const int device_number)
 {
 	// create a haptic device handler
     auto handler = new cHapticDeviceHandler();
 
 	// get a handle to the first haptic device
-	handler->getDevice(hapticDevice, 0);
+	handler->getDevice(hapticDevice, device_number);
 	if (NULL == hapticDevice) {
 		cout << "No haptic device found. " << endl;
 		device_started = false;
@@ -538,10 +539,12 @@ void OpenLoopTeleop::EnableGripperUserSwitch()
 	gripper_state = false;
 }
 
-void OpenLoopTeleop::ReadGripperUserSwitch()
+bool OpenLoopTeleop::ReadGripperUserSwitch()
 {
 	// Read new gripper state
     hapticDevice->getUserSwitch (0, gripper_state);
+    std::cout << "local bool : " << gripper_state << endl;
+    return gripper_state;
 }
 
 
