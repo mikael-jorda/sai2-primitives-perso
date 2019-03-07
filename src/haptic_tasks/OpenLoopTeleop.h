@@ -40,10 +40,12 @@ public:
 	 * @param Rmax_dev        BLA
 	 *
 	 */
-	OpenLoopTeleop(const Eigen::Vector3d centerPos_rob, 
+	OpenLoopTeleop(cHapticDeviceHandler* handler,
+					const int device_index,
+					const Eigen::Vector3d centerPos_rob, 
 		            const Eigen::Matrix3d centerRot_rob,
-		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity()
-        			const int device_number = 0);
+		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
+
 	~OpenLoopTeleop();
 
 
@@ -79,6 +81,9 @@ public:
 				const Eigen::Vector3d pos_rob_sensed, 
 		        const Eigen::Matrix3d rot_rob_sensed);
 
+	void computeHapticCommands_Impedance_PositionOnly(
+				Eigen::Vector3d& pos_rob,
+				const Eigen::Vector3d pos_rob_sensed);
 
 	void computeHapticCommands_ForceSensor(
 				Eigen::Vector3d& pos_rob,
@@ -95,7 +100,7 @@ public:
 
 	void HomingTask();
 
-	void GavityCompTask();
+	void GravityCompTask();
 
 
 	// -------- Teleoperation task related methods --------
@@ -152,7 +157,7 @@ public:
 	
 	//// Haptic device handler, status and parameters ////
 	// a haptic device handler
-	cHapticDeviceHandler* handler;
+	// cHapticDeviceHandler* _handler;
 	// a pointer to the current haptic device
 	cGenericHapticDevicePtr hapticDevice;
 	// Device status

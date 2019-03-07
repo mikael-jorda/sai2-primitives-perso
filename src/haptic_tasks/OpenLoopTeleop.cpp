@@ -53,8 +53,6 @@ OpenLoopTeleop::~OpenLoopTeleop ()
 	_torque_chai.set(0.0,0.0,0.0);
 	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);	
 	hapticDevice->close();
-	delete handler;
-	handler = NULL;
 
 	_pos_rob = _centerPos_rob;
 	_rot_rob = _centerRot_rob;
@@ -65,34 +63,66 @@ OpenLoopTeleop::~OpenLoopTeleop ()
 	_moment_filter = NULL;
 }
 
-OpenLoopTeleop::OpenLoopTeleop(const Eigen::Vector3d centerPos_rob, 
+OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
+								const int device_index,
+								const Eigen::Vector3d centerPos_rob, 
 		            			const Eigen::Matrix3d centerRot_rob,
-		            			const Eigen::Matrix3d transformDev_Rob
-		            			const int device_number)
+		            			const Eigen::Matrix3d transformDev_Rob)
 {
-	// create a haptic device handler
-    auto handler = new cHapticDeviceHandler();
+	// create a haptic device _handler
+    // _handler = handler;
 
-	// get a handle to the first haptic device
-	handler->getDevice(hapticDevice, device_number);
-	if (NULL == hapticDevice) {
-		cout << "No haptic device found. " << endl;
-		device_started = false;
-	} else {
-		hapticDevice->open();
-		hapticDevice->calibrate();
-		device_started = true;
+	// read info from haptic device
+	cHapticDeviceInfo hapticDeviceInfo;
+	handler->getDeviceSpecifications(hapticDeviceInfo, device_index);
+
+	if(hapticDeviceInfo.m_modelName == "Sigma.7")
+	{
+		// get a handle to the haptic device
+		cDeltaDevicePtr device_tmp = cDeltaDevice::create(device_index);
+		// handler->getDevice(device_tmp, device_index);
+		if (NULL == device_tmp) {
+			cout << "No haptic device found. " << endl;
+			device_started = false;
+		} else {
+			if(!device_tmp->open())
+			{
+				cout << "could not open the haptic device" << endl;
+			}
+			if(!device_tmp->calibrate())
+			{
+				cout << "could not calibrate the haptic device" << endl;
+			}
+			else
+			{
+				device_tmp->enableForces(true);
+				device_started = true;
+				hapticDevice = device_tmp;
+			}
+		}
+	}
+	else
+	{
+		handler->getDevice(hapticDevice, device_index);	
+		if (NULL == hapticDevice) {
+			cout << "No haptic device found. " << endl;
+			device_started = false;
+		} else {
+			if(!hapticDevice->open())
+			{
+				cout << "could not open the haptic device" << endl;
+			}
+			if(!hapticDevice->calibrate())
+			{
+				cout << "could not calibrate the haptic device" << endl;
+			}
+			else
+			{
+				device_started = true;
+			}
+		}
 	}
 
-	//Send zero force feedback to the haptic device
-	_force_dev.setZero();
-	_torque_dev.setZero();
-	_force_chai.set(0.0,0.0,0.0);
-	_torque_chai.set(0.0,0.0,0.0);
-	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
-
-	// retrieve information about the current haptic device
-	cHapticDeviceInfo hapticDeviceInfo = hapticDevice->getSpecifications();
 	// get properties of haptic device 
 	maxForce_dev = hapticDeviceInfo.m_maxLinearForce;
 	maxTorque_dev = hapticDeviceInfo.m_maxAngularTorque;
@@ -101,6 +131,12 @@ OpenLoopTeleop::OpenLoopTeleop(const Eigen::Vector3d centerPos_rob,
 	maxLinStiffness_dev = hapticDeviceInfo.m_maxLinearStiffness;
 	maxAngStiffness_dev = hapticDeviceInfo.m_maxAngularStiffness;
 
+	//Send zero force feedback to the haptic device
+	_force_dev.setZero();
+	_torque_dev.setZero();
+	_force_chai.set(0.0,0.0,0.0);
+	_torque_chai.set(0.0,0.0,0.0);
+	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
 
 	//Initialize homing task
 	device_homed = false;
@@ -154,7 +190,7 @@ OpenLoopTeleop::OpenLoopTeleop(const Eigen::Vector3d centerPos_rob,
 
 }
 
-void OpenLoopTeleop::GavityCompTask()
+void OpenLoopTeleop::GravityCompTask()
 {
 	_force_chai.set(0.0,0.0,0.0);
 	_torque_chai.set(0.0,0.0,0.0);
@@ -239,13 +275,13 @@ void OpenLoopTeleop::computeHapticCommands_Impedance(
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
 		
-	if ((pos_rob_sensed - _pos_rob).norm() <= 0.01)
-	{
-		f_task_trans.setZero();
-		f_task_rot.setZero();
-	}
-	else
-	{
+	// if ((pos_rob_sensed - _pos_rob).norm() <= 0.01)
+	// {
+	// 	f_task_trans.setZero();
+	// 	f_task_rot.setZero();
+	// }
+	// else
+	// {
 		//Evaluate the task force through stiffness proxy
 		f_task_trans = _k_pos*(pos_rob_sensed - _pos_rob);
 		// Compute the orientation error
@@ -255,7 +291,7 @@ void OpenLoopTeleop::computeHapticCommands_Impedance(
 		// Apply reduction factors to force feedback
 		f_task_trans = _Red_factor_trans * f_task_trans;
 		f_task_rot = _Red_factor_rot * f_task_rot;
-	}
+	// }
 
 	//Transfer task force from robot to haptic device global frame
 	_force_dev = _transformDev_Rob * f_task_trans;
@@ -315,6 +351,90 @@ void OpenLoopTeleop::computeHapticCommands_Impedance(
 
 	// update previous time
 	_t_prev = _t_curr;
+}
+
+void OpenLoopTeleop::computeHapticCommands_Impedance_PositionOnly(
+				Eigen::Vector3d& pos_rob,
+				const Eigen::Vector3d pos_rob_sensed)
+{
+
+	device_homed = false;
+	// read haptic device position
+	hapticDevice->getPosition(_pos_dev_chai);
+	hapticDevice->getRotation(_rot_dev_chai);
+	_pos_dev = convertChaiToEigenVector(_pos_dev_chai);
+	_rot_dev = convertChaiToEigenMatrix(_rot_dev_chai);
+
+	// Compute the force feedback in robot frame
+	Vector3d f_task_trans;
+	Vector3d f_task_rot;
+
+	//Evaluate the task force through stiffness proxy
+	f_task_trans = _k_pos*(pos_rob_sensed - _pos_rob);
+	// Compute the orientation error
+	// Sai2Model::orientationError(orientation_dev, _rot_rob, rot_rob_sensed);
+	// Evaluate task torque
+	// f_task_rot = _k_ori*orientation_dev;
+	// Apply reduction factors to force feedback
+	f_task_trans = _Red_factor_trans * f_task_trans;
+	f_task_rot.setZero();
+
+	//Transfer task force from robot to haptic device global frame
+	_force_dev = _transformDev_Rob * f_task_trans;
+	_torque_dev = _transformDev_Rob * f_task_rot;
+
+	// Scaling of the force feedback
+	Eigen::Matrix3d scaling_factor_trans;
+	Eigen::Matrix3d scaling_factor_rot;
+
+		scaling_factor_trans << 1/_Ks, 0.0, 0.0,
+						  0.0, 1/_Ks, 0.0, 
+						  0.0, 0.0, 1/_Ks;
+		scaling_factor_rot << 1/_KsR, 0.0, 0.0, 
+						  0.0, 1/_KsR, 0.0,
+						  0.0, 0.0, 1/_KsR;
+
+	_force_dev = scaling_factor_trans * _force_dev;
+	_torque_dev = scaling_factor_rot * _torque_dev;
+
+
+	// Saturate to Force and Torque limits of the haptic device
+	if (_force_dev.norm() >= maxForce_dev)
+	{
+		_force_dev = maxForce_dev*_force_dev/(_force_dev.norm());
+	}
+	if (_torque_dev.norm() >= maxTorque_dev)
+	{
+		_torque_dev = maxTorque_dev*_torque_dev/(_torque_dev.norm());
+	}
+
+	// Send controllers force and torque to haptic device
+	_force_chai = convertEigenToChaiVector(_force_dev);
+	_torque_chai = convertEigenToChaiVector(_torque_dev);
+    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+
+ 
+    // Compute the set position from the haptic device
+	_pos_rob = _Ks*(_pos_dev-_HomePos_op);
+	// Rotation with respect with home orientation
+	// Eigen::Matrix3d rot_rel = _HomeRot_op.transpose()*_rot_dev;
+	// Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
+	// Compute set orientation from the haptic device
+	// Eigen::AngleAxisd rot_rob_aa = Eigen::AngleAxisd(_KsR*rot_rel_ang.angle(),rot_rel_ang.axis());
+	// _rot_rob = rot_rob_aa.toRotationMatrix();
+
+	//Transfer set position and orientation from device to robot global frame
+	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
+	// _rot_rob = _transformDev_Rob.transpose() * _rot_rob;
+
+	// Adjust set position and orientation to the center of the task workspace
+	_pos_rob = _pos_rob + _centerPos_rob;
+	// _rot_rob = _rot_rob * _centerRot_rob; //////////////////////////////////////////////////// check matrix product here..
+
+	// Send set position orientation of the robot
+	pos_rob = _pos_rob;
+	// rot_rob = _rot_rob;
+
 }
 
 void OpenLoopTeleop::computeHapticCommands_ForceSensor(
@@ -543,7 +663,6 @@ bool OpenLoopTeleop::ReadGripperUserSwitch()
 {
 	// Read new gripper state
     hapticDevice->getUserSwitch (0, gripper_state);
-    std::cout << "local bool : " << gripper_state << endl;
     return gripper_state;
 }
 
