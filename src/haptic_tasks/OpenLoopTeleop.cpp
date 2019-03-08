@@ -237,8 +237,8 @@ void OpenLoopTeleop::HomingTask()
 	_force_chai = convertEigenToChaiVector(_force_dev);
 	_torque_chai = convertEigenToChaiVector(_torque_dev);
     hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
-
-	if( (_pos_dev - _HomePos_op).norm()<0.002 && orientation_error.norm() < 0.04)
+    //&& orientation_error.norm() < 0.04
+	if( (_pos_dev - _HomePos_op).norm()<0.002)
 	{
 		device_homed = true;
 	}
@@ -331,19 +331,21 @@ void OpenLoopTeleop::computeHapticCommands_Impedance(
     // Compute the set position from the haptic device
 	_pos_rob = _Ks*(_pos_dev-_HomePos_op);
 	// Rotation with respect with home orientation
-	Eigen::Matrix3d rot_rel = _HomeRot_op.transpose()*_rot_dev;
+	Eigen::Matrix3d rot_rel = _rot_dev * _HomeRot_op.transpose();
 	Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
+
 	// Compute set orientation from the haptic device
 	Eigen::AngleAxisd rot_rob_aa = Eigen::AngleAxisd(_KsR*rot_rel_ang.angle(),rot_rel_ang.axis());
 	_rot_rob = rot_rob_aa.toRotationMatrix();
 
+
 	//Transfer set position and orientation from device to robot global frame
 	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
-	_rot_rob = _transformDev_Rob.transpose() * _rot_rob;
+	_rot_rob = _transformDev_Rob.transpose() * _rot_rob * _transformDev_Rob * _centerRot_rob; 
+
 
 	// Adjust set position and orientation to the center of the task workspace
 	_pos_rob = _pos_rob + _centerPos_rob;
-	_rot_rob = _rot_rob * _centerRot_rob; //////////////////////////////////////////////////// check matrix product here..
 
 	// Send set position orientation of the robot
 	pos_rob = _pos_rob;
@@ -416,24 +418,17 @@ void OpenLoopTeleop::computeHapticCommands_Impedance_PositionOnly(
  
     // Compute the set position from the haptic device
 	_pos_rob = _Ks*(_pos_dev-_HomePos_op);
-	// Rotation with respect with home orientation
-	// Eigen::Matrix3d rot_rel = _HomeRot_op.transpose()*_rot_dev;
-	// Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
-	// Compute set orientation from the haptic device
-	// Eigen::AngleAxisd rot_rob_aa = Eigen::AngleAxisd(_KsR*rot_rel_ang.angle(),rot_rel_ang.axis());
-	// _rot_rob = rot_rob_aa.toRotationMatrix();
 
 	//Transfer set position and orientation from device to robot global frame
 	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
-	// _rot_rob = _transformDev_Rob.transpose() * _rot_rob;
+	
 
 	// Adjust set position and orientation to the center of the task workspace
 	_pos_rob = _pos_rob + _centerPos_rob;
-	// _rot_rob = _rot_rob * _centerRot_rob; //////////////////////////////////////////////////// check matrix product here..
 
 	// Send set position orientation of the robot
 	pos_rob = _pos_rob;
-	// rot_rob = _rot_rob;
+
 
 }
 
@@ -443,14 +438,14 @@ void OpenLoopTeleop::computeHapticCommands_ForceSensor(
 				const Eigen::VectorXd f_task_sensed,
 				const bool filter_on)
 {
-	// get time since last call
-	_t_curr = std::chrono::high_resolution_clock::now();
-	if(_first_iteration)
-	{
-		_t_prev = std::chrono::high_resolution_clock::now();
-		_first_iteration = false;
-	}
-	_t_diff = _t_curr - _t_prev;
+	// // get time since last call
+	// _t_curr = std::chrono::high_resolution_clock::now();
+	// if(_first_iteration)
+	// {
+	// 	_t_prev = std::chrono::high_resolution_clock::now();
+	// 	_first_iteration = false;
+	// }
+	// _t_diff = _t_curr - _t_prev;
 
 
 	device_homed = false;
@@ -459,6 +454,9 @@ void OpenLoopTeleop::computeHapticCommands_ForceSensor(
 	hapticDevice->getRotation(_rot_dev_chai);
 	_pos_dev = convertChaiToEigenVector(_pos_dev_chai);
 	_rot_dev = convertChaiToEigenMatrix(_rot_dev_chai);
+
+
+	// cout << "Rotation Matrix \n" << _rot_dev << endl;
 
 
 	// Compute the force feedback in robot frame
@@ -514,26 +512,94 @@ void OpenLoopTeleop::computeHapticCommands_ForceSensor(
     // Compute the set position from the haptic device
 	_pos_rob = _Ks*(_pos_dev-_HomePos_op);
 	// Rotation with respect with home orientation
-	Eigen::Matrix3d rot_rel = _HomeRot_op.transpose()*_rot_dev;
+	Eigen::Matrix3d rot_rel = _rot_dev * _HomeRot_op.transpose();
 	Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
+
 	// Compute set orientation from the haptic device
 	Eigen::AngleAxisd rot_rob_aa = Eigen::AngleAxisd(_KsR*rot_rel_ang.angle(),rot_rel_ang.axis());
 	_rot_rob = rot_rob_aa.toRotationMatrix();
 
+
 	//Transfer set position and orientation from device to robot global frame
 	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
-	_rot_rob = _transformDev_Rob.transpose() * _rot_rob;
+	_rot_rob = _transformDev_Rob.transpose() * _rot_rob * _transformDev_Rob * _centerRot_rob; 
+
 
 	// Adjust set position and orientation to the center of the task workspace
 	_pos_rob = _pos_rob + _centerPos_rob;
-	_rot_rob = _rot_rob * _centerRot_rob; //////////////////////////////////////////////////// check matrix product here..
 
 	// Send set position orientation of the robot
 	pos_rob = _pos_rob;
 	rot_rob = _rot_rob;
 
 	// update previous time
-	_t_prev = _t_curr;
+	// _t_prev = _t_curr;
+}
+
+
+
+void OpenLoopTeleop::computeHapticCommands_ForceSensor_PositionOnly(
+				Eigen::Vector3d& pos_rob,
+				const Eigen::VectorXd f_task_sensed,
+				const bool filter_on)
+{
+
+	device_homed = false;
+	// read haptic device position
+	hapticDevice->getPosition(_pos_dev_chai);
+	_pos_dev = convertChaiToEigenVector(_pos_dev_chai);
+
+	// Compute the force feedback in robot frame
+	// Filtering sensed forced
+	Vector3d f_task_trans_sensed = f_task_sensed.head(3);
+
+	if (filter_on == true)
+	{
+		f_task_trans_sensed = _force_filter->update(f_task_trans_sensed);
+	}
+
+	Vector3d f_task_trans;
+	f_task_trans = _Red_factor_trans * f_task_trans_sensed;
+
+	//Transfer task force from robot to haptic device global frame
+	_force_dev = _transformDev_Rob * f_task_trans;
+
+	// Scaling of the force feedback
+	Eigen::Matrix3d scaling_factor_trans;
+	scaling_factor_trans << 1/_Ks, 0.0, 0.0,
+						  0.0, 1/_Ks, 0.0, 
+						  0.0, 0.0, 1/_Ks;
+
+	_force_dev = scaling_factor_trans * _force_dev;
+	_torque_dev.setZero();
+
+	// Saturate to Force and Torque limits of the haptic device
+	if (_force_dev.norm() >= maxForce_dev)
+	{
+		_force_dev = maxForce_dev*_force_dev/(_force_dev.norm());
+	}
+	if (_torque_dev.norm() >= maxTorque_dev)
+	{
+		_torque_dev = maxTorque_dev*_torque_dev/(_torque_dev.norm());
+	}
+
+	// Send controllers force and torque to haptic device
+	_force_chai = convertEigenToChaiVector(_force_dev);
+	_torque_chai = convertEigenToChaiVector(_torque_dev);
+    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+
+    // Compute the set position from the haptic device
+	_pos_rob = _Ks*(_pos_dev-_HomePos_op);
+
+	//Transfer set position and orientation from device to robot global frame
+	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
+	
+	// Adjust set position and orientation to the center of the task workspace
+	_pos_rob = _pos_rob + _centerPos_rob;
+
+	// Send set position orientation of the robot
+	pos_rob = _pos_rob;
+	
 }
 
 

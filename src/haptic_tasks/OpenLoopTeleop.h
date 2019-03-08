@@ -91,6 +91,11 @@ public:
 				const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
 				const bool filter_on = true);
 
+	void computeHapticCommands_ForceSensor_PositionOnly(
+				Eigen::Vector3d& pos_rob,
+				const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
+				const bool filter_on = true);
+
 
 	/**
 	 * @brief      reinitializes the workspace drift to the workspace origin of the controlled robot, the controller parameters are kept as updated, max velocities and drift force/velocity are set back to zero.
