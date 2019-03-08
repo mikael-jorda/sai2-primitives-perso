@@ -493,6 +493,7 @@ void OpenLoopTeleop::computeHapticCommands_ForceSensor(
 	_force_dev = scaling_factor_trans * _force_dev;
 	_torque_dev = scaling_factor_rot * _torque_dev;
 
+
 	// Saturate to Force and Torque limits of the haptic device
 	if (_force_dev.norm() >= maxForce_dev)
 	{
@@ -504,6 +505,11 @@ void OpenLoopTeleop::computeHapticCommands_ForceSensor(
 	}
 
 	// Send controllers force and torque to haptic device
+
+	// cout << "force sent to haptic : " << _force_dev.transpose() << endl;
+	// _force_dev.setZero();
+	// _torque_dev.setZero();
+
 	_force_chai = convertEigenToChaiVector(_force_dev);
 	_torque_chai = convertEigenToChaiVector(_torque_dev);
     hapticDevice->setForceAndTorque(_force_chai,_torque_chai);

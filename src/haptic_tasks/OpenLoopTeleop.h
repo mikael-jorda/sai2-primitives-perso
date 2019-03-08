@@ -89,12 +89,12 @@ public:
 				Eigen::Vector3d& pos_rob,
 				Eigen::Matrix3d& rot_rob,
 				const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
-				const bool filter_on = true);
+				const bool filter_on = false);
 
 	void computeHapticCommands_ForceSensor_PositionOnly(
 				Eigen::Vector3d& pos_rob,
 				const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
-				const bool filter_on = true);
+				const bool filter_on = false);
 
 
 	/**
