@@ -5,7 +5,7 @@
  *	It computes the haptic device force feedback and the controlled robot set position
  *	with respect to the input command of the device. 
  *
- *      Author: Margot
+ *      Author: Margot Vulliez & Mikael Jorda
  */
 
 #ifndef SAI2_HAPTIC_TASKS_OPEN_LOOP_TELEOP_H_
@@ -30,12 +30,12 @@ class OpenLoopTeleop
 public:
 
 	//------------------------------------------------
-	// Constructors
+	// Constructor / Destructor
 	//------------------------------------------------
 
 
 	/**
-	 * @brief Constructor  This constructor creates the workspace extension controller for a haptic application.
+	 * @brief Constructor  This constructor creates the haptic controller for a simple bilateral teleoperation scheme.
 	 *
 	 * @param Rmax_dev        BLA
 	 *
@@ -45,7 +45,12 @@ public:
 					const Eigen::Vector3d centerPos_rob, 
 		            const Eigen::Matrix3d centerRot_rob,
 		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
-
+	
+	/**
+	 * @brief Detructor  This destructor deletes the pointers, stop the haptic controller, and close the haptic device.
+	 *
+	 *
+	 */
 	~OpenLoopTeleop();
 
 
@@ -56,81 +61,124 @@ public:
 	// -------- core methods --------
 
 	/**
-	 * @brief update the haptic device model (mass matrix) (if model defined)
-	 * @details This function updates the inertia matrix (Lambda) of the human user with the haptic device. This function uses the robot model and assumes it has been updated.
-	 */
-	//virtual void updateDeviceModel();
-
-
-	/**
 	 * @brief Computes the haptic device set force and the controlled robot set position
-	 * @details Computes the haptic device force and the controlled robot set position with respect to the haptic device positions/velocities, the drift of the workspace and the task force feedback. The controller takes a Vector3d for definition of the device cartesian position and a Matrix3d for the orientation. A VectorXd describes the device velocity and another the desired cartesian force feedback from the task. The haptic device inertia matrix is given in the cartesian space by a Matrix3d.
+	 * @details Computes the haptic commands from the sensed task force (proxy=false) or through a stiffness/damping proxy between the set
+	 *          and current robot position (proxy=true). When computing the force feedback from the force sensor data, the task force must 
+	 * 			be set thanks to updateSensedForce() before calling this function. If the proxy evaluation is used, the current position,
+	 * 			rotation matrix, and velocity of the controlled robot are updated with updateSensedRobotPositionVelocity() for this method.
+	 * 			The haptic commands can be evaluated in position only (position_ony=true) if only the 3 translational DOFs are controlled and
+	 * 			rendered to the user.
 	 * 
-	 * @param Fop_des    The desired cartesian force to apply to the haptic device (F_drift + Fop_task)
-	 * @param pos_rob    The desired position of the controlled robot after extension of the workspace
-	 * @param rot_rob    The desired orientation of the controlled robot after extension of the workspace
-	 * @param pos_op     The position of the haptic device in its operational space
-	 * @param rot_op     The orientation of the haptic device in its operational space
-	 * @param vel_op     The velocity of the haptic device in its operational space
-	 * @param Fop_task   The desired force feedback from the task interaction
-	 * @param Lambda     The haptic device and human user mass matrix in the cartesian space
+	 * @param pos_rob    		The desired position of the controlled robot
+	 * @param rot_rob    		The desired orientation of the controlled robot
+	 * @param proxy     		Flag to select the calculation mode of the haptic force: via proxy or sensed force
+	 * @param position_only     FLag to compute the haptic commands in positon only
 	 */
-	void computeHapticCommands_Impedance(
-				Eigen::Vector3d& pos_rob,
-				Eigen::Matrix3d& rot_rob,
-				const Eigen::Vector3d pos_rob_sensed, 
-		        const Eigen::Matrix3d rot_rob_sensed);
-
-	void computeHapticCommands_Impedance_PositionOnly(
-				Eigen::Vector3d& pos_rob,
-				const Eigen::Vector3d pos_rob_sensed);
-
-	void computeHapticCommands_ForceSensor(
-				Eigen::Vector3d& pos_rob,
-				Eigen::Matrix3d& rot_rob,
-				const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
-				const bool filter_on = false);
-
-	void computeHapticCommands_ForceSensor_PositionOnly(
-				Eigen::Vector3d& pos_rob,
-				const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
-				const bool filter_on = false);
-
+	void computeHapticCommands(Eigen::Vector3d& pos_rob,
+								Eigen::Matrix3d& rot_rob,
+								const bool proxy = false,
+								const bool position_ony = false);
 
 	/**
-	 * @brief      reinitializes the workspace drift to the workspace origin of the controlled robot, the controller parameters are kept as updated, max velocities and drift force/velocity are set back to zero.
+	 * @brief Update the sensed force from the task interaction
+	 * @details When rendering the sensed force as haptic feedback, this function updates the force sensor data.
+	 * 
+	 * @param f_task_sensed    	Sensed task force from the controlled robot's sensor
+	 * @param filter_on    		Enable the filtering of force sensor data. The filter parameters are set thanks to setFilterCutOffFreq()
+	 */
+	void updateSensedForce(const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
+							const bool filter_on = false);
+
+	/**
+	 * @brief Update the current position and orientation of the controlled robot
+	 * @details When evaluating the haptic feedback via an impedance/damping proxy, this function updates the current robot position/rotation.
+	 * 
+	 * @param pos_rob_sensed    The current position of the controlled robot
+	 * @param rot_rob_sensed    The current orientation of the controlled robot
+	 */
+	void updateSensedRobotPositionVelocity(const Eigen::Vector3d pos_rob_sensed,
+											const Eigen::Vector3d vel_rob_trans,
+											const Eigen::Matrix3d rot_rob_sensed = Eigen::Matrix3d::Identity(),
+											const Eigen::Vector3d vel_rob_rot = Eigen::Vector3d::Zero());
+
+	/**
+	 * @brief Set the haptic device in gravity compensation
+	 * @details Send zero force/torque feedback to the haptic device.
+	 * 
+	 */
+	void GravityCompTask();
+
+	/**
+	 * @brief Place the haptic device in its home position.
+	 * @details This method creates a position controller for the haptic device to send it to its home position.
+	 * 
+	 */
+	void HomingTask();
+
+	/**
+	 * @brief Use the gripper of the haptic device as a user switch
+	 * 
+	 */
+	void EnableGripperUserSwitch();
+
+	/**
+	 * @brief If the gripper is used as a user switch, this methods read the gripper state
+	 * 
+	 */
+	bool ReadGripperUserSwitch();
+
+	/**
+	 * @brief Reinitializes the haptic controller parameters to default values.
 	 */
 	void reInitializeTask();
 
 
-	void HomingTask();
-
-	void GravityCompTask();
-
-
-	// -------- Teleoperation task related methods --------
+	// -------- Parameter setting methods --------
 
 	/**
-	 * @brief Sets the scaling factors between the device workspace and the task environment
-	 * @details ...
+	 * @brief Set the scaling factors between the device workspace and the task environment
 	 * 
 	 * @param Ks        Translational scaling factor
 	 * @param KsR       Rotational scaling factor
 	 */
 	void setScalingFactors(const double Ks, const double KsR);
 
-
+	/**
+	 * @brief Set the position controller gains of the haptic device for the homing task.
+	 * 			The gains are given as a ratio of the device maximum damping and stiffness (between 0 and 1).
+	 * 
+	 * @param kp_pos    Proportional gain in position  
+	 * @param kv_pos    Derivative term in position
+	 * @param kp_ori    Proportional gain in orientation
+	 * @param kv_ori    Derivative term in orientation
+	 */
 	void setPosCtrlGains (const double kp_pos, const double kv_pos, const double kp_ori, const double kv_ori);
 
-	void setForceFeedbackCtrlGains (const double k_pos, const double k_ori,
+	/**
+	 * @brief Set the impedance/damping terms for the force feedback evaluation via proxy
+	 * 		  Define the reduction factors between the actual task force and the rendered force
+	 * 
+	 * @param k_pos       		Proxy impedance term in position
+	 * @param d_pos 	  		Proxy damping term in position
+	 * @param k_ori       		Proxy impedance term in orientation
+	 * @param d_ori 	  		Proxy damping term in orientation
+	 * @param Red_factor_rot 	Matrix of force reduction factors
+	 * @param Red_factor_trans 	Matrix of torque reduction factors
+	 */
+	void setForceFeedbackCtrlGains (const double k_pos, const double d_pos, const double k_ori, const double d_ori,
 		const Matrix3d Red_factor_rot = Matrix3d::Identity(),
 		const Matrix3d Red_factor_trans = Matrix3d::Identity());
 
+	/**
+	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
+	 * 
+	 * @param fc_force        Cut-off frequency of the sensed force
+	 * @param fc_moment       Cut-off frequency of the sensed torque
+	 */
 	void setFilterCutOffFreq(const double fc_force, const double fc_moment);
 
-
 	/**
-	 * @brief Sets the center of the device workspace
+	 * @brief Set the center of the device workspace
 	 * @details The haptic device home position and orientation are set through a Vector3d and a Matrix3d
 	 * 
 	 * @param HomePos_op     The home position of the haptic device in its operational space
@@ -139,8 +187,8 @@ public:
 	void setDeviceCenter(const Eigen::Vector3d HomePos_op, 
 		            const Eigen::Matrix3d HomeRot_op = Eigen::Matrix3d::Identity());
 
-/**
-	 * @brief Sets the center of the task workspace
+	/**
+	 * @brief Set the center of the task workspace
 	 * @details The robot home position and orientation, with respect to the task, are set through a Vector3d and a Matrix3d
 	 * 
 	 * @param centerPos_rob     The task home position of the robot in its operational space
@@ -149,10 +197,11 @@ public:
 	void setRobotCenter(const Eigen::Vector3d centerPos_rob, 
 		            const Eigen::Matrix3d centerRot_rob = Eigen::Matrix3d::Identity());
 
-
-	void EnableGripperUserSwitch();
-	bool ReadGripperUserSwitch();
-
+	/**
+	 * @brief Set the transformation matrix between the haptic device global frame to the robot global frame
+	 * 
+	 * @param transformDev_Rob    Rotation matrix between from the device to robot frame
+	 */
 	void setDeviceRobotTransform(const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
 
 
@@ -218,6 +267,8 @@ public:
 	// Force feedback controller parameters
 	double _k_pos;
 	double _k_ori;
+	double _d_ori;
+	double _d_pos;
 	Matrix3d _Red_factor_trans;
 	Matrix3d _Red_factor_rot;
 
@@ -227,10 +278,19 @@ public:
 	double _fc_force;
 	double _fc_moment;
 
-	//Time parameters 
-	std::chrono::high_resolution_clock::time_point _t_prev;
-	std::chrono::high_resolution_clock::time_point _t_curr;
-	std::chrono::duration<double> _t_diff;
+	// Sensed task force 
+	VectorXd _f_task_sensed;
+
+	// Robot current position, rotation, and velocity
+	Vector3d _pos_rob_sensed;
+	Matrix3d _rot_rob_sensed;
+	Vector3d _vel_rob_trans;
+	Vector3d _vel_rob_rot;
+
+	// Time parameters 
+	chrono::high_resolution_clock::time_point _t_prev;
+	chrono::high_resolution_clock::time_point _t_curr;
+	chrono::duration<double> _t_diff;
 	bool _first_iteration;
 
 
