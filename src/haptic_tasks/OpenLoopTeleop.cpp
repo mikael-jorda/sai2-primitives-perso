@@ -59,45 +59,15 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 		            			const Eigen::Matrix3d centerRot_rob,
 		            			const Eigen::Matrix3d transformDev_Rob)
 {
-	// create a haptic device _handler
-    // _handler = handler;
-
-	// read info from haptic device
-	cHapticDeviceInfo hapticDeviceInfo;
-	handler->getDeviceSpecifications(hapticDeviceInfo, device_index);
-
-	if(hapticDeviceInfo.m_modelName == "Sigma.7")
-	{
-		// get a handle to the haptic device
-		cDeltaDevicePtr device_tmp = cDeltaDevice::create(device_index);
-		// handler->getDevice(device_tmp, device_index);
-		if (NULL == device_tmp) {
+	// open and calibrate the haptic device
+	handler->getDevice(hapticDevice, device_index);	
+		if (NULL == hapticDevice)
+		{
 			cout << "No haptic device found. " << endl;
 			device_started = false;
-		} else {
-			if(!device_tmp->open())
-			{
-				cout << "could not open the haptic device" << endl;
-			}
-			if(!device_tmp->calibrate())
-			{
-				cout << "could not calibrate the haptic device" << endl;
-			}
-			else
-			{
-				device_tmp->enableForces(true);
-				device_started = true;
-				hapticDevice = device_tmp;
-			}
 		}
-	}
-	else
-	{
-		handler->getDevice(hapticDevice, device_index);	
-		if (NULL == hapticDevice) {
-			cout << "No haptic device found. " << endl;
-			device_started = false;
-		} else {
+		else
+		{
 			if(!hapticDevice->open())
 			{
 				cout << "could not open the haptic device" << endl;
@@ -111,7 +81,10 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 				device_started = true;
 			}
 		}
-	}
+
+	// read info from haptic device
+	cHapticDeviceInfo hapticDeviceInfo;
+	handler->getDeviceSpecifications(hapticDeviceInfo, device_index);
 
 	// get properties of haptic device 
 	maxForce_dev = hapticDeviceInfo.m_maxLinearForce;
@@ -181,11 +154,17 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_fc_moment = 0.02;
 	_force_filter->setCutoffFrequency(_fc_force);
 	_moment_filter->setCutoffFrequency(_fc_moment);
+	filter_on = false;
+
+	//Initialiaze force feedback computation mode
+	proxy = false;
+	position_only = false;
 
 	// To initialize the timer
 	_first_iteration = true;
 
 }
+
 
 OpenLoopTeleop::~OpenLoopTeleop ()
 {
@@ -209,9 +188,7 @@ OpenLoopTeleop::~OpenLoopTeleop ()
 //// Core methods ////
 
 void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
-							Eigen::Matrix3d& rot_rob,
-							const bool proxy,
-							const bool position_ony)
+							Eigen::Matrix3d& rot_rob)
 {
 	// get time since last call
 	// _t_curr = std::chrono::high_resolution_clock::now();
@@ -228,7 +205,7 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 	// read haptic device position
 	hapticDevice->getPosition(_pos_dev_chai);
 	_pos_dev = convertChaiToEigenVector(_pos_dev_chai);
-	if (!position_ony)
+	if (!position_only)
 	{
 		hapticDevice->getRotation(_rot_dev_chai);
 		_rot_dev = convertChaiToEigenMatrix(_rot_dev_chai);
@@ -250,7 +227,7 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 	// {
 		// Evaluate the task force through stiffness proxy
 		f_task_trans = _k_pos*(_pos_rob_sensed - _pos_rob) - _d_pos * _vel_rob_trans;
-		if (!position_ony)
+		if (!position_only)
 		{
 			// Compute the orientation error
 			Sai2Model::orientationError(orientation_dev, _rot_rob, _rot_rob_sensed);
@@ -267,7 +244,7 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 	{
 		// Read sensed task force 
 		f_task_trans = _f_task_sensed.head(3);
-		if (!position_ony)
+		if (!position_only)
 		{
 		f_task_rot = _f_task_sensed.tail(3);
 		}
@@ -317,7 +294,7 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
  	// Compute the set position from the haptic device
 	_pos_rob = _Ks*(_pos_dev-_HomePos_op);
 	// Rotation with respect with home orientation
-	if (!position_ony)
+	if (!position_only)
 	{
 		Eigen::Matrix3d rot_rel = _rot_dev * _HomeRot_op.transpose();
 		Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
@@ -330,7 +307,7 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 
 	//Transfer set position and orientation from device to robot global frame
 	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
-	if (!position_ony)
+	if (!position_only)
 	{
 		_rot_rob = _transformDev_Rob.transpose() * _rot_rob * _transformDev_Rob * _centerRot_rob; 
 	}
@@ -350,8 +327,7 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 	// _t_prev = _t_curr;
 }
 
-void OpenLoopTeleop::updateSensedForce(const Eigen::VectorXd f_task_sensed,
-							const bool filter_on)
+void OpenLoopTeleop::updateSensedForce(const Eigen::VectorXd f_task_sensed)
 {
 	if (filter_on)
 	{
@@ -509,6 +485,11 @@ void OpenLoopTeleop::reInitializeTask()
 	_fc_moment = 0.02;
 	_force_filter->setCutoffFrequency(_fc_force);
 	_moment_filter->setCutoffFrequency(_fc_moment);
+	filter_on = false;
+
+	//Initialiaze force feedback computation mode
+	proxy = false;
+	position_only = false;
 
 	_first_iteration = true; // To initialize the timer
 }

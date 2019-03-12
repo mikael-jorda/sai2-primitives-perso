@@ -45,6 +45,7 @@ public:
 					const Eigen::Vector3d centerPos_rob, 
 		            const Eigen::Matrix3d centerRot_rob,
 		            const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
+
 	
 	/**
 	 * @brief Detructor  This destructor deletes the pointers, stop the haptic controller, and close the haptic device.
@@ -67,27 +68,23 @@ public:
 	 * 			be set thanks to updateSensedForce() before calling this function. If the proxy evaluation is used, the current position,
 	 * 			rotation matrix, and velocity of the controlled robot are updated with updateSensedRobotPositionVelocity() for this method.
 	 * 			The haptic commands can be evaluated in position only (position_ony=true) if only the 3 translational DOFs are controlled and
-	 * 			rendered to the user.
+	 * 			rendered to the user. 'proxy' and 'position_only' flags are gobal variables, set to false by default. 'proxy' selects the
+	 * 			calculation mode of the haptic force: via proxy or sensed force. 'position_only' computes the haptic commands in positon only
 	 * 
 	 * @param pos_rob    		The desired position of the controlled robot
 	 * @param rot_rob    		The desired orientation of the controlled robot
-	 * @param proxy     		Flag to select the calculation mode of the haptic force: via proxy or sensed force
-	 * @param position_only     FLag to compute the haptic commands in positon only
 	 */
 	void computeHapticCommands(Eigen::Vector3d& pos_rob,
-								Eigen::Matrix3d& rot_rob,
-								const bool proxy = false,
-								const bool position_ony = false);
+								Eigen::Matrix3d& rot_rob);
 
 	/**
 	 * @brief Update the sensed force from the task interaction
-	 * @details When rendering the sensed force as haptic feedback, this function updates the force sensor data.
+	 * @details When rendering the sensed force as haptic feedback, this function updates the force sensor data. The global variable
+	 * 			'filter_on' enables the filtering of force sensor data. The filter parameters are set thanks to setFilterCutOffFreq().
 	 * 
 	 * @param f_task_sensed    	Sensed task force from the controlled robot's sensor
-	 * @param filter_on    		Enable the filtering of force sensor data. The filter parameters are set thanks to setFilterCutOffFreq()
 	 */
-	void updateSensedForce(const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6),
-							const bool filter_on = false);
+	void updateSensedForce(const Eigen::VectorXd f_task_sensed = Eigen::VectorXd::Zero(6));
 
 	/**
 	 * @brief Update the current position and orientation of the controlled robot
@@ -277,6 +274,10 @@ public:
 	ButterworthFilter* _moment_filter;
 	double _fc_force;
 	double _fc_moment;
+	bool filter_on;
+
+	bool proxy;
+	bool position_only;
 
 	// Sensed task force 
 	VectorXd _f_task_sensed;
