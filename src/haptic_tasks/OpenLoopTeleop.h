@@ -201,11 +201,14 @@ public:
 	 */
 	void setDeviceRobotTransform(const Eigen::Matrix3d transformDev_Rob = Eigen::Matrix3d::Identity());
 
+	void initializeSigmaDevice();
 
 	//------------------------------------------------
 	// Attributes
 	//------------------------------------------------
 	
+	cHapticDeviceInfo device_info;
+
 	//// Haptic device handler, status and parameters ////
 	// a haptic device handler
 	// cHapticDeviceHandler* _handler;

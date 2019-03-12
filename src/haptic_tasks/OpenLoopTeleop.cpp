@@ -81,18 +81,19 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 				device_started = true;
 			}
 		}
-
 	// read info from haptic device
 	cHapticDeviceInfo hapticDeviceInfo;
 	handler->getDeviceSpecifications(hapticDeviceInfo, device_index);
 
-	// get properties of haptic device 
-	maxForce_dev = hapticDeviceInfo.m_maxLinearForce;
-	maxTorque_dev = hapticDeviceInfo.m_maxAngularTorque;
-	maxLinDamping_dev = hapticDeviceInfo.m_maxLinearDamping;
-	maxAngDamping_dev = hapticDeviceInfo.m_maxAngularDamping;
-	maxLinStiffness_dev = hapticDeviceInfo.m_maxLinearStiffness;
-	maxAngStiffness_dev = hapticDeviceInfo.m_maxAngularStiffness;
+	// read info from haptic device
+	handler->getDeviceSpecifications(device_info, device_index);
+
+	maxForce_dev = device_info.m_maxLinearForce;
+	maxTorque_dev = device_info.m_maxAngularTorque;
+	maxLinDamping_dev = device_info.m_maxLinearDamping;
+	maxAngDamping_dev = device_info.m_maxAngularDamping;
+	maxLinStiffness_dev = device_info.m_maxLinearStiffness;
+	maxAngStiffness_dev = device_info.m_maxAngularStiffness;
 
 	//Send zero force feedback to the haptic device
 	_force_dev.setZero();
@@ -165,6 +166,15 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 
 }
 
+
+void OpenLoopTeleop::initializeSigmaDevice()
+{
+	if(device_info.m_modelName == "sigma.7")
+	{
+		cDeltaDevice* tmp_device = static_cast<cDeltaDevice*>(hapticDevice.get());
+		tmp_device->enableForces(true);
+	}	
+}
 
 OpenLoopTeleop::~OpenLoopTeleop ()
 {
