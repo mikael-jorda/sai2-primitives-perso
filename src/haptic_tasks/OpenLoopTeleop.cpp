@@ -303,18 +303,14 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 		Eigen::AngleAxisd rot_rob_aa = Eigen::AngleAxisd(_KsR*rot_rel_ang.angle(),rot_rel_ang.axis());
 		_rot_rob = rot_rob_aa.toRotationMatrix();
 	}
-
-
-	//Transfer set position and orientation from device to robot global frame
-	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
-	if (!position_only)
-	{
-		_rot_rob = _transformDev_Rob.transpose() * _rot_rob * _transformDev_Rob * _centerRot_rob; 
-	}
 	else 
 	{
 		_rot_rob.setIdentity();
 	}
+
+	//Transfer set position and orientation from device to robot global frame
+	_pos_rob = _transformDev_Rob.transpose() * _pos_rob;
+	_rot_rob = _transformDev_Rob.transpose() * _rot_rob * _transformDev_Rob * _centerRot_rob; 
 
 	// Adjust set position to the center of the task workspace
 	_pos_rob = _pos_rob + _centerPos_rob;
