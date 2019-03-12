@@ -5,7 +5,7 @@
  *	It computes the haptic device force feedback and the controlled robot set position
  *	with respect to the input command of the device. 
  *
- *      Author: Margot Vulliez & Mikael Jorda
+ *      Authors: Margot Vulliez & Mikael Jorda
  *
  */
 
@@ -81,19 +81,9 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 				device_started = true;
 			}
 		}
-	// read info from haptic device
-	cHapticDeviceInfo hapticDeviceInfo;
-	handler->getDeviceSpecifications(hapticDeviceInfo, device_index);
-
+	
 	// read info from haptic device
 	handler->getDeviceSpecifications(device_info, device_index);
-
-	maxForce_dev = device_info.m_maxLinearForce;
-	maxTorque_dev = device_info.m_maxAngularTorque;
-	maxLinDamping_dev = device_info.m_maxLinearDamping;
-	maxAngDamping_dev = device_info.m_maxAngularDamping;
-	maxLinStiffness_dev = device_info.m_maxLinearStiffness;
-	maxAngStiffness_dev = device_info.m_maxAngularStiffness;
 
 	//Send zero force feedback to the haptic device
 	_force_dev.setZero();
@@ -286,13 +276,13 @@ void OpenLoopTeleop::computeHapticCommands(Eigen::Vector3d& pos_rob,
 	_torque_dev = scaling_factor_rot * _torque_dev;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_force_dev.norm() >= maxForce_dev)
+	if (_force_dev.norm() >= device_info.m_maxLinearForce)
 	{
-		_force_dev = maxForce_dev*_force_dev/(_force_dev.norm());
+		_force_dev = device_info.m_maxLinearForce*_force_dev/(_force_dev.norm());
 	}
-	if (_torque_dev.norm() >= maxTorque_dev)
+	if (_torque_dev.norm() >= device_info.m_maxAngularTorque)
 	{
-		_torque_dev = maxTorque_dev*_torque_dev/(_torque_dev.norm());
+		_torque_dev = device_info.m_maxAngularTorque*_torque_dev/(_torque_dev.norm());
 	}
 
 	// Send controllers force and torque to haptic device
@@ -377,10 +367,10 @@ void OpenLoopTeleop::GravityCompTask()
 void OpenLoopTeleop::HomingTask()
 {	
 	// Haptice device position controller gains
-	double kp_pos =_kp_pos * maxLinStiffness_dev;
-	double kv_pos =_kv_pos * maxLinDamping_dev;
-	double kp_ori =_kp_ori * maxAngStiffness_dev;
-	double kv_ori =_kv_ori * maxAngDamping_dev;
+	double kp_pos =_kp_pos * device_info.m_maxLinearStiffness;
+	double kv_pos =_kv_pos * device_info.m_maxLinearDamping;
+	double kp_ori =_kp_ori * device_info.m_maxAngularStiffness;
+	double kv_ori =_kv_ori * device_info.m_maxAngularDamping;
 
 	// read haptic device position and velocity
 	hapticDevice->getPosition(_pos_dev_chai);
@@ -401,13 +391,13 @@ void OpenLoopTeleop::HomingTask()
 	_torque_dev = -kp_ori*orientation_error - kv_ori * _vel_dev_rot;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_force_dev.norm() >= maxForce_dev)
+	if (_force_dev.norm() >= device_info.m_maxLinearForce)
 	{
-		_force_dev = maxForce_dev*_force_dev/(_force_dev.norm());
+		_force_dev = device_info.m_maxLinearForce*_force_dev/(_force_dev.norm());
 	}
-	if (_torque_dev.norm() >= maxTorque_dev)
+	if (_torque_dev.norm() >= device_info.m_maxAngularTorque)
 	{
-		_torque_dev = maxTorque_dev*_torque_dev/(_torque_dev.norm());
+		_torque_dev = device_info.m_maxAngularTorque*_torque_dev/(_torque_dev.norm());
 	}
 
 	// Send controllers force and torque to haptic device

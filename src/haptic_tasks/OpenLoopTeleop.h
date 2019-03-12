@@ -3,9 +3,10 @@
  *
  *      This controller implements the bilateral teleoperation scheme in open loop.
  *	It computes the haptic device force feedback and the controlled robot set position
- *	with respect to the input command of the device. 
+ *	with respect to the input command of the device.
+ * 
  *
- *      Author: Margot Vulliez & Mikael Jorda
+ *      Authors: Margot Vulliez & Mikael Jorda
  */
 
 #ifndef SAI2_HAPTIC_TASKS_OPEN_LOOP_TELEOP_H_
@@ -37,7 +38,11 @@ public:
 	/**
 	 * @brief Constructor  This constructor creates the haptic controller for a simple bilateral teleoperation scheme.
 	 *
-	 * @param Rmax_dev        BLA
+	 * @param handler       	A pointer to the haptic device handler
+	 * @param device_index 		An integer to designated the new haptic device
+	 * @param centerPos_rob 	The task home position of the robot in its operational space
+	 * @param centerRot_rob     The task home orientation of the robot in its operational space
+	 * @param transformDev_Rob 	Rotation matrix between from the device to robot frame
 	 *
 	 */
 	OpenLoopTeleop(cHapticDeviceHandler* handler,
@@ -49,7 +54,6 @@ public:
 	
 	/**
 	 * @brief Detructor  This destructor deletes the pointers, stop the haptic controller, and close the haptic device.
-	 *
 	 *
 	 */
 	~OpenLoopTeleop();
@@ -207,23 +211,14 @@ public:
 	// Attributes
 	//------------------------------------------------
 	
-	cHapticDeviceInfo device_info;
 
 	//// Haptic device handler, status and parameters ////
-	// a haptic device handler
-	// cHapticDeviceHandler* _handler;
 	// a pointer to the current haptic device
 	cGenericHapticDevicePtr hapticDevice;
+	cHapticDeviceInfo device_info;
 	// Device status
 	bool device_started;
 	bool device_homed;
-	// Device maximum force, damping and stiffness 
-	double maxForce_dev;
-	double maxTorque_dev;
-	double maxLinDamping_dev;
-	double maxAngDamping_dev;
-	double maxLinStiffness_dev;
-	double maxAngStiffness_dev;
 	// If gripper used as a switch
 	bool gripper_state;
 	// Set force and torque feecdback of the haptic device
