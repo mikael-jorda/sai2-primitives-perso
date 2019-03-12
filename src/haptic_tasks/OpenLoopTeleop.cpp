@@ -69,67 +69,35 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 		            			const Eigen::Matrix3d centerRot_rob,
 		            			const Eigen::Matrix3d transformDev_Rob)
 {
-	// create a haptic device _handler
-    // _handler = handler;
+	// get haptic device from handler
+	handler->getDevice(hapticDevice, device_index);	
+	if (NULL == hapticDevice) {
+		cout << "No haptic device found. " << endl;
+		device_started = false;
+	} else {
+		if(!hapticDevice->open())
+		{
+			cout << "could not open the haptic device" << endl;
+		}
+		if(!hapticDevice->calibrate(true))
+		{
+			cout << "could not calibrate the haptic device" << endl;
+		}
+		else
+		{
+			device_started = true;
+		}
+	}
 
 	// read info from haptic device
-	cHapticDeviceInfo hapticDeviceInfo;
-	handler->getDeviceSpecifications(hapticDeviceInfo, device_index);
+	handler->getDeviceSpecifications(device_info, device_index);
 
-	if(hapticDeviceInfo.m_modelName == "Sigma.7")
-	{
-		// get a handle to the haptic device
-		cDeltaDevicePtr device_tmp = cDeltaDevice::create(device_index);
-		// handler->getDevice(device_tmp, device_index);
-		if (NULL == device_tmp) {
-			cout << "No haptic device found. " << endl;
-			device_started = false;
-		} else {
-			if(!device_tmp->open())
-			{
-				cout << "could not open the haptic device" << endl;
-			}
-			if(!device_tmp->calibrate())
-			{
-				cout << "could not calibrate the haptic device" << endl;
-			}
-			else
-			{
-				device_tmp->enableForces(true);
-				device_started = true;
-				hapticDevice = device_tmp;
-			}
-		}
-	}
-	else
-	{
-		handler->getDevice(hapticDevice, device_index);	
-		if (NULL == hapticDevice) {
-			cout << "No haptic device found. " << endl;
-			device_started = false;
-		} else {
-			if(!hapticDevice->open())
-			{
-				cout << "could not open the haptic device" << endl;
-			}
-			if(!hapticDevice->calibrate())
-			{
-				cout << "could not calibrate the haptic device" << endl;
-			}
-			else
-			{
-				device_started = true;
-			}
-		}
-	}
-
-	// get properties of haptic device 
-	maxForce_dev = hapticDeviceInfo.m_maxLinearForce;
-	maxTorque_dev = hapticDeviceInfo.m_maxAngularTorque;
-	maxLinDamping_dev = hapticDeviceInfo.m_maxLinearDamping;
-	maxAngDamping_dev = hapticDeviceInfo.m_maxAngularDamping;
-	maxLinStiffness_dev = hapticDeviceInfo.m_maxLinearStiffness;
-	maxAngStiffness_dev = hapticDeviceInfo.m_maxAngularStiffness;
+	maxForce_dev = device_info.m_maxLinearForce;
+	maxTorque_dev = device_info.m_maxAngularTorque;
+	maxLinDamping_dev = device_info.m_maxLinearDamping;
+	maxAngDamping_dev = device_info.m_maxAngularDamping;
+	maxLinStiffness_dev = device_info.m_maxLinearStiffness;
+	maxAngStiffness_dev = device_info.m_maxAngularStiffness;
 
 	//Send zero force feedback to the haptic device
 	_force_dev.setZero();
@@ -188,6 +156,15 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	// To initialize the timer
 	_first_iteration = true;
 
+}
+
+void OpenLoopTeleop::initializeSigmaDevice()
+{
+	if(device_info.m_modelName == "sigma.7")
+	{
+		cDeltaDevice* tmp_device = static_cast<cDeltaDevice*>(hapticDevice.get());
+		tmp_device->enableForces(true);
+	}	
 }
 
 void OpenLoopTeleop::GravityCompTask()
