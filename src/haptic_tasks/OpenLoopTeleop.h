@@ -49,7 +49,7 @@ public:
 					const int device_index,
 					const Eigen::Vector3d center_position_robot, 
 		            const Eigen::Matrix3d center_rotation_robot,
-		            const Eigen::Matrix3d Transform_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
+		            const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
 
 	/**
 	 * @brief This method enables the torque control on the Sigma.7 (enableForces)
@@ -207,6 +207,18 @@ public:
 		            	 const Eigen::Matrix3d home_rotation_device = Eigen::Matrix3d::Identity());
 
 	/**
+	 * @brief Set the center of the device Orientation Workspace to the current orientation of the device
+	 * 
+	 */
+	void setDeviceOrientationCenterToCurrent();
+
+	/**
+	 * @brief Set the center of the device Position Workspace to the current position of the device
+	 * 
+	 */
+	void setDevicePositionCenterToCurrent();
+
+	/**
 	 * @brief Set the center of the task Workspace
 	 * @details The robot home position and orientation, with respect to the task, are set through a Vector3d and a Matrix3d
 	 * 
@@ -217,11 +229,11 @@ public:
 		            	const Eigen::Matrix3d center_rotation_robot = Eigen::Matrix3d::Identity());
 
 	/**
-	 * @brief Set the transformation matrix between the haptic device global frame to the robot global frame
+	 * @brief Set the rotation matrix between the haptic device global frame to the robot global frame
 	 * 
-	 * @param Transform_Matrix_DeviceToRobot    Rotation matrix between from the device to robot frame
+	 * @param Rotation_Matrix_DeviceToRobot    Rotation matrix between from the device to robot frame
 	 */
-	void setDeviceRobotTransform(const Eigen::Matrix3d Transform_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
+	void setDeviceRobotRotation(const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
 
 
 	// -------- Workspace extension related methods --------
@@ -252,10 +264,11 @@ public:
 	
 //// Inputs to be define by the users ////
 
-	bool haptic_feedback_from_proxy; // If set to true, the force feedback is computed from an stiffness/damping proxy.
+	bool _haptic_feedback_from_proxy; // If set to true, the force feedback is computed from an stiffness/damping proxy.
 									 // Otherwise the sensed force are rendered to the user.
+	bool _send_haptic_feedback;       // If set to false, send 0 forces and torques to the haptic device
 
-	bool filter_on; //Enable filtering force sensor data. To be use only if updateSensedForce() is called cyclically.
+	bool _filter_on; //Enable filtering force sensor data. To be use only if updateSensedForce() is called cyclically.
 
 //// Status and robot/device's infos ////
 
@@ -315,7 +328,7 @@ private:
 	Matrix3d _center_rotation_robot;
 
 	//Transformation matrix from the device frame to the robot frame
-	Matrix3d _Transform_Matrix_DeviceToRobot;
+	Matrix3d _Rotation_Matrix_DeviceToRobot;
 	
 	// Workspace scaling factors in translation and rotation
 	double _scaling_factor_trans, _scaling_factor_rot;
