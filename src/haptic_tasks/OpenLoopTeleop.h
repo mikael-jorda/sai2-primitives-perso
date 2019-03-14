@@ -94,8 +94,8 @@ public:
 
 
 
-//	void computeHapticCommandsWorkspaceExtension(Eigen::Vector3d& desired_position_robot,
-//								Eigen::Matrix3d& desired_rotation_robot);
+	void computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
+												Eigen::Matrix3d& desired_rotation_robot);
 
 	/**
 	 * @brief Update the sensed force from the task interaction
@@ -305,12 +305,13 @@ public:
 	// Workspace extension parameters
 	bool _first_iteration;
 	// Maximal haptic device velocity during the task
-	double _max_rot_velocity_device, max_trans_velocity_device;
+	double _max_rot_velocity_device, _max_trans_velocity_device;
 	// Device drift force
-	VectorXd _drift_force;
+	Vector3d _drift_force;
+	Vector3d _drift_torque;
 	// Device drift velocities
-	Vector3d drift_rot_velocity;
-	Vector3d drift_trans_velocity;
+	Vector3d _drift_rot_velocity;
+	Vector3d _drift_trans_velocity;
 	// Drifting Workspace center of the controlled robot, position and orientation
 	Vector3d _center_position_robot_drift;
 	Matrix3d _center_rotation_robot_drift;  
