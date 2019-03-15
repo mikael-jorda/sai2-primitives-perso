@@ -264,7 +264,7 @@ public:
 	
 //// Inputs to be define by the users ////
 
-	bool _haptic_feedback_from_proxy; // If set to true, the force feedback is computed from an stiffness/damping proxy.
+	bool _haptic_feedback_from_proxy; // If set to true, the force feedback is computed from a stiffness/damping proxy.
 									 // Otherwise the sensed force are rendered to the user.
 	bool _send_haptic_feedback;       // If set to false, send 0 forces and torques to the haptic device
 
@@ -301,6 +301,9 @@ public:
 	Vector3d _current_rot_velocity_robot;
 	// Sensed task force 
 	VectorXd _sensed_task_force;
+	// Device task force
+	Vector3d _device_force;
+	Vector3d _device_torque;
 
 	// Workspace extension parameters
 	bool _first_iteration;

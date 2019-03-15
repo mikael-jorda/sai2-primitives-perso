@@ -130,7 +130,7 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_proxy_position_impedance = 200.0;
 	_proxy_orientation_impedance = 15.0;
 	_proxy_position_damping = 10.0;
-	_proxy_orientation_damping = 5.0;
+	_proxy_orientation_damping = 0.5;
 	_reduction_factor_torque_feedback << 1/20.0, 0.0, 0.0,
 						  0.0, 1/20.0, 0.0,
 						  0.0, 0.0, 1/20.0;
@@ -406,8 +406,6 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 }
 
 
-
-
 void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
 							Eigen::Matrix3d& desired_rotation_robot)
 {
@@ -517,11 +515,24 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
+	// _commanded_torque_device.setZero();
+
+
+
+
+
+
+
+	_device_force = _commanded_force_device;
+	_device_torque = _commanded_torque_device;
 	
 	//// Evaluation of the drift force ////
 	// Definition of the velocity gains from task feedback
 	Matrix3d _Kv_translation = _drift_force_admissible_ratio*(_commanded_force_device.asDiagonal());
 	Matrix3d _Kv_rotation = _drift_force_admissible_ratio*(_commanded_torque_device.asDiagonal());
+
+	cout << "Kv drift velocity gains translation \n" << _Kv_translation << endl;
+	cout << "Kv drift velocity gains rotation \n" << _Kv_rotation << endl;
 
 	// Drift force computation
 	_drift_force = _Kv_translation * _drift_trans_velocity;
@@ -775,7 +786,7 @@ void OpenLoopTeleop::reInitializeTask()
 	_proxy_position_impedance = 200.0;
 	_proxy_orientation_impedance = 15.0;
 	_proxy_position_damping = 10.0;
-	_proxy_orientation_damping = 5.0;
+	_proxy_orientation_damping = 0.5;
 	_reduction_factor_torque_feedback << 1/20.0, 0.0, 0.0,
 						  0.0, 1/20.0, 0.0,
 						  0.0, 0.0, 1/20.0;
