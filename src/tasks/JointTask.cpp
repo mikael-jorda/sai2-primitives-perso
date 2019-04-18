@@ -29,6 +29,15 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 	_use_velocity_saturation_flag = false;
 	_saturation_velocity = M_PI/3.0*Eigen::VectorXd::Ones(dof);
 
+	_use_isotropic_gains = true;
+	_kp_vec = _kp*Eigen::VectorXd::Ones(dof);
+	_kv_vec = _kv*Eigen::VectorXd::Ones(dof);
+	_ki_vec = _ki*Eigen::VectorXd::Ones(dof);
+
+	_kp_mat = Eigen::MatrixXd::Zero(dof,dof);
+	_kv_mat = Eigen::MatrixXd::Zero(dof,dof);
+	_ki_mat = Eigen::MatrixXd::Zero(dof,dof);
+
 	// initialize matrices sizes
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
 
@@ -80,6 +89,7 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 {
+	int dof = _robot->_dof;
 
 	// get time since last call for the I term
 	if(_first_iteration)
@@ -93,6 +103,20 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_t_curr = std::chrono::high_resolution_clock::now();
 	}
 	_t_diff = _t_curr - _t_prev;
+
+	// update matrix gains
+	if(_use_isotropic_gains)
+	{
+		_kp_vec = _kp*Eigen::VectorXd::Ones(dof);
+		_kv_vec = _kv*Eigen::VectorXd::Ones(dof);
+		_ki_vec = _ki*Eigen::VectorXd::Ones(dof);
+	}
+	for(int i=0 ; i<dof ; i++)
+	{
+		_kp_mat(i,i) = _kp_vec(i);
+		_kv_mat(i,i) = _kv_vec(i);
+		_ki_mat(i,i) = _ki_vec(i);
+	}
 
 	// update constroller state
 	_current_position = _robot->_q;
@@ -115,7 +139,7 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// compute task force (with velocity saturation if asked)
 	if(_use_velocity_saturation_flag)
 	{
-		_step_desired_velocity = -_kp/_kv * (_current_position - _step_desired_position) - _ki/_kv * _integrated_position_error;
+		_step_desired_velocity = -_kp_mat*_kv_mat.inverse() * (_current_position - _step_desired_position) - _ki_mat*_kv_mat.inverse() * _integrated_position_error;
 		for(int i=0; i<_robot->dof(); i++)
 		{
 			if(_step_desired_velocity(i) > _saturation_velocity(i))
@@ -127,11 +151,11 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 				_step_desired_velocity(i) = -_saturation_velocity(i);
 			}
 		}
-		_task_force = _robot->_M * (-_kv*(_current_velocity - _step_desired_velocity));
+		_task_force = _robot->_M * (-_kv_mat*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		_task_force = _robot->_M*(-_kp*(_current_position - _step_desired_position) - _kv * _current_velocity - _ki * _integrated_position_error);
+		_task_force = _robot->_M*(-_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
 	}
 
 	// compute task torques

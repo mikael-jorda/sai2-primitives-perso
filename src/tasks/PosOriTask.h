@@ -407,6 +407,11 @@ public:
 	double _linear_saturation_velocity;   // defaults to 0.3 m/s
 	double _angular_saturation_velocity;  // defaults to PI/3 Rad/s
 
+	bool _use_isotropic_gains;              // defaults to true
+	Eigen::Vector3d _kp_pos_vec, _kp_ori_vec;
+	Eigen::Vector3d _kv_pos_vec, _kv_ori_vec;
+	Eigen::Vector3d _ki_pos_vec, _ki_ori_vec;
+
 // trajectory generation via interpolation using Reflexxes Library
 // on by defalut
 #ifdef USING_OTG
@@ -453,6 +458,10 @@ public:
 
 	bool _closed_loop_force_control;
 	bool _closed_loop_moment_control;
+
+	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
+	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
+	Eigen::Matrix3d _ki_pos_mat, _ki_ori_mat;
 
 	// model quantities
 	Eigen::MatrixXd _jacobian;
