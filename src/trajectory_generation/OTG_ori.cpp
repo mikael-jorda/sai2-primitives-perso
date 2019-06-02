@@ -207,7 +207,14 @@ void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3
 		}
 	}
 
-	next_orientation = Eigen::AngleAxisd(next_ori_representation.norm(), next_ori_representation.normalized()).toRotationMatrix();
+	if(next_ori_representation.norm() < 1e-3)
+	{
+		next_orientation.setIdentity();
+	}
+	else
+	{
+		next_orientation = Eigen::AngleAxisd(next_ori_representation.norm(), next_ori_representation.normalized()).toRotationMatrix();
+	}
 
 	next_orientation = _initial_orientation*next_orientation;
 	next_angular_velocity = _initial_orientation*next_angular_velocity;
