@@ -121,9 +121,9 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_scaling_factor_rot=1.0;
 
 	//Initialize position controller parameters
-	_kp_position_ctrl_device = 0.1;
+	_kp_position_ctrl_device = 0.2;
 	_kv_position_ctrl_device = 0.5;
-	_kp_orientation_ctrl_device = 0.4;
+	_kp_orientation_ctrl_device = 0.6;
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize force feedback controller parameters
@@ -176,6 +176,14 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_task_workspace_radius_max=0.2;
 	_device_workspace_tilt_angle_max=20*M_PI/180.0;
 	_task_workspace_tilt_angle_max=45*M_PI/180.0;
+
+	//Initialize haptic guidance parameters
+	_enable_plane_guidance_3D=false;
+	_enable_line_guidance_3D=false;
+	_guidance_stiffness=0.7;
+	_guidance_damping=0.8;
+	_guidance_force_plane.setZero();
+	_guidance_force_line.setZero();
 
 }
 
@@ -323,10 +331,21 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 
 	cVector3d _current_position_device_chai;
 	cMatrix3d _current_rotation_device_chai;
-	// read haptic device position
+ 	cVector3d _current_trans_velocity_device_chai;
+	// read haptic device position and velocity
 	hapticDevice->getPosition(_current_position_device_chai);
+	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
 	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
+	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
 
+///////////////////////////////////////////////////
+ 	// Compute the set velocity from the haptic device
+	_vel_trans_rob = _scaling_factor_trans*_current_trans_velocity_device;
+	
+	//Transfer set position and orientation from device to robot global frame
+	_vel_trans_rob = _Rotation_Matrix_DeviceToRobot.transpose() * _vel_trans_rob;
+//////////////////////////////////////////////////
+	
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
@@ -349,7 +368,6 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 	
 	// Apply reduction factors to force feedback
 	f_task_trans = _reduction_factor_force_feedback * f_task_trans;
-	f_task_rot = _reduction_factor_torque_feedback * f_task_rot;
 	//Transfer task force from robot to haptic device global frame
 	_commanded_force_device = _Rotation_Matrix_DeviceToRobot * f_task_trans;
 	_commanded_torque_device = _Rotation_Matrix_DeviceToRobot * f_task_rot;
@@ -366,16 +384,23 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 						  0.0, 0.0, 1/_scaling_factor_rot;
 
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
-	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
+
+	if (_enable_plane_guidance_3D)
+	{
+		ComputePlaneGuidanceForce();
+		_commanded_force_device += _guidance_force_plane;
+	}
+
+	if (_enable_line_guidance_3D)
+	{
+		ComputeLineGuidanceForce();
+		_commanded_force_device += _guidance_force_line;
+	}
 
 	// Saturate to Force and Torque limits of the haptic device
 	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
 	{
 		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
-	}
-	if (_commanded_torque_device.norm() >= device_info.m_maxAngularTorque)
-	{
-		_commanded_torque_device = device_info.m_maxAngularTorque*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
 	// Send controllers force and torque to haptic device
@@ -404,6 +429,7 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 	
 
 }
+
 
 
 void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
@@ -466,18 +492,18 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 		// Compute the orientation error
 		Sai2Model::orientationError(orientation_dev, _desired_rotation_robot, _current_rotation_robot);							//
 		// Evaluate task torque
-		f_task_rot = _proxy_orientation_impedance*orientation_dev - _proxy_orientation_damping * _current_rot_velocity_robot;	//
+		// f_task_rot = _proxy_orientation_impedance*orientation_dev - _proxy_orientation_damping * _current_rot_velocity_robot;	//
 		
-		// f_task_rot.setZero();
+		f_task_rot.setZero();
 		
 	}
 	else
 	{
 		// Read sensed task force 
 		f_task_trans = _sensed_task_force.head(3);
-		f_task_rot = _sensed_task_force.tail(3);																				//
+		// f_task_rot = _sensed_task_force.tail(3);																				//
 	
-		// f_task_rot.setZero();
+		f_task_rot.setZero();
 	
 	}
 
@@ -515,12 +541,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
-	// _commanded_torque_device.setZero();
-
-
-
-
-
 
 
 	_device_force = _commanded_force_device;
@@ -531,17 +551,24 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 	Matrix3d _Kv_translation = _drift_force_admissible_ratio*(_commanded_force_device.asDiagonal());
 	Matrix3d _Kv_rotation = _drift_force_admissible_ratio*(_commanded_torque_device.asDiagonal());
 
-	cout << "Kv drift velocity gains translation \n" << _Kv_translation << endl;
-	cout << "Kv drift velocity gains rotation \n" << _Kv_rotation << endl;
 
 	// Drift force computation
 	_drift_force = _Kv_translation * _drift_trans_velocity;
 	_drift_torque = _Kv_rotation * _drift_rot_velocity;
 	//_drift_force = Lambda*_drift_force_0; //Drift force weigthed through the device inertia matrix
 
+	// cout << "Fdrift \n" << _drift_force << endl;
+	// cout << "Cdrift \n" << _drift_torque << endl;
+
 	//// Desired cartesian force to apply to the haptic device ////
 	_commanded_force_device += _drift_force;
 	_commanded_torque_device += _drift_torque;
+
+	if(!_send_haptic_feedback)
+	{
+		_commanded_force_device.setZero();
+		_commanded_torque_device.setZero();
+	}
 
 	//// Add virtual forces according to the device operational space limits ////
 	Vector3d force_virtual = Vector3d::Zero();
@@ -572,11 +599,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 	// Send controllers force and torque to haptic device
 	_force_chai = convertEigenToChaiVector(_commanded_force_device);
 	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-	if(!_send_haptic_feedback)
-	{
-		_force_chai.set(0,0,0);
-		_torque_chai.set(0,0,0);
-	}
     hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
 
 	//// Computation of the desired position for the controlled robot after drift of the device ////
@@ -629,6 +651,236 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 
 
 
+void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot)
+{
+	// get time since last call
+	 _t_curr = std::chrono::high_resolution_clock::now();
+	 if(_first_iteration)
+	 {
+	 	_t_prev = std::chrono::high_resolution_clock::now();
+	 	_first_iteration = false;
+	 	_desired_position_robot = _center_position_robot;
+	 	_desired_rotation_robot = _center_rotation_robot;
+	 	_center_position_robot_drift = _center_position_robot;
+	 }
+	 _t_diff = _t_curr - _t_prev;
+
+	device_homed = false;
+
+ 	cVector3d _current_position_device_chai;
+ 	cVector3d _current_trans_velocity_device_chai;
+	// read haptic device position and velocity
+	hapticDevice->getPosition(_current_position_device_chai);
+	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
+	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
+	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
+
+///////////////////////////////////////////////////
+ 	// Compute the set velocity from the haptic device
+	_vel_trans_rob = _scaling_factor_trans*_current_trans_velocity_device;
+	
+	//Transfer set position and orientation from device to robot global frame
+	_vel_trans_rob = _Rotation_Matrix_DeviceToRobot.transpose() * _vel_trans_rob;
+	
+///////////////////////////////////////////////////////
+
+
+	// Update the maximum velocities for the task
+	if (_current_trans_velocity_device.norm()>=_max_trans_velocity_device)	
+	{
+		_max_trans_velocity_device = _current_trans_velocity_device.norm();
+	}
+
+	// Compute the force feedback in robot frame
+	Vector3d f_task_trans;
+	Vector3d f_task_rot;
+	cVector3d _force_chai;
+	cVector3d _torque_chai;
+	
+	if (_haptic_feedback_from_proxy)
+	{
+		// Evaluate the task force through stiffness proxy
+		f_task_trans = _proxy_position_impedance*(_current_position_robot - _desired_position_robot) - _proxy_position_damping * _current_trans_velocity_robot;
+		f_task_rot.setZero();
+		
+	}
+	else
+	{
+		// Read sensed task force 
+		f_task_trans = _sensed_task_force.head(3);
+		f_task_rot.setZero();
+	}
+
+	// Apply reduction factors to force feedback
+	f_task_trans = _reduction_factor_force_feedback * f_task_trans;
+	f_task_rot = _reduction_factor_torque_feedback * f_task_rot;
+	//Transfer task force from robot to haptic device global frame
+	_commanded_force_device = _Rotation_Matrix_DeviceToRobot * f_task_trans;
+	_commanded_torque_device = _Rotation_Matrix_DeviceToRobot * f_task_rot;
+
+	//// Evaluation of the drift velocities ////
+	//Translational drift
+	Vector3d relative_position_device;
+	relative_position_device = _current_position_device -_home_position_device;
+	_drift_trans_velocity = -_current_trans_velocity_device.norm()*relative_position_device/(_device_workspace_radius_max*_max_trans_velocity_device);
+
+	//// Computation of the scaling factors ////
+	_scaling_factor_trans = 1.0 + relative_position_device.norm()*(_task_workspace_radius_max/_device_workspace_radius_max-1.0)/_device_workspace_radius_max;
+
+	// Scaling of the force feedback
+	Eigen::Matrix3d scaling_factor_trans;
+	scaling_factor_trans << 1/_scaling_factor_trans, 0.0, 0.0,
+						  0.0, 1/_scaling_factor_trans, 0.0, 
+						  0.0, 0.0, 1/_scaling_factor_trans;
+
+	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
+
+	// cout << "Ks \n" << _scaling_factor_trans << endl;
+
+	
+	//// Evaluation of the drift force ////
+	// Definition of the velocity gains from task feedback
+	Matrix3d _Kv_translation = _drift_force_admissible_ratio*(_commanded_force_device.asDiagonal());
+
+	// Drift force computation
+	_drift_force = _Kv_translation * _drift_trans_velocity;
+	
+	cout << "Fdrift \n" << _drift_force << endl;
+
+	//// Desired cartesian force to apply to the haptic device ////
+	_commanded_force_device += _drift_force;
+
+	if(!_send_haptic_feedback)
+	{
+		_commanded_force_device.setZero();
+	}
+
+	//// Add virtual forces according to the device operational space limits ////
+	Vector3d force_virtual = Vector3d::Zero();
+
+	if (relative_position_device.norm() >= _device_workspace_radius_max)
+	{
+		force_virtual = -(0.8 * device_info.m_maxLinearStiffness * (relative_position_device.norm()-_device_workspace_radius_max)/(relative_position_device.norm()))*relative_position_device;
+	}
+	_commanded_force_device += force_virtual;
+
+	if (_enable_plane_guidance_3D)
+	{
+		ComputePlaneGuidanceForce();
+		_commanded_force_device += _guidance_force_plane;
+	}
+
+	if (_enable_line_guidance_3D)
+	{
+		ComputeLineGuidanceForce();
+		_commanded_force_device += _guidance_force_line;
+	}
+
+	// Saturate to Force and Torque limits of the haptic device
+	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	{
+		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+	}
+
+	// Send controllers force and torque to haptic device
+	_force_chai = convertEigenToChaiVector(_commanded_force_device);
+	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
+    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+
+	//// Computation of the desired position for the controlled robot after drift of the device ////
+	// Estimated drift velocity considering drift force 
+	Vector3d _vel_drift_est_trans = _t_diff.count()*_drift_force;
+
+	// Drift of the center of the task workspace
+	_center_position_robot_drift -= _Rotation_Matrix_DeviceToRobot.transpose()*(_t_diff.count()*_scaling_factor_trans*_vel_drift_est_trans);
+
+	cout << "Center robot WS \n" << _center_position_robot_drift << endl;
+
+	//// Compute position of the controlled robot after drift ////
+	 // Compute the set position from the haptic device
+	_desired_position_robot = _scaling_factor_trans*relative_position_device;
+
+	//Transfer set position and orientation from device to robot global frame
+	_desired_position_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_position_robot;
+
+	// Adjust set position to the center of the task Workspace
+	_desired_position_robot = _desired_position_robot + _center_position_robot_drift;
+
+	// Send set position orientation of the robot
+	desired_position_robot = _desired_position_robot;
+
+	// update previous time
+	 _t_prev = _t_curr;
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+void OpenLoopTeleop::ComputePlaneGuidanceForce()
+{
+	// vector from the plane's origin to the current position
+	Eigen::Vector3d plane_to_point_vec;
+	plane_to_point_vec = _current_position_device - _plane_origin_point;
+
+	// calculate the normal distance from the plane to the current position
+	double distance_to_plane;
+	distance_to_plane = plane_to_point_vec.dot(_plane_normal_vec);
+
+	// current position projected onto the plane
+	Eigen::Vector3d projected_current_position;
+	projected_current_position = _current_position_device - distance_to_plane * _plane_normal_vec;
+
+	// projected device velocity on the normal vector
+	Eigen::Vector3d projected_current_velocity;
+	projected_current_velocity = _current_trans_velocity_device.dot(_plane_normal_vec)*_plane_normal_vec;
+
+	// calculate the force feedback
+	_guidance_force_plane = - _guidance_stiffness * device_info.m_maxLinearStiffness * (_current_position_device - projected_current_position) - _guidance_damping * projected_current_velocity;
+}
+
+void OpenLoopTeleop::ComputeLineGuidanceForce()
+{
+	Eigen::Vector3d line_to_point_vec;
+	double distance_along_line;
+	Eigen::Vector3d closest_point_vec;
+	Eigen::Vector3d projected_current_position;
+	Eigen::Vector3d line_normal_vec;
+	
+	// vector from first point on line to current position
+	line_to_point_vec = _current_position_device - _line_first_point;
+
+	// distance from the first point to the current position projected onto the line
+	distance_along_line = line_to_point_vec.dot(_guidance_line_vec);
+
+	// vector to the projected point onto the line from the first point
+	closest_point_vec = distance_along_line * _guidance_line_vec;
+
+	// projected position on line in world frame
+	projected_current_position = _line_first_point + closest_point_vec;
+
+	// Normal vector to the line from current position
+	line_normal_vec = _current_position_device - projected_current_position;
+	line_normal_vec = line_normal_vec/line_normal_vec.norm();
+
+	// projected device velocity on the normal vector
+	Eigen::Vector3d projected_current_velocity;
+	projected_current_velocity = _current_trans_velocity_device.dot(line_normal_vec)*line_normal_vec;
+
+	// compute the force 
+	_guidance_force_line = - (_guidance_stiffness) * device_info.m_maxLinearStiffness * (_current_position_device - projected_current_position) - _guidance_damping * projected_current_velocity;
+}
+
+
 
 void OpenLoopTeleop::updateSensedForce(const Eigen::VectorXd sensed_task_force)
 {
@@ -658,7 +910,6 @@ void OpenLoopTeleop::updateSensedRobotPositionVelocity(const Eigen::Vector3d cur
 	_current_rot_velocity_robot = current_rot_velocity_robot;
 
 }
-
 
 void OpenLoopTeleop::GravityCompTask()
 {	
@@ -820,6 +1071,13 @@ void OpenLoopTeleop::reInitializeTask()
 	_drift_rot_velocity.setZero(3);
 	_drift_trans_velocity.setZero(3);
 
+	//Initialize haptic guidance parameters
+	_enable_plane_guidance_3D=false;
+	_enable_line_guidance_3D=false;
+	_guidance_stiffness=0.7;
+	_guidance_damping=0.8;
+	_guidance_force_plane.setZero();
+	_guidance_force_line.setZero();
 
 }
 
@@ -911,6 +1169,31 @@ void OpenLoopTeleop::setWorkspaceSize(double device_workspace_radius_max, double
 void OpenLoopTeleop::setForceNoticeableDiff(double drift_force_admissible_ratio)
 {
 	_drift_force_admissible_ratio = drift_force_admissible_ratio;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//// Haptic guidance related settings methods ////
+
+void OpenLoopTeleop::setHapticGuidanceGains(const double guidance_stiffness, const double guidance_damping)
+{
+	_guidance_stiffness = guidance_stiffness;
+	_guidance_damping = guidance_damping;
+}
+
+void OpenLoopTeleop::setPlane(const Eigen::Vector3d plane_origin_point, const Eigen::Vector3d plane_normal_vec)
+{
+	_plane_origin_point = plane_origin_point;
+	_plane_normal_vec = plane_normal_vec / plane_normal_vec.norm();
+}
+
+void OpenLoopTeleop::setLine(const Eigen::Vector3d line_first_point, const Eigen::Vector3d line_second_point)
+{
+	//set vector from one point to the other
+	_line_first_point = line_first_point;
+	_line_second_point = line_second_point;
+
+	_guidance_line_vec = line_second_point - line_first_point;
+	_guidance_line_vec = _guidance_line_vec / _guidance_line_vec.norm();
 }
 
 

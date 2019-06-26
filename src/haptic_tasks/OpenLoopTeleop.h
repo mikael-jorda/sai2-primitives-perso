@@ -79,6 +79,9 @@ public:
 	 *			updateSensedForce() before calling this function. If the proxy evaluation is used, the current position,
 	 * 			rotation matrix, and velocity of the controlled robot are updated with updateSensedRobotPositionVelocity()
 	 *			for this method.
+	 *
+	 * 			A guidance plan can be add to the 3d haptic controller (haptic_guidance_plan=true).
+	 *			The plan is defined by its cartesian parameterization, set as the 4x1 vector _guidancePlan_cartesian.
 	 * 
 	 *			computeHapticCommands6d(): The 6 DOFs are controlled and feedback.
 	 *			computeHapticCommands3d(): The haptic commands are evaluated in position only, the 3 translational DOFs
@@ -89,11 +92,11 @@ public:
 	 */
 	void computeHapticCommands6d(Eigen::Vector3d& desired_position_robot,
 								Eigen::Matrix3d& desired_rotation_robot);
-
 	void computeHapticCommands3d(Eigen::Vector3d& desired_position_robot);
 
 
 
+	void computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot);
 	void computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
 												Eigen::Matrix3d& desired_rotation_robot);
 
@@ -258,6 +261,54 @@ public:
 	 */
 	void setForceNoticeableDiff(double drift_force_admissible_ratio);
 
+
+	// -------- Haptic guidance related methods --------
+	/**
+	 * @brief Sets the stiffness and damping parameters for the haptic guidance (plane and line)
+	 * 
+	 * @param guidance_stiffness 	Stiffness of the virtual guidance
+	 * @param guidance_damping 		Damping of the virtual guidance
+	 */	
+	void setHapticGuidanceGains(const double guidance_stiffness, const double guidance_damping);
+
+	/**
+	 * @brief Defines an artibtrary 3D plane using a point and a normal vector
+	 * 
+	 * @param plane_point_origin coordinate vector of the origin point
+	 * @param plane_normal_vec normal vector for the plane
+	 */	
+	void setPlane(const Eigen::Vector3d plane_origin_point, const Eigen::Vector3d plane_normal_vec);
+
+	/**
+	*  @brief computes the guidance force for the 3D plane set by the user
+	*/
+	void ComputePlaneGuidanceForce();
+
+	/**
+	* @brief stores user defined values for line guidance
+	* @param _first_point vector to first point from world origin
+	* @param _second_point vector to second point from world origin
+	*/
+	void setLine(const Eigen::Vector3d line_first_point, const Eigen::Vector3d line_second_point);
+	
+	/**
+	*  @brief computes the guidance force for the 3D line set by the user
+	*/
+	void ComputeLineGuidanceForce();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	//------------------------------------------------
 	// Attributes
 	//------------------------------------------------
@@ -269,6 +320,11 @@ public:
 	bool _send_haptic_feedback;       // If set to false, send 0 forces and torques to the haptic device
 
 	bool _filter_on; //Enable filtering force sensor data. To be use only if updateSensedForce() is called cyclically.
+
+	bool _enable_plane_guidance_3D; // add guidance along a user-defined plane
+
+	bool _enable_line_guidance_3D; // add guidance along a user-defined plane
+
 
 //// Status and robot/device's infos ////
 
@@ -288,6 +344,7 @@ public:
 	Matrix3d _current_rotation_device;
 	// Haptic device velocity
 	Vector3d _current_trans_velocity_device;
+	Vector3d _vel_trans_rob; //Commanded robot velocity from haptic device
 	Vector3d _current_rot_velocity_device;
 
 	// Robot variables
@@ -317,7 +374,20 @@ public:
 	Vector3d _drift_trans_velocity;
 	// Drifting Workspace center of the controlled robot, position and orientation
 	Vector3d _center_position_robot_drift;
-	Matrix3d _center_rotation_robot_drift;  
+	Matrix3d _center_rotation_robot_drift;
+
+	// Haptic guidance gains
+	double _guidance_stiffness;
+	double _guidance_damping;
+	// Guidance plane parameters
+	Vector3d _plane_origin_point;
+	Vector3d _plane_normal_vec;
+	Vector3d _guidance_force_plane;
+	// Guidance line parameters
+	Vector3d _guidance_line_vec;
+	Vector3d _line_first_point;
+	Vector3d _line_second_point;
+	Vector3d _guidance_force_line;
 
 
 //// Controllers parameters, set through setting methods ////

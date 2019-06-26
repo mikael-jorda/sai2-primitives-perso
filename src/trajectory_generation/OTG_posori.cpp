@@ -279,7 +279,14 @@ void OTG_posori::computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3
 		}
 	}
 
-	next_orientation = Eigen::AngleAxisd(next_ori_representation.norm(), next_ori_representation.normalized()).toRotationMatrix();
+	if(next_ori_representation.norm() < 1e-3)
+	{
+		next_orientation.setIdentity();
+	}
+	else
+	{
+		next_orientation = Eigen::AngleAxisd(next_ori_representation.norm(), next_ori_representation.normalized()).toRotationMatrix();
+	}
 
 	next_orientation = _initial_orientation*next_orientation;
 	next_angular_velocity = _initial_orientation*next_angular_velocity;
