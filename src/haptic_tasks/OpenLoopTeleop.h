@@ -100,9 +100,23 @@ public:
 	void computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
 												Eigen::Matrix3d& desired_rotation_robot);
 
+
+
+	void computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot);
+	void computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_trans_velocity_robot,
+							Eigen::Vector3d& desired_rot_velocity_robot);
+
+
+
+
+
+
+
+
+
 	/**
 	 * @brief Update the sensed force from the task interaction
-	 * @details When rendering the sensed force as haptic feedback, this function updates the force sensor data. The global variable
+	 * @details When rendering the sensed force as haptic feedback in the impedance-type bilateral scheme, this function updates the force sensor data. The global variable
 	 * 			'filter_on' enables the filtering of force sensor data. The filter parameters are set thanscaling_factor_trans to setFilterCutOffFreq().
 	 * 
 	 * @param sensed_task_force    	Sensed task force from the controlled robot's sensor
@@ -110,16 +124,34 @@ public:
 	void updateSensedForce(const Eigen::VectorXd sensed_task_force = Eigen::VectorXd::Zero(6));
 
 	/**
-	 * @brief Update the current position and orientation of the controlled robot
-	 * @details When evaluating the haptic feedback via an impedance/damping proxy, this function updates the current robot position/rotation.
+	 * @brief Update the current position, orientation, and velocity of the controlled robot
+	 * @details When evaluating the haptic feedback in the admittance-type bilateral scheme, this function updates the current robot position/rotation.
 	 * 
-	 * @param current_position_robot    The current position of the controlled robot
-	 * @param current_rotation_robot    The current orientation of the controlled robot
+	 * @param current_position_robot    	The current position of the controlled robot
+	 * @param current_rotation_robot    	The current orientation of the controlled robot
+	 * @param current_trans_velocity_robot  The current translational velocity of the controlled robot
+	 * @param current_rot_velocity_robot 	The current rotational velocity of the controlled robot
 	 */
 	void updateSensedRobotPositionVelocity(const Eigen::Vector3d current_position_robot,
 											const Eigen::Vector3d current_trans_velocity_robot,
 											const Eigen::Matrix3d current_rotation_robot = Eigen::Matrix3d::Identity(),
 											const Eigen::Vector3d current_rot_velocity_robot = Eigen::Vector3d::Zero());
+
+	/**
+	 * @brief Update the current position, orientation, and velocity of the proxy
+	 * @details When evaluating the haptic feedback via an impedance/damping proxy, this function updates the current proxy position, rotation, and velocity.
+	 * 
+	 * @param current_position_proxy    	The current position of the controlled virtual proxy
+	 * @param current_rotation_proxy    	The current orientation of the controlled virtual proxy
+	 * @param current_trans_velocity_proxy  The current translational velocity of the virtual proxy
+	 * @param current_rot_velocity_proxy	The current rotational velocity of the virtual proxy
+	 */
+	void updateVirtualProxyPositionVelocity(const Eigen::Vector3d current_position_proxy,
+											const Eigen::Vector3d current_trans_velocity_proxy,
+											const Eigen::Matrix3d current_rotation_proxy = Eigen::Matrix3d::Identity(),
+											const Eigen::Vector3d current_rot_velocity_proxy = Eigen::Vector3d::Zero());
+
+
 
 	/**
 	 * @brief Set the haptic device in gravity compensation
@@ -176,20 +208,37 @@ public:
 						  const double kp_orientation_ctrl_device, const double kv_orientation_ctrl_device);
 
 	/**
-	 * @brief Set the impedance/damping terms for the force feedback evaluation via proxy
+	 * @brief Set the impedance/damping terms for the force feedback evaluation in admittance-type bilateral scheme
 	 * 		  Define the reduction factors between the actual task force and the rendered force
+	 * 
+	 * @param kp_robot_trans_velocity       		Robot impedance term in position for feedback computation
+	 * @param ki_robot_trans_velocity 	  			Robot damping term in position for feedback computation
+	 * @param kp_robot_rot_velocity       	Robot impedance term in orientation for feedback computation
+	 * @param ki_robot_rot_velocity 	  		Robot damping term in orientation for feedback computation
+	 * @param robot_trans_admittance 				Robot desired admittance in translation
+	 * @param robot_rot_admittance 					Robot desired admittance in rotation
+	 * @param reduction_factor_torque_feedback 		Matrix of force reduction factors
+	 * @param reduction_factor_force_feedback 		Matrix of torque reduction factors
+	 */
+	void setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
+									const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
+									const double robot_trans_admittance,
+									const double robot_rot_admittance,
+									const Matrix3d reduction_factor_torque_feedback = Matrix3d::Identity(),
+									const Matrix3d reduction_factor_force_feedback = Matrix3d::Identity());
+
+
+	/**
+	 * @brief Set the impedance/damping terms for the force feedback evaluation via virtual proxy
 	 * 
 	 * @param proxy_position_impedance       		Proxy impedance term in position
 	 * @param proxy_position_damping 	  			Proxy damping term in position
 	 * @param proxy_orientation_impedance       	Proxy impedance term in orientation
 	 * @param proxy_orientation_damping 	  		Proxy damping term in orientation
-	 * @param reduction_factor_torque_feedback 		Matrix of force reduction factors
-	 * @param reduction_factor_force_feedback 		Matrix of torque reduction factors
 	 */
-	void setForceFeedbackCtrlGains (const double proxy_position_impedance, const double proxy_position_damping,
-									const double proxy_orientation_impedance, const double proxy_orientation_damping,
-									const Matrix3d reduction_factor_torque_feedback = Matrix3d::Identity(),
-									const Matrix3d reduction_factor_force_feedback = Matrix3d::Identity());
+	void setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
+									const double proxy_orientation_impedance, const double proxy_orientation_damping);
+
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
@@ -344,18 +393,30 @@ public:
 	Matrix3d _current_rotation_device;
 	// Haptic device velocity
 	Vector3d _current_trans_velocity_device;
-	Vector3d _vel_trans_rob; //Commanded robot velocity from haptic device
 	Vector3d _current_rot_velocity_device;
+	// Sensed force and torque from the haptic device
+	Vector3d _sensed_force_device;
+	Vector3d _sensed_torque_device;
 
 	// Robot variables
-	//Set position and orientation of the controlled robot (in robot frame)
+	//Commanded position and orientation of the robot (in robot frame) from impedance control
 	Vector3d _desired_position_robot;
 	Matrix3d _desired_rotation_robot;
+	//Commanded velocity of the robot (in robot frame) from admittance control
+	Vector3d _desired_trans_velocity_robot;
+	Vector3d _desired_rot_velocity_robot;
+	Vector3d _integrated_trans_velocity_error;
+	Vector3d _integrated_rot_velocity_error;
 	// Robot current position, rotation, and velocity
 	Vector3d _current_position_robot;
 	Matrix3d _current_rotation_robot;
 	Vector3d _current_trans_velocity_robot;
 	Vector3d _current_rot_velocity_robot;
+	// Virtual proxy current position, rotation, and velocity
+	Vector3d _current_position_proxy;
+	Matrix3d _current_rotation_proxy;
+	Vector3d _current_trans_velocity_proxy;
+	Vector3d _current_rot_velocity_proxy;
 	// Sensed task force 
 	VectorXd _sensed_task_force;
 	// Device task force
@@ -407,17 +468,27 @@ private:
 	// Workspace scaling factors in translation and rotation
 	double _scaling_factor_trans, _scaling_factor_rot;
 
-	//Position controller parameters
+	//Position controller parameters for homing task
 	double _kp_position_ctrl_device;
 	double _kv_position_ctrl_device;
 	double _kp_orientation_ctrl_device;
 	double _kv_orientation_ctrl_device;
 
-	// Force feedback controller parameters
+	// Virtual proxy parameters
 	double _proxy_position_impedance;
 	double _proxy_orientation_impedance;
 	double _proxy_orientation_damping;
 	double _proxy_position_damping;
+
+	// Force feedback controller parameters
+	double _kp_robot_trans_velocity;
+	double _kp_robot_rot_velocity;
+	double _ki_robot_rot_velocity;
+	double _ki_robot_trans_velocity;
+
+	double _robot_trans_admittance;
+	double _robot_rot_admittance;
+
 	Matrix3d _reduction_factor_force_feedback;
 	Matrix3d _reduction_factor_torque_feedback;
 
