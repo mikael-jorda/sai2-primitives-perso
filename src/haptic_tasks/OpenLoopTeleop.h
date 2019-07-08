@@ -224,8 +224,8 @@ public:
 									const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
 									const double robot_trans_admittance,
 									const double robot_rot_admittance,
-									const Matrix3d reduction_factor_torque_feedback = Matrix3d::Identity(),
-									const Matrix3d reduction_factor_force_feedback = Matrix3d::Identity());
+									const Matrix3d reduction_factor_force_feedback = Matrix3d::Identity(),
+									const Matrix3d reduction_factor_torque_feedback = Matrix3d::Identity());
 
 
 	/**

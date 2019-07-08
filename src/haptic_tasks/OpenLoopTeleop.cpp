@@ -144,16 +144,16 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
-	_proxy_position_impedance = 200.0;
-	_proxy_orientation_impedance = 15.0;
-	_proxy_position_damping = 10.0;
+	_proxy_position_impedance = 1000.0;
+	_proxy_orientation_impedance = 10.0;
+	_proxy_position_damping = 20.0;
 	_proxy_orientation_damping = 0.5;
 
 	//Initialize force feedback controller parameters
-	_kp_robot_trans_velocity = 200.0;
-	_kp_robot_rot_velocity = 15.0;
-	_ki_robot_trans_velocity = 10.0;
-	_ki_robot_rot_velocity = 0.5;
+	_kp_robot_trans_velocity = 10.0;
+	_kp_robot_rot_velocity = 10.0;
+	_ki_robot_trans_velocity = 0.0;
+	_ki_robot_rot_velocity = 0.0;
 
 	_robot_trans_admittance = 1/50.0;
 	_robot_rot_admittance = 1/1.5;
@@ -297,16 +297,16 @@ void OpenLoopTeleop::reInitializeTask()
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
-	_proxy_position_impedance = 200.0;
-	_proxy_orientation_impedance = 15.0;
-	_proxy_position_damping = 10.0;
+	_proxy_position_impedance = 1000.0;
+	_proxy_orientation_impedance = 10.0;
+	_proxy_position_damping = 20.0;
 	_proxy_orientation_damping = 0.5;
 
 	//Initialize force feedback controller parameters
-	_kp_robot_trans_velocity = 200.0;
-	_kp_robot_rot_velocity = 15.0;
-	_ki_robot_trans_velocity = 10.0;
-	_ki_robot_rot_velocity = 0.5;
+	_kp_robot_trans_velocity = 10.0;
+	_kp_robot_rot_velocity = 10.0;
+	_ki_robot_trans_velocity = 0.0;
+	_ki_robot_rot_velocity = 0.0;
 
 	_robot_trans_admittance = 1/50.0;
 	_robot_rot_admittance = 1/1.5;
@@ -1395,8 +1395,8 @@ void OpenLoopTeleop::setForceFeedbackCtrlGains (const double kp_robot_trans_velo
 										const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
 										const double robot_trans_admittance,
 										const double robot_rot_admittance,
-										const Matrix3d reduction_factor_torque_feedback,
-										const Matrix3d reduction_factor_force_feedback)
+										const Matrix3d reduction_factor_force_feedback,
+										const Matrix3d reduction_factor_torque_feedback)
 {
 	_kp_robot_trans_velocity = kp_robot_trans_velocity;
 	_kp_robot_rot_velocity = kp_robot_rot_velocity;
@@ -1404,8 +1404,8 @@ void OpenLoopTeleop::setForceFeedbackCtrlGains (const double kp_robot_trans_velo
 	_ki_robot_rot_velocity = ki_robot_rot_velocity;
 	_robot_trans_admittance = robot_trans_admittance;
 	_robot_rot_admittance = robot_rot_admittance;
-	_reduction_factor_torque_feedback = reduction_factor_torque_feedback;
 	_reduction_factor_force_feedback = reduction_factor_force_feedback;
+	_reduction_factor_torque_feedback = reduction_factor_torque_feedback;
 }
 
 
