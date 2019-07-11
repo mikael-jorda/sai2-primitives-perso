@@ -1,15 +1,16 @@
 /*
- * OpenLoopTeleop.cpp
+ * HapticController.cpp
  *
- *      This controller implements the bilateral teleoperation scheme in open loop.
- *	It computes the haptic device force feedback and the controlled robot set position
- *	with respect to the input command of the device. 
+ *      This controller implements a bilateral haptic teleoperation scheme in open loop.
+ * 		The commands are computed for the haptic device (force feedback) and the controlled robot (desired task).
+ * 		HapticController includes impedance-type and admittance-type controllers, with plane/line/orientation guidances,
+ * 		and the workspace mapping algorithm.
  *
  *      Authors: Margot Vulliez & Mikael Jorda
  *
  */
 
-#include "OpenLoopTeleop.h"
+#include "HapticController.h"
 
 #include <stdexcept>
 
@@ -18,83 +19,18 @@ namespace Sai2Primitives
 {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-//// Declaration of internal functions
-////////////////////////////////////////////////////////////////////////////////////////////////////
-cVector3d convertEigenToChaiVector( Eigen::Vector3d a_vec )
-{
-    double x = a_vec(0);
-    double y = a_vec(1);
-    double z = a_vec(2);
-    return cVector3d(x,y,z);
-}
-
-Eigen::Vector3d convertChaiToEigenVector( cVector3d a_vec )
-{
-    double x = a_vec.x();
-    double y = a_vec.y();
-    double z = a_vec.z();
-    return Eigen::Vector3d(x,y,z);
-}
-
-cMatrix3d convertEigenToChaiRotation( Eigen::Matrix3d a_mat )
-{
-    return cMatrix3d( a_mat(0,0), a_mat(0,1), a_mat(0,2), a_mat(1,0), a_mat(1,1), a_mat(1,2), a_mat(2,0), a_mat(2,1), a_mat(2,2) );
-}
-
-Eigen::Matrix3d convertChaiToEigenMatrix( cMatrix3d a_mat )
-{
-    Eigen::Matrix3d asdf;
-    asdf << a_mat(0,0), a_mat(0,1), a_mat(0,2),
-            a_mat(1,0), a_mat(1,1), a_mat(1,2),
-            a_mat(2,0), a_mat(2,1), a_mat(2,2);
-
-    return asdf;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 //// Constructor, Destructor and Initialization of the haptic controllers
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
-								const int device_index,
-								const Eigen::Vector3d center_position_robot, 
+HapticController::HapticController(const Eigen::Vector3d center_position_robot, 
 		            			const Eigen::Matrix3d center_rotation_robot,
 		            			const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot)
 {
-	// open and calibrate the haptic device
-	handler->getDevice(hapticDevice, device_index);	
-		if (NULL == hapticDevice)
-		{
-			cout << "No haptic device found. " << endl;
-			device_started = false;
-		}
-		else
-		{
-			if(!hapticDevice->open())
-			{
-				cout << "could not open the haptic device" << endl;
-			}
-			if(!hapticDevice->calibrate())
-			{
-				cout << "could not calibrate the haptic device" << endl;
-			}
-			else
-			{
-				device_started = true;
-			}
-		}
-	
-	// read info from haptic device
-	handler->getDeviceSpecifications(device_info, device_index);
 
 	//Send zero force feedback to the haptic device
 	_commanded_force_device.setZero();
 	_commanded_torque_device.setZero();
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
-	_force_chai.set(0.0,0.0,0.0);
-	_torque_chai.set(0.0,0.0,0.0);
-	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	_commanded_gripper_force_device = 0.0;
 
 	//Initialize snesed force to zero
 	_sensed_task_force.setZero(6);
@@ -127,6 +63,10 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_current_rotation_robot = _center_rotation_robot;
 	_current_trans_velocity_robot.setZero();
 	_current_rot_velocity_robot.setZero();
+	
+	_current_position_gripper_device = 0.0;
+	_current_gripper_velocity_device = 0.0;
+
 	//Set the initial virtual proxy position, orientation, and velocity
 	_current_position_proxy = _center_position_robot;
 	_current_rotation_proxy = _center_rotation_robot;
@@ -177,11 +117,12 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_filter_on = false;
 
 	//Initialiaze force feedback computation mode
-	_haptic_feedback_from_proxy = true;
+	_haptic_feedback_from_proxy = false;
 	_send_haptic_feedback = false;
 
 	// To initialize the timer
 	_first_iteration = true;
+	gripper_state = false;
 
 	// Initialize Workspace extension parameters
 	_center_position_robot_drift.setZero();
@@ -205,25 +146,28 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_task_workspace_tilt_angle_max=45*M_PI/180.0;
 
 	//Initialize haptic guidance parameters
-	_enable_plane_guidance_3D=false;
-	_enable_line_guidance_3D=false;
+	_enable_plane_guidance=false;
+	_enable_line_guidance=false;
 	_guidance_stiffness=0.7;
 	_guidance_damping=0.8;
 	_guidance_force_plane.setZero();
 	_guidance_force_line.setZero();
 
+	//Device specifications
+	_max_linear_stiffness_device = 0.0;
+	_max_angular_stiffness_device = 0.0;
+	_max_linear_damping_device = 0.0;
+	_max_angular_damping_device = 0.0;
+	_max_force_device = 0.0;
+	_max_torque_device = 0.0;
+
 }
 
-OpenLoopTeleop::~OpenLoopTeleop ()
+HapticController::~HapticController ()
 {
 	_commanded_force_device.setZero();
 	_commanded_torque_device.setZero();
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
-	_force_chai.set(0.0,0.0,0.0);
-	_torque_chai.set(0.0,0.0,0.0);
-	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);	
-	hapticDevice->close();
+	_commanded_gripper_force_device = 0.0;
 
 	_desired_position_robot = _center_position_robot;
 	_desired_rotation_robot = _center_rotation_robot;
@@ -238,16 +182,12 @@ OpenLoopTeleop::~OpenLoopTeleop ()
 	_moment_filter = NULL;
 }
 
-void OpenLoopTeleop::reInitializeTask()
+void HapticController::reInitializeTask()
 {
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 	//Send zero force feedback to the haptic device
 	_commanded_force_device.setZero();
 	_commanded_torque_device.setZero();
-	_force_chai.set(0.0,0.0,0.0);
-	_torque_chai.set(0.0,0.0,0.0);
-	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	_commanded_gripper_force_device = 0.0;
 
 	//reInitialize snesed force to zero
 	_sensed_task_force.setZero(6);
@@ -282,6 +222,9 @@ void OpenLoopTeleop::reInitializeTask()
 	_current_rotation_proxy = _center_rotation_robot;
 	_current_trans_velocity_proxy.setZero();
 	_current_rot_velocity_proxy.setZero();
+
+	_current_position_gripper_device = 0.0;
+	_current_gripper_velocity_device = 0.0;
 
 	//Initialize the frame trasform from device to robot
 	_Rotation_Matrix_DeviceToRobot.setIdentity();
@@ -327,10 +270,11 @@ void OpenLoopTeleop::reInitializeTask()
 	_filter_on = false;
 
 	//Initialiaze force feedback computation mode
-	_haptic_feedback_from_proxy = true;
+	_haptic_feedback_from_proxy = false;
 	_send_haptic_feedback = false;
 
 	_first_iteration = true; // To initialize the timer
+	gripper_state = false;
 
 	// Initialize Workspace extension parameters
 	_center_position_robot_drift.setZero();
@@ -345,8 +289,8 @@ void OpenLoopTeleop::reInitializeTask()
 	_drift_trans_velocity.setZero(3);
 
 	//Initialize haptic guidance parameters
-	_enable_plane_guidance_3D=false;
-	_enable_line_guidance_3D=false;
+	_enable_plane_guidance=false;
+	_enable_line_guidance=false;
 	_guidance_stiffness=0.7;
 	_guidance_damping=0.8;
 	_guidance_force_plane.setZero();
@@ -357,32 +301,18 @@ void OpenLoopTeleop::reInitializeTask()
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Impedance controllers in bilateral teleoperation scheme
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void OpenLoopTeleop::computeHapticCommands6d(Eigen::Vector3d& desired_position_robot,
-							Eigen::Matrix3d& desired_rotation_robot)
+void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position_robot,
+											Eigen::Matrix3d& desired_rotation_robot,
+											Eigen::Vector3d& commanded_force_device,
+											Eigen::Vector3d& commanded_torque_device)
 {
 	device_homed = false;
-
-	cVector3d _current_position_device_chai;
-	cMatrix3d _current_rotation_device_chai;
- 	cVector3d _current_trans_velocity_device_chai;
- 	cVector3d _current_rot_velocity_device_chai;
-	// read haptic device position and velocity
-	hapticDevice->getPosition(_current_position_device_chai);
-	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
-	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
-	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
-	
-	hapticDevice->getRotation(_current_rotation_device_chai);
-	_current_rotation_device = convertChaiToEigenMatrix(_current_rotation_device_chai);	
-	hapticDevice->getAngularVelocity(_current_rot_velocity_device_chai);
-	_current_rot_velocity_device = convertChaiToEigenVector(_current_rot_velocity_device_chai);	
 
 	//Transfer device velocity to robot global frame
 	Vector3d _current_trans_velocity_device_RobFrame;
  	Vector3d _current_rot_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
-
 
 	// Compute the set position from the haptic device
 	_desired_position_robot = _scaling_factor_trans*(_current_position_device - _home_position_device);
@@ -405,8 +335,6 @@ void OpenLoopTeleop::computeHapticCommands6d(Eigen::Vector3d& desired_position_r
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 	
 	if (_haptic_feedback_from_proxy)
 	{	
@@ -448,24 +376,18 @@ void OpenLoopTeleop::computeHapticCommands6d(Eigen::Vector3d& desired_position_r
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= device_info.m_maxAngularTorque)
+	if (_commanded_torque_device.norm() >= _max_torque_device)
 	{
-		_commanded_torque_device = device_info.m_maxAngularTorque*_commanded_torque_device/(_commanded_torque_device.norm());
+		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
 	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-	if(!_send_haptic_feedback)
-	{
-		_force_chai.set(0,0,0);
-		_torque_chai.set(0,0,0);
-	}
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	commanded_force_device = _commanded_force_device;
+	commanded_torque_device = _commanded_torque_device;
 
     // Send set position and orientation to the robot
 	desired_position_robot = _desired_position_robot;
@@ -473,17 +395,10 @@ void OpenLoopTeleop::computeHapticCommands6d(Eigen::Vector3d& desired_position_r
 }
 
 
-void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_robot)
+void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position_robot,
+											Eigen::Vector3d& commanded_force_device)
 {
 	device_homed = false;
-
-	cVector3d _current_position_device_chai;
- 	cVector3d _current_trans_velocity_device_chai;
-	// read haptic device position and velocity
-	hapticDevice->getPosition(_current_position_device_chai);
-	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
-	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
-	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
 
 	//Transfer device velocity to robot global frame
 	Vector3d _current_trans_velocity_device_RobFrame;
@@ -503,8 +418,6 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 	
 	if (_haptic_feedback_from_proxy)
 	{
@@ -538,33 +451,26 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 
-	if (_enable_plane_guidance_3D)
+	if (_enable_plane_guidance)
 	{
 		ComputePlaneGuidanceForce();
 		_commanded_force_device += _guidance_force_plane;
 	}
 
-	if (_enable_line_guidance_3D)
+	if (_enable_line_guidance)
 	{
 		ComputeLineGuidanceForce();
 		_commanded_force_device += _guidance_force_line;
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
 
-	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-	if(!_send_haptic_feedback)
-	{
-		_force_chai.set(0,0,0);
-		_torque_chai.set(0,0,0);
-	}
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+    // Send controllers force and torque to haptic device
+	commanded_force_device = _commanded_force_device;
 
     // Send set position to the robot
 	desired_position_robot = _desired_position_robot;
@@ -576,8 +482,10 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Admittance controllers in bilateral teleoperation scheme
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void OpenLoopTeleop::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_trans_velocity_robot,
-							Eigen::Vector3d& desired_rot_velocity_robot)
+void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_trans_velocity_robot,
+														Eigen::Vector3d& desired_rot_velocity_robot,
+														Eigen::Vector3d& commanded_force_device,
+														Eigen::Vector3d& commanded_torque_device)
 {
 	device_homed = false;
 
@@ -591,14 +499,6 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_
 		_integrated_rot_velocity_error.setZero();
 	}
 	_t_diff = _t_curr - _t_prev;
-
-    // Update sensed force from the haptic device (if no force sensor the method considers the commanded forces)
-	cVector3d _sensed_force_device_chai;
- 	cVector3d _sensed_torque_device_chai;
-	hapticDevice->getForce(_sensed_force_device_chai);
-	hapticDevice->getTorque(_sensed_torque_device_chai);
-	_sensed_force_device = convertChaiToEigenVector(-_sensed_force_device_chai);
-	_sensed_torque_device = convertChaiToEigenVector(-_sensed_torque_device_chai);
 
  	// Transfer the desired force in the robot global frame
  	Vector3d _desired_force_robot;
@@ -614,8 +514,6 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 
 	// Integrate the translational velocity error
 	_integrated_trans_velocity_error += (_desired_trans_velocity_robot - _current_trans_velocity_robot) * _t_diff.count();
@@ -649,24 +547,18 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= device_info.m_maxAngularTorque)
+	if (_commanded_torque_device.norm() >= _max_torque_device)
 	{
-		_commanded_torque_device = device_info.m_maxAngularTorque*_commanded_torque_device/(_commanded_torque_device.norm());
+		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
 	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-	if(!_send_haptic_feedback)
-	{
-		_force_chai.set(0,0,0);
-		_torque_chai.set(0,0,0);
-	}
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	commanded_force_device = _commanded_force_device;
+	commanded_torque_device = _commanded_torque_device;
 
     // Send set velocity to the robot 
 	desired_trans_velocity_robot = _desired_trans_velocity_robot;
@@ -674,7 +566,8 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_
 
 }
 
-void OpenLoopTeleop::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot)
+void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot,
+														Eigen::Vector3d& commanded_force_device)
 {
 	
 	device_homed = false;
@@ -689,14 +582,6 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_
 	}
 	_t_diff = _t_curr - _t_prev;
 
-    // Update sensed force from the haptic device (if no force sensor the method considers the commanded forces)
-	cVector3d _sensed_force_device_chai;
-	hapticDevice->getForce(_sensed_force_device_chai);
-	_sensed_force_device = convertChaiToEigenVector(-_sensed_force_device_chai);
-
-	cout << "Force from chai" << _sensed_force_device << endl;
-
-
  	// Transfer the desired force in the robot global frame
  	Vector3d _desired_force_robot;
 	_desired_force_robot = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _sensed_force_device;
@@ -708,8 +593,6 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 
 	// Integrate the translational velocity error
 	_integrated_trans_velocity_error += (_desired_trans_velocity_robot - _current_trans_velocity_robot) * _t_diff.count();
@@ -733,21 +616,14 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
 	
 
 	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-	if(!_send_haptic_feedback)
-	{
-		_force_chai.set(0,0,0);
-		_torque_chai.set(0,0,0);
-	}
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	commanded_force_device = _commanded_force_device;
 
     // Send set velocity to the robot 
 	desired_trans_velocity_robot = _desired_trans_velocity_robot;
@@ -759,28 +635,13 @@ void OpenLoopTeleop::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ///////////////////////////////////////////////////////////////////////////////////
 // Impedance controllers with workspace extension algorithm
 ///////////////////////////////////////////////////////////////////////////////////
-void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
-							Eigen::Matrix3d& desired_rotation_robot)
+void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
+																Eigen::Matrix3d& desired_rotation_robot,
+																Eigen::Vector3d& commanded_force_device,
+																Eigen::Vector3d& commanded_torque_device)
 {
 	// get time since last call
 	 _t_curr = std::chrono::high_resolution_clock::now();
@@ -796,22 +657,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 	 _t_diff = _t_curr - _t_prev;
 
 	device_homed = false;
-
- 	cVector3d _current_position_device_chai;
-	cMatrix3d _current_rotation_device_chai;
- 	cVector3d _current_trans_velocity_device_chai;
- 	cVector3d _current_rot_velocity_device_chai;
-	// read haptic device position and velocity
-	hapticDevice->getPosition(_current_position_device_chai);
-	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
-	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
-	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
-	
-	hapticDevice->getRotation(_current_rotation_device_chai);
-	_current_rotation_device = convertChaiToEigenMatrix(_current_rotation_device_chai);	
-	hapticDevice->getAngularVelocity(_current_rot_velocity_device_chai);
-	_current_rot_velocity_device = convertChaiToEigenVector(_current_rot_velocity_device_chai);
-
 
 	//Transfer device velocity to robot global frame
 	Vector3d _current_trans_velocity_device_RobFrame;
@@ -852,8 +697,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 	
 	if (_haptic_feedback_from_proxy)
 	{
@@ -947,30 +790,29 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 
 	if (relative_position_device.norm() >= _device_workspace_radius_max)
 	{
-		force_virtual = -(0.8 * device_info.m_maxLinearStiffness * (relative_position_device.norm()-_device_workspace_radius_max)/(relative_position_device.norm()))*relative_position_device;
+		force_virtual = -(0.8 * _max_linear_stiffness_device * (relative_position_device.norm()-_device_workspace_radius_max)/(relative_position_device.norm()))*relative_position_device;
 	}
 	_commanded_force_device += force_virtual;
 	
 	if (relative_orientation_angle_device.angle() >= _device_workspace_tilt_angle_max)
 	{
-		torque_virtual = -(0.8 * device_info.m_maxAngularStiffness *(relative_orientation_angle_device.angle()-_device_workspace_tilt_angle_max))*relative_orientation_angle_device.axis();
+		torque_virtual = -(0.8 * _max_angular_stiffness_device *(relative_orientation_angle_device.angle()-_device_workspace_tilt_angle_max))*relative_orientation_angle_device.axis();
 	}
 	_commanded_torque_device += torque_virtual;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= device_info.m_maxAngularTorque)
+	if (_commanded_torque_device.norm() >= _max_torque_device)
 	{
-		_commanded_torque_device = device_info.m_maxAngularTorque*_commanded_torque_device/(_commanded_torque_device.norm());
+		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
 	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	commanded_force_device = _commanded_force_device;
+	commanded_torque_device = _commanded_torque_device;
 
 	//// Computation of the desired position for the controlled robot after drift of the device ////
 	// Estimated drift velocity considering drift force 
@@ -1018,7 +860,8 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 
 
 
-void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot)
+void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot,
+																Eigen::Vector3d& commanded_force_device)
 {
 	// get time since last call
 	 _t_curr = std::chrono::high_resolution_clock::now();
@@ -1034,13 +877,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 
 	device_homed = false;
 
- 	cVector3d _current_position_device_chai;
- 	cVector3d _current_trans_velocity_device_chai;
-	// read haptic device position and velocity
-	hapticDevice->getPosition(_current_position_device_chai);
-	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
-	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
-	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
 
 	// Update the maximum velocities for the task
 	if (_current_trans_velocity_device.norm()>=_max_trans_velocity_device)	
@@ -1051,8 +887,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
 	
 	if (_haptic_feedback_from_proxy)
 	{
@@ -1117,32 +951,30 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 
 	if (relative_position_device.norm() >= _device_workspace_radius_max)
 	{
-		force_virtual = -(0.8 * device_info.m_maxLinearStiffness * (relative_position_device.norm()-_device_workspace_radius_max)/(relative_position_device.norm()))*relative_position_device;
+		force_virtual = -(0.8 * _max_linear_stiffness_device * (relative_position_device.norm()-_device_workspace_radius_max)/(relative_position_device.norm()))*relative_position_device;
 	}
 	_commanded_force_device += force_virtual;
 
-	if (_enable_plane_guidance_3D)
+	if (_enable_plane_guidance)
 	{
 		ComputePlaneGuidanceForce();
 		_commanded_force_device += _guidance_force_plane;
 	}
 
-	if (_enable_line_guidance_3D)
+	if (_enable_line_guidance)
 	{
 		ComputeLineGuidanceForce();
 		_commanded_force_device += _guidance_force_line;
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
 
 	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	commanded_force_device = _commanded_force_device;
 
 	//// Computation of the desired position for the controlled robot after drift of the device ////
 	// Estimated drift velocity considering drift force 
@@ -1183,7 +1015,7 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 ///////////////////////////////////////////////////////////////////////////////////
 // Haptic guidance related methods 
 ///////////////////////////////////////////////////////////////////////////////////
-void OpenLoopTeleop::ComputePlaneGuidanceForce()
+void HapticController::ComputePlaneGuidanceForce()
 {
 	// vector from the plane's origin to the current position
 	Eigen::Vector3d plane_to_point_vec;
@@ -1202,10 +1034,10 @@ void OpenLoopTeleop::ComputePlaneGuidanceForce()
 	projected_current_velocity = _current_trans_velocity_device.dot(_plane_normal_vec)*_plane_normal_vec;
 
 	// calculate the force feedback
-	_guidance_force_plane = - _guidance_stiffness * device_info.m_maxLinearStiffness * (_current_position_device - projected_current_position) - _guidance_damping * projected_current_velocity;
+	_guidance_force_plane = - _guidance_stiffness * _max_linear_stiffness_device * (_current_position_device - projected_current_position) - _guidance_damping * projected_current_velocity;
 }
 
-void OpenLoopTeleop::ComputeLineGuidanceForce()
+void HapticController::ComputeLineGuidanceForce()
 {
 	Eigen::Vector3d line_to_point_vec;
 	double distance_along_line;
@@ -1234,14 +1066,14 @@ void OpenLoopTeleop::ComputeLineGuidanceForce()
 	projected_current_velocity = _current_trans_velocity_device.dot(line_normal_vec)*line_normal_vec;
 
 	// compute the force 
-	_guidance_force_line = - (_guidance_stiffness) * device_info.m_maxLinearStiffness * (_current_position_device - projected_current_position) - _guidance_damping * projected_current_velocity;
+	_guidance_force_line = - (_guidance_stiffness) * _max_linear_stiffness_device * (_current_position_device - projected_current_position) - _guidance_damping * projected_current_velocity;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////
 // Updating methods for haptic feedback computation
 ///////////////////////////////////////////////////////////////////////////////////
-void OpenLoopTeleop::updateSensedForce(const Eigen::VectorXd sensed_task_force)
+void HapticController::updateSensedForce(const Eigen::VectorXd sensed_task_force)
 {
 	if (_filter_on)
 	{
@@ -1258,7 +1090,7 @@ void OpenLoopTeleop::updateSensedForce(const Eigen::VectorXd sensed_task_force)
 	}
 }
 
-void OpenLoopTeleop::updateSensedRobotPositionVelocity(const Eigen::Vector3d current_position_robot,
+void HapticController::updateSensedRobotPositionVelocity(const Eigen::Vector3d current_position_robot,
 								const Eigen::Vector3d current_trans_velocity_robot,
 								const Eigen::Matrix3d current_rotation_robot,
 								const Eigen::Vector3d current_rot_velocity_robot)
@@ -1270,7 +1102,7 @@ void OpenLoopTeleop::updateSensedRobotPositionVelocity(const Eigen::Vector3d cur
 
 }
 
-void OpenLoopTeleop::updateVirtualProxyPositionVelocity(const Eigen::Vector3d current_position_proxy,
+void HapticController::updateVirtualProxyPositionVelocity(const Eigen::Vector3d current_position_proxy,
 								const Eigen::Vector3d current_trans_velocity_proxy,
 								const Eigen::Matrix3d current_rotation_proxy,
 								const Eigen::Vector3d current_rot_velocity_proxy)
@@ -1286,50 +1118,24 @@ void OpenLoopTeleop::updateVirtualProxyPositionVelocity(const Eigen::Vector3d cu
 ///////////////////////////////////////////////////////////////////////////////////
 // Haptic device specific methods
 ///////////////////////////////////////////////////////////////////////////////////
-void OpenLoopTeleop::initializeSigmaDevice()
-{
-	if(device_info.m_modelName == "sigma.7")
-	{
-		cDeltaDevice* tmp_device = static_cast<cDeltaDevice*>(hapticDevice.get());
-		tmp_device->enableForces(true);
-	}	
-}
-
-void OpenLoopTeleop::GravityCompTask()
+void HapticController::GravityCompTask()
 {	
 	_commanded_force_device.setZero();
 	_commanded_torque_device.setZero();
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
-	_force_chai.set(0.0,0.0,0.0);
-	_torque_chai.set(0.0,0.0,0.0);
-	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
+	_commanded_gripper_force_device = 0.0;
 }
 
-void OpenLoopTeleop::HomingTask()
+void HapticController::HomingTask()
 {	
 	
-	cVector3d _force_chai;
-	cVector3d _torque_chai;
-	cVector3d _current_position_device_chai;
-	cMatrix3d _current_rotation_device_chai;
-	cVector3d _current_trans_velocity_device_chai;
-	cVector3d _current_rot_velocity_device_chai;
-	// Haptice device position controller gains
-	double kp_position_ctrl_device =_kp_position_ctrl_device * device_info.m_maxLinearStiffness;
-	double kv_position_ctrl_device =_kv_position_ctrl_device * device_info.m_maxLinearDamping;
-	double kp_orientation_ctrl_device =_kp_orientation_ctrl_device * device_info.m_maxAngularStiffness;
-	double kv_orientation_ctrl_device =_kv_orientation_ctrl_device * device_info.m_maxAngularDamping;
+	// Send zero force to the gripper
+	_commanded_gripper_force_device = 0.0;
 
-	// read haptic device position and velocity
-	hapticDevice->getPosition(_current_position_device_chai);
-	hapticDevice->getRotation(_current_rotation_device_chai);
-	_current_position_device = convertChaiToEigenVector(_current_position_device_chai);
-	_current_rotation_device = convertChaiToEigenMatrix(_current_rotation_device_chai);
-	hapticDevice->getLinearVelocity(_current_trans_velocity_device_chai);
-	hapticDevice->getAngularVelocity(_current_rot_velocity_device_chai);
-	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
-	_current_rot_velocity_device = convertChaiToEigenVector(_current_rot_velocity_device_chai);
+	// Haptice device position controller gains
+	double kp_position_ctrl_device =_kp_position_ctrl_device * _max_linear_stiffness_device;
+	double kv_position_ctrl_device =_kv_position_ctrl_device * _max_linear_damping_device;
+	double kp_orientation_ctrl_device =_kp_orientation_ctrl_device * _max_angular_stiffness_device;
+	double kv_orientation_ctrl_device =_kv_orientation_ctrl_device * _max_angular_damping_device;
 
 	// Evaluate position controller force
 	_commanded_force_device = -kp_position_ctrl_device*(_current_position_device - _home_position_device) - kv_position_ctrl_device * _current_trans_velocity_device;
@@ -1340,53 +1146,67 @@ void OpenLoopTeleop::HomingTask()
 	_commanded_torque_device = -kp_orientation_ctrl_device*orientation_error - kv_orientation_ctrl_device * _current_rot_velocity_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
+	if (_commanded_force_device.norm() >= _max_force_device)
 	{
-		_commanded_force_device = device_info.m_maxLinearForce*_commanded_force_device/(_commanded_force_device.norm());
+		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= device_info.m_maxAngularTorque)
+	if (_commanded_torque_device.norm() >= _max_torque_device)
 	{
-		_commanded_torque_device = device_info.m_maxAngularTorque*_commanded_torque_device/(_commanded_torque_device.norm());
+		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
-	// Send controllers force and torque to haptic device
-	_force_chai = convertEigenToChaiVector(_commanded_force_device);
-	_torque_chai = convertEigenToChaiVector(_commanded_torque_device);
-    hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
-    //&& orientation_error.norm() < 0.04
 	if( (_current_position_device - _home_position_device).norm()<0.002)
 	{
 		device_homed = true;
 	}
 }
 
-void OpenLoopTeleop::EnableGripperUserSwitch()
+void HapticController::UseGripperAsSwitch()
 {
-	// if the device has a gripper, then enable it to behave like a user switch
-	hapticDevice->setEnableGripperUserSwitch(true);
-	gripper_state = false;
+
+	double gripper_start_angle = 10*M_PI/180.0;
+	double gripper_switch_angle = 5*M_PI/180.0;
+
+    double gripper_force_click = 3.0;
+    double gripper_force_switched = 2.0;
+
+	//Update damping force term from gripper velocity
+	double damping_force = -0.05 * _current_gripper_velocity_device;
+
+	// case 0: outside of switch, zero force
+    if (_current_position_gripper_device > gripper_start_angle)
+    { 
+        _commanded_gripper_force_device = 0.0;
+        gripper_state = false;
+    }
+    // case 1: switch is being engaged. (Force is rising until "click")
+    else if ((_current_position_gripper_device <= gripper_start_angle) &&
+             (_current_position_gripper_device > gripper_switch_angle))
+    {
+        double switching_force = (gripper_start_angle - _current_position_gripper_device) * ((gripper_force_click) / (gripper_start_angle - gripper_switch_angle));
+        _commanded_gripper_force_device = damping_force + switching_force;
+        gripper_state = false;
+    }
+    // case 2: switch has been engaged. (Force is constant)
+    else if (_current_position_gripper_device <= gripper_switch_angle)
+    {
+        _commanded_gripper_force_device = gripper_force_switched + damping_force;
+        gripper_state = true;
+    }
+
 }
-
-bool OpenLoopTeleop::ReadGripperUserSwitch()
-{
-	// Read new gripper state
-    hapticDevice->getUserSwitch (0, gripper_state);
-    return gripper_state;
-}
-
-
 
 ///////////////////////////////////////////////////////////////////////////////////
 // Parameter setting methods
 ///////////////////////////////////////////////////////////////////////////////////
 
-void OpenLoopTeleop::setScalingFactors(const double scaling_factor_trans, const double scaling_factor_rot)
+void HapticController::setScalingFactors(const double scaling_factor_trans, const double scaling_factor_rot)
 {
 	_scaling_factor_trans = scaling_factor_trans;
 	_scaling_factor_rot = scaling_factor_rot;
 }
 
-void OpenLoopTeleop::setPosCtrlGains (const double kp_position_ctrl_device, const double kv_position_ctrl_device, const double kp_orientation_ctrl_device, const double kv_orientation_ctrl_device)
+void HapticController::setPosCtrlGains (const double kp_position_ctrl_device, const double kv_position_ctrl_device, const double kp_orientation_ctrl_device, const double kv_orientation_ctrl_device)
 {
 	_kp_position_ctrl_device = kp_position_ctrl_device;
 	_kv_position_ctrl_device = kv_position_ctrl_device;
@@ -1394,7 +1214,7 @@ void OpenLoopTeleop::setPosCtrlGains (const double kp_position_ctrl_device, cons
 	_kv_orientation_ctrl_device = kv_orientation_ctrl_device;
 }
 
-void OpenLoopTeleop::setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
+void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
 										const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
 										const double robot_trans_admittance,
 										const double robot_rot_admittance,
@@ -1412,7 +1232,7 @@ void OpenLoopTeleop::setForceFeedbackCtrlGains (const double kp_robot_trans_velo
 }
 
 
-void OpenLoopTeleop::setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
+void HapticController::setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
 									const double proxy_orientation_impedance, const double proxy_orientation_damping)
 {
 	_proxy_position_impedance = proxy_position_impedance;
@@ -1422,7 +1242,7 @@ void OpenLoopTeleop::setVirtualProxyGains (const double proxy_position_impedance
 }
 
 
-void OpenLoopTeleop::setFilterCutOffFreq(const double cutOff_frequency_force, const double cutOff_frequency_moment)
+void HapticController::setFilterCutOffFreq(const double cutOff_frequency_force, const double cutOff_frequency_moment)
 {
 	_cutOff_frequency_force = cutOff_frequency_force;
 	_cutOff_frequency_moment = cutOff_frequency_moment;
@@ -1431,27 +1251,15 @@ void OpenLoopTeleop::setFilterCutOffFreq(const double cutOff_frequency_force, co
 
 }
 
-void OpenLoopTeleop::setDeviceCenter(const Eigen::Vector3d home_position_device, const Eigen::Matrix3d home_rotation_device)
+void HapticController::setDeviceCenter(const Eigen::Vector3d home_position_device, const Eigen::Matrix3d home_rotation_device)
 {
 	_home_position_device = home_position_device;
 	_home_rotation_device = home_rotation_device;
 }
 
-void OpenLoopTeleop::setDeviceOrientationCenterToCurrent()
-{
-	cMatrix3d device_orientation_chai;
-	hapticDevice->getRotation(device_orientation_chai);
-	_home_rotation_device = device_orientation_chai.eigen();
-}
 
-void OpenLoopTeleop::setDevicePositionCenterToCurrent()
-{
-	cVector3d device_position_chai;
-	hapticDevice->getPosition(device_position_chai);
-	_home_position_device = device_position_chai.eigen();
-}
 
-void OpenLoopTeleop::setRobotCenter(const Eigen::Vector3d center_position_robot, const Eigen::Matrix3d center_rotation_robot)
+void HapticController::setRobotCenter(const Eigen::Vector3d center_position_robot, const Eigen::Matrix3d center_rotation_robot)
 {
 	_center_position_robot = center_position_robot; 
 	_center_rotation_robot = center_rotation_robot;
@@ -1462,14 +1270,15 @@ void OpenLoopTeleop::setRobotCenter(const Eigen::Vector3d center_position_robot,
 
 }
 
-void OpenLoopTeleop::setDeviceRobotRotation(const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot)
+void HapticController::setDeviceRobotRotation(const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot)
 {
 	_Rotation_Matrix_DeviceToRobot = Rotation_Matrix_DeviceToRobot;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//// Workspace extension related methods ////
-void OpenLoopTeleop::setWorkspaceSize(double device_workspace_radius_max, double task_workspace_radius_max, double device_workspace_tilt_angle_max, double task_workspace_tilt_angle_max)
+///////////////////////////////////////////////////////////////////////////////////
+// Workspace extension related methods
+///////////////////////////////////////////////////////////////////////////////////
+void HapticController::setWorkspaceSize(double device_workspace_radius_max, double task_workspace_radius_max, double device_workspace_tilt_angle_max, double task_workspace_tilt_angle_max)
 {
 	_device_workspace_radius_max = device_workspace_radius_max;
 	_task_workspace_radius_max = task_workspace_radius_max;
@@ -1478,27 +1287,28 @@ void OpenLoopTeleop::setWorkspaceSize(double device_workspace_radius_max, double
 }
 
 
-void OpenLoopTeleop::setForceNoticeableDiff(double drift_force_admissible_ratio)
+void HapticController::setForceNoticeableDiff(double drift_force_admissible_ratio)
 {
 	_drift_force_admissible_ratio = drift_force_admissible_ratio;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//// Haptic guidance related settings methods ////
+///////////////////////////////////////////////////////////////////////////////////
+// Haptic guidance related settings methods
+///////////////////////////////////////////////////////////////////////////////////
 
-void OpenLoopTeleop::setHapticGuidanceGains(const double guidance_stiffness, const double guidance_damping)
+void HapticController::setHapticGuidanceGains(const double guidance_stiffness, const double guidance_damping)
 {
 	_guidance_stiffness = guidance_stiffness;
 	_guidance_damping = guidance_damping;
 }
 
-void OpenLoopTeleop::setPlane(const Eigen::Vector3d plane_origin_point, const Eigen::Vector3d plane_normal_vec)
+void HapticController::setPlane(const Eigen::Vector3d plane_origin_point, const Eigen::Vector3d plane_normal_vec)
 {
 	_plane_origin_point = plane_origin_point;
 	_plane_normal_vec = plane_normal_vec / plane_normal_vec.norm();
 }
 
-void OpenLoopTeleop::setLine(const Eigen::Vector3d line_first_point, const Eigen::Vector3d line_second_point)
+void HapticController::setLine(const Eigen::Vector3d line_first_point, const Eigen::Vector3d line_second_point)
 {
 	//set vector from one point to the other
 	_line_first_point = line_first_point;

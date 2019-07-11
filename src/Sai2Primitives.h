@@ -9,6 +9,7 @@
 #include "primitives/DualArmObjectMotion.h"
 
 #include "haptic_tasks/OpenLoopTeleop.h"
+#include "haptic_tasks/HapticController.h"
 
 #ifdef USING_OTG
 #include "trajectory_generation/OTG.h"

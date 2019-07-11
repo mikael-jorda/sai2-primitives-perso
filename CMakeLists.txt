@@ -80,6 +80,7 @@ SET(PRIMITIVES_SOURCE
 # add haptic_tasks
 SET(HAPTIC_TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
 	)
 
 # add header files
