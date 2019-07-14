@@ -85,33 +85,22 @@ public:
 	 *
 	 * @param desired_position_robot    		The desired position of the controlled robot
 	 * @param desired_rotation_robot    		The desired orientation of the controlled robot
-	 * @param commanded_force_device 			The commanded force feedback of the haptic device
-	 * @param commanded_force_device 			The commanded torque feedback of the haptic device
-	 *
+	 * 
 	 */
 	void computeHapticCommands6d(Eigen::Vector3d& desired_position_robot,
-								Eigen::Matrix3d& desired_rotation_robot,
-								Eigen::Vector3d& commanded_force_device,
-								Eigen::Vector3d& commanded_torque_device);
+								Eigen::Matrix3d& desired_rotation_robot);
 
-	void computeHapticCommands3d(Eigen::Vector3d& desired_position_robot,
-								Eigen::Vector3d& commanded_force_device);
+	void computeHapticCommands3d(Eigen::Vector3d& desired_position_robot);
 
 	void computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_trans_velocity_robot,
-											Eigen::Vector3d& desired_rot_velocity_robot,
-											Eigen::Vector3d& commanded_force_device,
-											Eigen::Vector3d& commanded_torque_device);
+											Eigen::Vector3d& desired_rot_velocity_robot);
 
-	void computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot,
-											Eigen::Vector3d& commanded_force_device);
+	void computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot);
 
 	void computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
-												Eigen::Matrix3d& desired_rotation_robot,
-												Eigen::Vector3d& commanded_force_device,
-												Eigen::Vector3d& commanded_torque_device);
+												Eigen::Matrix3d& desired_rotation_robot);
 
-	void computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot,
-												Eigen::Vector3d& commanded_force_device);
+	void computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot);
 
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -382,6 +371,7 @@ public:
 	bool device_homed;
 	// Gripper status if used as a switch
 	bool gripper_state;
+	bool gripper_init;
 	// Set force and torque feedback of the haptic device
 	Vector3d _commanded_force_device;
 	Vector3d _commanded_torque_device;

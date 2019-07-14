@@ -79,7 +79,7 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 
 	//Initialize position controller parameters
 	_kp_position_ctrl_device = 0.2;
-	_kv_position_ctrl_device = 0.5;
+	_kv_position_ctrl_device = 0.7;
 	_kp_orientation_ctrl_device = 0.6;
 	_kv_orientation_ctrl_device = 0.2;
 
@@ -110,8 +110,8 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	_force_filter = new ButterworthFilter(3);
 	_moment_filter = new ButterworthFilter(3);
 
-	_cutOff_frequency_force = 0.02;
-	_cutOff_frequency_moment = 0.02;
+	_cutOff_frequency_force = 0.04;
+	_cutOff_frequency_moment = 0.04;
 	_force_filter->setCutoffFrequency(_cutOff_frequency_force);
 	_moment_filter->setCutoffFrequency(_cutOff_frequency_moment);
 	_filter_on = false;
@@ -123,6 +123,7 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	// To initialize the timer
 	_first_iteration = true;
 	gripper_state = false;
+	gripper_init = false;
 
 	// Initialize Workspace extension parameters
 	_center_position_robot_drift.setZero();
@@ -137,7 +138,7 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	_drift_trans_velocity.setZero(3);
 
 	// Default drift force percentage (can be change with setForceNoticeableDiff())
-	_drift_force_admissible_ratio=10.0/100.0;
+	_drift_force_admissible_ratio=50.0/100.0;
 
 	// Initialization of the controller parameters
 	_device_workspace_radius_max=0.025;
@@ -234,9 +235,9 @@ void HapticController::reInitializeTask()
 	_scaling_factor_rot=1.0;
 
 	//Initialize position controller parameters
-	_kp_position_ctrl_device = 0.1;
-	_kv_position_ctrl_device = 0.5;
-	_kp_orientation_ctrl_device = 0.4;
+	_kp_position_ctrl_device = 0.2;
+	_kv_position_ctrl_device = 0.7;
+	_kp_orientation_ctrl_device = 0.6;
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
@@ -263,8 +264,8 @@ void HapticController::reInitializeTask()
 						  0.0, 0.0, 1/2.0;
 
 	//reInitialize filter parameters
-	_cutOff_frequency_force = 0.02;
-	_cutOff_frequency_moment = 0.02;
+	_cutOff_frequency_force = 0.04;
+	_cutOff_frequency_moment = 0.04;
 	_force_filter->setCutoffFrequency(_cutOff_frequency_force);
 	_moment_filter->setCutoffFrequency(_cutOff_frequency_moment);
 	_filter_on = false;
@@ -275,6 +276,7 @@ void HapticController::reInitializeTask()
 
 	_first_iteration = true; // To initialize the timer
 	gripper_state = false;
+	gripper_init = false;
 
 	// Initialize Workspace extension parameters
 	_center_position_robot_drift.setZero();
@@ -302,34 +304,23 @@ void HapticController::reInitializeTask()
 // Impedance controllers in bilateral teleoperation scheme
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position_robot,
-											Eigen::Matrix3d& desired_rotation_robot,
-											Eigen::Vector3d& commanded_force_device,
-											Eigen::Vector3d& commanded_torque_device)
+											Eigen::Matrix3d& desired_rotation_robot)
 {
 	device_homed = false;
+
+	if(_first_iteration)
+	 {
+	 	_first_iteration = false;
+	 	// Set the initial desired position to the robot center
+	 	_desired_position_robot = _current_position_robot;
+	 	_desired_rotation_robot = _current_rotation_robot;
+	 }
 
 	//Transfer device velocity to robot global frame
 	Vector3d _current_trans_velocity_device_RobFrame;
  	Vector3d _current_rot_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
-
-	// Compute the set position from the haptic device
-	_desired_position_robot = _scaling_factor_trans*(_current_position_device - _home_position_device);
-	
-	// Rotation with respect with home orientation
-	Eigen::Matrix3d rot_rel = _current_rotation_device * _home_rotation_device.transpose();
-	Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
-	// Compute set orientation from the haptic device
-	Eigen::AngleAxisd desired_rotation_robot_aa = Eigen::AngleAxisd(_scaling_factor_rot*rot_rel_ang.angle(),rot_rel_ang.axis());
-	_desired_rotation_robot = desired_rotation_robot_aa.toRotationMatrix();
-
-	//Transfer set position and orientation from device to robot global frame
-	_desired_position_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_position_robot;
-	_desired_rotation_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_rotation_robot * _Rotation_Matrix_DeviceToRobot * _center_rotation_robot; 
-
-	// Adjust set position to the center of the task workspace
-	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
@@ -385,9 +376,28 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
-	// Send controllers force and torque to haptic device
-	commanded_force_device = _commanded_force_device;
-	commanded_torque_device = _commanded_torque_device;
+	if(!_send_haptic_feedback)
+	{
+		_commanded_force_device.setZero();
+		_commanded_torque_device.setZero();
+	}
+
+	// Compute the new desired position from the haptic device
+	_desired_position_robot = _scaling_factor_trans*(_current_position_device - _home_position_device);
+	
+	// Rotation with respect with home orientation
+	Eigen::Matrix3d rot_rel = _current_rotation_device * _home_rotation_device.transpose();
+	Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
+	// Compute set orientation from the haptic device
+	Eigen::AngleAxisd desired_rotation_robot_aa = Eigen::AngleAxisd(_scaling_factor_rot*rot_rel_ang.angle(),rot_rel_ang.axis());
+	_desired_rotation_robot = desired_rotation_robot_aa.toRotationMatrix();
+
+	//Transfer set position and orientation from device to robot global frame
+	_desired_position_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_position_robot;
+	_desired_rotation_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_rotation_robot * _Rotation_Matrix_DeviceToRobot * _center_rotation_robot; 
+
+	// Adjust set position to the center of the task workspace
+	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
     // Send set position and orientation to the robot
 	desired_position_robot = _desired_position_robot;
@@ -395,24 +405,21 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 }
 
 
-void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position_robot,
-											Eigen::Vector3d& commanded_force_device)
+void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position_robot)
 {
 	device_homed = false;
+
+	if(_first_iteration)
+	 {
+	 	_first_iteration = false;
+	 	// Set the initial desired position to the robot center
+	 	_desired_position_robot = _current_position_robot;
+	 	_desired_rotation_robot = _current_rotation_robot;
+	 }
 
 	//Transfer device velocity to robot global frame
 	Vector3d _current_trans_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
-	
-	// Compute the set position from the haptic device
-	_desired_position_robot = _scaling_factor_trans*(_current_position_device-_home_position_device);
-	// Rotation with respect with home orientation
-	
-	//Transfer set position and orientation from device to robot global frame
-	_desired_position_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_position_robot;
-	
-	// Adjust set position to the center of the task Workspace
-	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
@@ -469,8 +476,21 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
 
-    // Send controllers force and torque to haptic device
-	commanded_force_device = _commanded_force_device;
+	if(!_send_haptic_feedback)
+	{
+		_commanded_force_device.setZero();
+		_commanded_torque_device.setZero();
+	}
+
+	// Compute the set position from the haptic device
+	_desired_position_robot = _scaling_factor_trans*(_current_position_device-_home_position_device);
+	// Rotation with respect with home orientation
+	
+	//Transfer set position and orientation from device to robot global frame
+	_desired_position_robot = _Rotation_Matrix_DeviceToRobot.transpose() * _desired_position_robot;
+	
+	// Adjust set position to the center of the task Workspace
+	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
     // Send set position to the robot
 	desired_position_robot = _desired_position_robot;
@@ -483,9 +503,7 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 // Admittance controllers in bilateral teleoperation scheme
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desired_trans_velocity_robot,
-														Eigen::Vector3d& desired_rot_velocity_robot,
-														Eigen::Vector3d& commanded_force_device,
-														Eigen::Vector3d& commanded_torque_device)
+														Eigen::Vector3d& desired_rot_velocity_robot)
 {
 	device_homed = false;
 
@@ -556,9 +574,11 @@ void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desire
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
-	// Send controllers force and torque to haptic device
-	commanded_force_device = _commanded_force_device;
-	commanded_torque_device = _commanded_torque_device;
+	if(!_send_haptic_feedback)
+	{
+		_commanded_force_device.setZero();
+		_commanded_torque_device.setZero();
+	}
 
     // Send set velocity to the robot 
 	desired_trans_velocity_robot = _desired_trans_velocity_robot;
@@ -566,8 +586,7 @@ void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desire
 
 }
 
-void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot,
-														Eigen::Vector3d& commanded_force_device)
+void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desired_trans_velocity_robot)
 {
 	
 	device_homed = false;
@@ -620,11 +639,13 @@ void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desire
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
+
+	if(!_send_haptic_feedback)
+	{
+		_commanded_force_device.setZero();
+		_commanded_torque_device.setZero();
+	}
 	
-
-	// Send controllers force and torque to haptic device
-	commanded_force_device = _commanded_force_device;
-
     // Send set velocity to the robot 
 	desired_trans_velocity_robot = _desired_trans_velocity_robot;
 
@@ -639,9 +660,7 @@ void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desire
 // Impedance controllers with workspace extension algorithm
 ///////////////////////////////////////////////////////////////////////////////////
 void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& desired_position_robot,
-																Eigen::Matrix3d& desired_rotation_robot,
-																Eigen::Vector3d& commanded_force_device,
-																Eigen::Vector3d& commanded_torque_device)
+																Eigen::Matrix3d& desired_rotation_robot)
 {
 	// get time since last call
 	 _t_curr = std::chrono::high_resolution_clock::now();
@@ -649,10 +668,15 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 	 {
 	 	_t_prev = std::chrono::high_resolution_clock::now();
 	 	_first_iteration = false;
-	 	_desired_position_robot = _center_position_robot;
-	 	_desired_rotation_robot = _center_rotation_robot;
+	 	// Set the initial desired position to the robot center
+	 	_desired_position_robot = _current_position_robot;
+	 	_desired_rotation_robot = _current_rotation_robot;
 	 	_center_position_robot_drift = _center_position_robot;
 	 	_center_rotation_robot_drift = _center_rotation_robot;
+	 	// Reinitialize maximum device velocity for the task 
+	 	_max_rot_velocity_device=0.001;
+		_max_trans_velocity_device=0.001;
+
 	 }
 	 _t_diff = _t_curr - _t_prev;
 
@@ -663,8 +687,6 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
  	Vector3d _current_rot_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
-
-	
 
 	// Update the maximum velocities for the task
 	if (_current_rot_velocity_device.norm()>=_max_rot_velocity_device)	
@@ -677,22 +699,6 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 		_max_trans_velocity_device = _current_trans_velocity_device.norm();
 	}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
@@ -701,24 +707,19 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 	if (_haptic_feedback_from_proxy)
 	{
 		// Evaluate the task force through stiffness proxy
-		f_task_trans = _proxy_position_impedance*(_current_position_robot - _desired_position_robot) - _proxy_position_damping * _current_trans_velocity_robot;
-		
+		f_task_trans = _proxy_position_impedance*(_current_position_proxy - _desired_position_robot) - _proxy_position_damping * (_current_trans_velocity_device_RobFrame - _current_trans_velocity_proxy);
+
 		// Compute the orientation error
-		Sai2Model::orientationError(orientation_dev, _desired_rotation_robot, _current_rotation_robot);							//
+		Sai2Model::orientationError(orientation_dev, _desired_rotation_robot, _current_rotation_proxy);
 		// Evaluate task torque
-		// f_task_rot = _proxy_orientation_impedance*orientation_dev - _proxy_orientation_damping * _current_rot_velocity_robot;	//
-		
-		f_task_rot.setZero();
+		f_task_rot = _proxy_orientation_impedance*orientation_dev - _proxy_orientation_damping * (_current_rot_velocity_device_RobFrame - _current_rot_velocity_proxy);
 		
 	}
 	else
 	{
 		// Read sensed task force 
 		f_task_trans = _sensed_task_force.head(3);
-		// f_task_rot = _sensed_task_force.tail(3);																				//
-	
-		f_task_rot.setZero();
-	
+		f_task_rot = _sensed_task_force.tail(3);																				//
 	}
 
 	// Apply reduction factors to force feedback
@@ -727,7 +728,6 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 	//Transfer task force from robot to haptic device global frame
 	_commanded_force_device = _Rotation_Matrix_DeviceToRobot * f_task_trans;
 	_commanded_torque_device = _Rotation_Matrix_DeviceToRobot * f_task_rot;
-
 
 	//// Evaluation of the drift velocities ////
 	//Translational drift
@@ -810,10 +810,6 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
 
-	// Send controllers force and torque to haptic device
-	commanded_force_device = _commanded_force_device;
-	commanded_torque_device = _commanded_torque_device;
-
 	//// Computation of the desired position for the controlled robot after drift of the device ////
 	// Estimated drift velocity considering drift force 
 	// VectorXd _vel_drift_est = _t_diff.count()*Lambda.inverse()*_Fdrift; // if estimated human+device mass matrix
@@ -860,8 +856,7 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 
 
 
-void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot,
-																Eigen::Vector3d& commanded_force_device)
+void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot)
 {
 	// get time since last call
 	 _t_curr = std::chrono::high_resolution_clock::now();
@@ -869,14 +864,16 @@ void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d
 	 {
 	 	_t_prev = std::chrono::high_resolution_clock::now();
 	 	_first_iteration = false;
-	 	_desired_position_robot = _center_position_robot;
-	 	_desired_rotation_robot = _center_rotation_robot;
+	 	_desired_position_robot = _current_position_robot;
+	 	_desired_rotation_robot = _current_rotation_robot;
 	 	_center_position_robot_drift = _center_position_robot;
+	 	_center_rotation_robot_drift = _center_rotation_robot;
+
+	 	_max_trans_velocity_device = 0.001;
 	 }
 	 _t_diff = _t_curr - _t_prev;
 
 	device_homed = false;
-
 
 	// Update the maximum velocities for the task
 	if (_current_trans_velocity_device.norm()>=_max_trans_velocity_device)	
@@ -884,14 +881,19 @@ void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d
 		_max_trans_velocity_device = _current_trans_velocity_device.norm();
 	}
 
+	//Transfer device velocity to robot global frame
+	Vector3d _current_trans_velocity_device_RobFrame;
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	
 	if (_haptic_feedback_from_proxy)
 	{
-		// Evaluate the task force through stiffness proxy
-		f_task_trans = _proxy_position_impedance*(_current_position_robot - _desired_position_robot) - _proxy_position_damping * _current_trans_velocity_robot;
+	
+	// Evaluate the task force through stiffness proxy
+		f_task_trans = _proxy_position_impedance*(_current_position_proxy - _desired_position_robot) - _proxy_position_damping * (_current_trans_velocity_device_RobFrame - _current_trans_velocity_proxy);
 		f_task_rot.setZero();
 		
 	}
@@ -944,6 +946,7 @@ void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d
 	if(!_send_haptic_feedback)
 	{
 		_commanded_force_device.setZero();
+		_commanded_torque_device.setZero();
 	}
 
 	//// Add virtual forces according to the device operational space limits ////
@@ -972,9 +975,6 @@ void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-
-	// Send controllers force and torque to haptic device
-	commanded_force_device = _commanded_force_device;
 
 	//// Computation of the desired position for the controlled robot after drift of the device ////
 	// Estimated drift velocity considering drift force 
@@ -1127,9 +1127,6 @@ void HapticController::GravityCompTask()
 
 void HapticController::HomingTask()
 {	
-	
-	// Send zero force to the gripper
-	_commanded_gripper_force_device = 0.0;
 
 	// Haptice device position controller gains
 	double kp_position_ctrl_device =_kp_position_ctrl_device * _max_linear_stiffness_device;
@@ -1173,26 +1170,44 @@ void HapticController::UseGripperAsSwitch()
 	//Update damping force term from gripper velocity
 	double damping_force = -0.05 * _current_gripper_velocity_device;
 
-	// case 0: outside of switch, zero force
-    if (_current_position_gripper_device > gripper_start_angle)
-    { 
-        _commanded_gripper_force_device = 0.0;
-        gripper_state = false;
-    }
-    // case 1: switch is being engaged. (Force is rising until "click")
-    else if ((_current_position_gripper_device <= gripper_start_angle) &&
-             (_current_position_gripper_device > gripper_switch_angle))
-    {
-        double switching_force = (gripper_start_angle - _current_position_gripper_device) * ((gripper_force_click) / (gripper_start_angle - gripper_switch_angle));
-        _commanded_gripper_force_device = damping_force + switching_force;
-        gripper_state = false;
-    }
-    // case 2: switch has been engaged. (Force is constant)
-    else if (_current_position_gripper_device <= gripper_switch_angle)
-    {
-        _commanded_gripper_force_device = gripper_force_switched + damping_force;
-        gripper_state = true;
-    }
+	// Initialization of the gripper
+	if (!gripper_init)
+	{
+		gripper_state = false;
+		if(_current_position_gripper_device <= gripper_switch_angle)
+		{
+			_commanded_gripper_force_device = gripper_force_switched + damping_force;
+		}
+		else
+		{
+			_commanded_gripper_force_device = 0.0;
+			gripper_init = true;
+		}
+	}
+	else
+	{
+		// case 0: outside of switch, zero force
+	    if (_current_position_gripper_device > gripper_start_angle)
+	    { 
+	        _commanded_gripper_force_device = 0.0;
+	        gripper_state = false;
+	    }
+	    // case 1: switch is being engaged. (Force is rising until "click")
+	    else if ((_current_position_gripper_device <= gripper_start_angle) &&
+	             (_current_position_gripper_device > gripper_switch_angle))
+	    {
+	        double switching_force = (gripper_start_angle - _current_position_gripper_device) * ((gripper_force_click) / (gripper_start_angle - gripper_switch_angle));
+	        _commanded_gripper_force_device = damping_force + switching_force;
+	        gripper_state = false;
+	    }
+	    // case 2: switch has been engaged. (Force is constant)
+	    else if (_current_position_gripper_device <= gripper_switch_angle)
+	    {
+	        _commanded_gripper_force_device = gripper_force_switched + damping_force;
+	        gripper_state = true;
+	    }
+
+	}
 
 }
 
