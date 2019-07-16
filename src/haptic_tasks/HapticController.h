@@ -440,10 +440,6 @@ public:
 	Vector3d _line_second_point;
 	Vector3d _guidance_force_line;
 
-
-//// Controllers parameters, set through setting methods ////
-private:
-
 	// Haptic device home position and orientation
 	Vector3d _home_position_device;
 	Matrix3d _home_rotation_device;
@@ -451,6 +447,10 @@ private:
 	// Workspace center of the controlled robot in the robot frame
 	Vector3d _center_position_robot;
 	Matrix3d _center_rotation_robot;
+
+
+//// Controllers parameters, set through setting methods ////
+private:
 
 	//Transformation matrix from the device frame to the robot frame
 	Matrix3d _Rotation_Matrix_DeviceToRobot;

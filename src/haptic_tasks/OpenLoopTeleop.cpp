@@ -439,6 +439,20 @@ void OpenLoopTeleop::computeHapticCommands6d(Eigen::Vector3d& desired_position_r
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
 
+	// Apply haptic guidances if activated
+	if (_enable_plane_guidance_3D)
+	{
+		ComputePlaneGuidanceForce();
+		_commanded_force_device += _guidance_force_plane - _commanded_force_device.dot(_plane_normal_vec) * _plane_normal_vec;
+	}
+
+	if (_enable_line_guidance_3D)
+	{
+		ComputeLineGuidanceForce();
+		Vector3d line_vector = (_line_first_point - _line_second_point) / (_line_first_point - _line_second_point).norm();
+		_commanded_force_device = _guidance_force_line + _commanded_force_device.dot(line_vector) * line_vector;
+	}
+
 	// Saturate to Force and Torque limits of the haptic device
 	if (_commanded_force_device.norm() >= device_info.m_maxLinearForce)
 	{
@@ -545,16 +559,18 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 
+	// Apply haptic guidance if activated
 	if (_enable_plane_guidance_3D)
 	{
 		ComputePlaneGuidanceForce();
-		_commanded_force_device += _guidance_force_plane;
+		_commanded_force_device += _guidance_force_plane - _commanded_force_device.dot(_plane_normal_vec) * _plane_normal_vec;
 	}
 
 	if (_enable_line_guidance_3D)
 	{
 		ComputeLineGuidanceForce();
-		_commanded_force_device += _guidance_force_line;
+		Vector3d line_vector = (_line_first_point - _line_second_point) / (_line_first_point - _line_second_point).norm();
+		_commanded_force_device = _guidance_force_line + _commanded_force_device.dot(line_vector) * line_vector;
 	}
 
 	// Saturate to Force and Torque limits of the haptic device

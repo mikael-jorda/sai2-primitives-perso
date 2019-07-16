@@ -84,7 +84,7 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
-	_proxy_position_impedance = 1000.0;
+	_proxy_position_impedance = 1400.0;
 	_proxy_orientation_impedance = 10.0;
 	_proxy_position_damping = 20.0;
 	_proxy_orientation_damping = 0.5;
@@ -241,7 +241,7 @@ void HapticController::reInitializeTask()
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
-	_proxy_position_impedance = 1000.0;
+	_proxy_position_impedance = 1400.0;
 	_proxy_orientation_impedance = 10.0;
 	_proxy_position_damping = 20.0;
 	_proxy_orientation_damping = 0.5;
@@ -366,6 +366,20 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
 
+	// Apply haptic guidances if activated
+	if (_enable_plane_guidance)
+	{
+		ComputePlaneGuidanceForce();
+		_commanded_force_device += _guidance_force_plane - _commanded_force_device.dot(_plane_normal_vec) * _plane_normal_vec;
+	}
+
+	if (_enable_line_guidance)
+	{
+		ComputeLineGuidanceForce();
+		Vector3d line_vector = (_line_first_point - _line_second_point) / (_line_first_point - _line_second_point).norm();
+		_commanded_force_device = _guidance_force_line + _commanded_force_device.dot(line_vector) * line_vector;
+	}
+	
 	// Saturate to Force and Torque limits of the haptic device
 	if (_commanded_force_device.norm() >= _max_force_device)
 	{
@@ -458,16 +472,18 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 
+	// Apply haptic guidance if activated
 	if (_enable_plane_guidance)
 	{
 		ComputePlaneGuidanceForce();
-		_commanded_force_device += _guidance_force_plane;
+		_commanded_force_device += _guidance_force_plane - _commanded_force_device.dot(_plane_normal_vec) * _plane_normal_vec;
 	}
 
 	if (_enable_line_guidance)
 	{
 		ComputeLineGuidanceForce();
-		_commanded_force_device += _guidance_force_line;
+		Vector3d line_vector = (_line_first_point - _line_second_point) / (_line_first_point - _line_second_point).norm();
+		_commanded_force_device = _guidance_force_line + _commanded_force_device.dot(line_vector) * line_vector;
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
