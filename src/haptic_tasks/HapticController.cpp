@@ -146,6 +146,11 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	_device_workspace_tilt_angle_max=20*M_PI/180.0;
 	_task_workspace_tilt_angle_max=45*M_PI/180.0;
 
+	// Device workspace virtual limits
+	_add_workspace_virtual_limit=false;
+	_device_workspace_radius_limit = 0.1;
+	_device_workspace_angle_limit = 90*M_PI/180.0;
+
 	//Initialize haptic guidance parameters
 	_enable_plane_guidance=false;
 	_enable_line_guidance=false;
@@ -326,6 +331,14 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
 	Vector3d orientation_dev;
+
+	// Position of the device with respect with home position
+	Vector3d relative_position_device;
+	relative_position_device = _current_position_device-_home_position_device;
+	// Rotation of the device with respect with home orientation
+	Matrix3d relative_rotation_device = _current_rotation_device * _home_rotation_device.transpose(); // Rotation with respect with home orientation
+	AngleAxisd relative_orientation_angle_device = AngleAxisd(relative_rotation_device);
+
 	
 	if (_haptic_feedback_from_proxy)
 	{	
@@ -379,7 +392,26 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 		Vector3d line_vector = (_line_first_point - _line_second_point) / (_line_first_point - _line_second_point).norm();
 		_commanded_force_device = _guidance_force_line + _commanded_force_device.dot(line_vector) * line_vector;
 	}
-	
+
+	if(_add_workspace_virtual_limit)
+	{
+		// Add virtual forces according to the device operational space limits
+		Vector3d force_virtual = Vector3d::Zero();
+		Vector3d torque_virtual = Vector3d::Zero();
+
+		if (relative_position_device.norm() >= _device_workspace_radius_limit)
+		{
+			force_virtual = -(0.8 * _max_linear_stiffness_device * (relative_position_device.norm()-_device_workspace_radius_limit)/(relative_position_device.norm()))*relative_position_device;
+		}
+		_commanded_force_device += force_virtual;
+		
+		if (relative_orientation_angle_device.angle() >= _device_workspace_angle_limit)
+		{
+			torque_virtual = -(0.8 * _max_angular_stiffness_device *(relative_orientation_angle_device.angle()-_device_workspace_angle_limit))*relative_orientation_angle_device.axis();
+		}
+		_commanded_torque_device += torque_virtual;		
+	}
+
 	// Saturate to Force and Torque limits of the haptic device
 	if (_commanded_force_device.norm() >= _max_force_device)
 	{
@@ -397,13 +429,10 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 	}
 
 	// Compute the new desired position from the haptic device
-	_desired_position_robot = _scaling_factor_trans*(_current_position_device - _home_position_device);
+	_desired_position_robot = _scaling_factor_trans*relative_position_device;
 	
-	// Rotation with respect with home orientation
-	Eigen::Matrix3d rot_rel = _current_rotation_device * _home_rotation_device.transpose();
-	Eigen::AngleAxisd rot_rel_ang = Eigen::AngleAxisd(rot_rel);
 	// Compute set orientation from the haptic device
-	Eigen::AngleAxisd desired_rotation_robot_aa = Eigen::AngleAxisd(_scaling_factor_rot*rot_rel_ang.angle(),rot_rel_ang.axis());
+	Eigen::AngleAxisd desired_rotation_robot_aa = Eigen::AngleAxisd(_scaling_factor_rot*relative_orientation_angle_device.angle(),relative_orientation_angle_device.axis());
 	_desired_rotation_robot = desired_rotation_robot_aa.toRotationMatrix();
 
 	//Transfer set position and orientation from device to robot global frame
@@ -435,6 +464,10 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 	Vector3d _current_trans_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 
+	// Position of the device with respect with home position
+	Vector3d relative_position_device;
+	relative_position_device = _current_position_device-_home_position_device;
+	
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
@@ -486,6 +519,17 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 		_commanded_force_device = _guidance_force_line + _commanded_force_device.dot(line_vector) * line_vector;
 	}
 
+	if(_add_workspace_virtual_limit)
+	{
+		// Add virtual forces according to the device operational space limits
+		Vector3d force_virtual = Vector3d::Zero();
+		if (relative_position_device.norm() >= _device_workspace_radius_limit)
+		{
+			force_virtual = -(0.8 * _max_linear_stiffness_device * (relative_position_device.norm()-_device_workspace_radius_limit)/(relative_position_device.norm()))*relative_position_device;
+		}
+		_commanded_force_device += force_virtual;		
+	}
+
 	// Saturate to Force and Torque limits of the haptic device
 	if (_commanded_force_device.norm() >= _max_force_device)
 	{
@@ -499,7 +543,7 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 	}
 
 	// Compute the set position from the haptic device
-	_desired_position_robot = _scaling_factor_trans*(_current_position_device-_home_position_device);
+	_desired_position_robot = _scaling_factor_trans*relative_position_device;
 	// Rotation with respect with home orientation
 	
 	//Transfer set position and orientation from device to robot global frame
@@ -1305,6 +1349,14 @@ void HapticController::setDeviceRobotRotation(const Eigen::Matrix3d Rotation_Mat
 {
 	_Rotation_Matrix_DeviceToRobot = Rotation_Matrix_DeviceToRobot;
 }
+
+
+void HapticController::setWorkspaceLimits(double device_workspace_radius_limit, double device_workspace_angle_limit)
+{
+	_device_workspace_radius_limit = device_workspace_radius_limit;
+	_device_workspace_angle_limit = device_workspace_angle_limit;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////
 // Workspace extension related methods

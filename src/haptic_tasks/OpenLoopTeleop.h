@@ -288,6 +288,16 @@ public:
 	void setDeviceRobotRotation(const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
 
 
+	/**
+	 * @brief Sets the size of the device Workspace to add virtual limits in the force feedback
+	 * @details The size of the device Workspace is set through the radius of its equivalent sphere and the maximum tilt angles.
+	 * 
+	 * @param device_workspace_radius_limit     Radius of the smallest sphere including the haptic device Workspace
+	 * @param device_workspace_angle_limit   	Maximum tilt angle of the haptic device
+	 */
+	void setWorkspaceLimits(double device_workspace_radius_limit, double device_workspace_angle_limit);
+
+	
 	// -------- Workspace extension related methods --------
 
 	/**
@@ -374,12 +384,18 @@ public:
 
 	bool _enable_line_guidance_3D; // add guidance along a user-defined plane
 
+	bool _add_workspace_virtual_limit; // add a virtual sphere delimiting the haptic device workspace
+
+
 
 //// Status and robot/device's infos ////
 
 	// Haptic device variables
 	cGenericHapticDevicePtr hapticDevice; // a pointer to the current haptic device
 	cHapticDeviceInfo device_info; // the info of the current haptic device
+	
+	double _device_workspace_radius_limit;
+	double _device_workspace_angle_limit;
 	// Device status
 	bool device_started;
 	bool device_homed;
