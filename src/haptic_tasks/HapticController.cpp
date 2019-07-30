@@ -259,19 +259,20 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 	 	_desired_rotation_robot = _current_rotation_robot;
 	 }
 
-	// Compute the force feedback in robot frame
-	Vector3d f_task_trans;
-	Vector3d f_task_rot;
-	Vector3d orientation_dev;
-
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
 	// Position of the device with respect with home position
 	Vector3d relative_position_device;
 	relative_position_device = _current_position_device-_home_position_device;
 	// Rotation of the device with respect with home orientation
 	Matrix3d relative_rotation_device = _current_rotation_device * _home_rotation_device.transpose(); // Rotation with respect with home orientation
 	AngleAxisd relative_orientation_angle_device = AngleAxisd(relative_rotation_device);
-
 	
+	// Compute the force feedback in robot frame
+	Vector3d f_task_trans;
+	Vector3d f_task_rot;
+	Vector3d orientation_dev;
 	if (_haptic_feedback_from_proxy)
 	{	
 		// Evaluate the task force through stiffness proxy
@@ -392,6 +393,9 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 	 	_desired_rotation_robot = _current_rotation_robot;
 	 }
 
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	
 	// Position of the device with respect with home position
 	Vector3d relative_position_device;
 	relative_position_device = _current_position_device-_home_position_device;
@@ -678,6 +682,11 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 		_max_trans_velocity_device = _current_trans_velocity_device.norm();
 	}
 
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
+
+
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
@@ -859,7 +868,10 @@ void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d
 	{
 		_max_trans_velocity_device = _current_trans_velocity_device.norm();
 	}
-
+	
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	
 	// Compute the force feedback in robot frame
 	Vector3d f_task_trans;
 	Vector3d f_task_rot;
@@ -996,6 +1008,9 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	 	_desired_rotation_robot = _current_rotation_robot;
 	 }
 
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
 	// Position of the device with respect with home position
 	Vector3d relative_position_device;
 	relative_position_device = _current_position_device-_home_position_device;
@@ -1147,6 +1162,9 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	 	_desired_rotation_robot = _current_rotation_robot;
 	 }
 
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	
 	// Position of the device with respect with home position
 	Vector3d relative_position_device;
 	relative_position_device = _current_position_device-_home_position_device;
@@ -1329,10 +1347,6 @@ void HapticController::updateSensedRobotPositionVelocity(const Eigen::Vector3d c
 	_current_rotation_robot = current_rotation_robot;
 	_current_trans_velocity_robot = current_trans_velocity_robot;
 	_current_rot_velocity_robot = current_rot_velocity_robot;
-	//Transfer device velocity to robot global frame
-	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
-	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
-
 
 }
 

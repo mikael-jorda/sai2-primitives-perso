@@ -1275,11 +1275,6 @@ void OpenLoopTeleop::updateSensedRobotPositionVelocity(const Eigen::Vector3d cur
 	_current_rotation_robot = current_rotation_robot;
 	_current_trans_velocity_robot = current_trans_velocity_robot;
 	_current_rot_velocity_robot = current_rot_velocity_robot;
-	//Transfer device velocity to robot global frame
-	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
-	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
-
-
 }
 
 void OpenLoopTeleop::updateVirtualProxyPositionVelocity(const Eigen::Vector3d current_position_proxy,
