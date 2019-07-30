@@ -151,6 +151,17 @@ public:
 											const Eigen::Matrix3d current_rotation_proxy = Eigen::Matrix3d::Identity(),
 											const Eigen::Vector3d current_rot_velocity_proxy = Eigen::Vector3d::Zero());
 
+	/**
+	 * @brief Update the desired selection matrices to project the haptic feedback in the unified controller
+	 * 
+	 * @param _sigma_position			The position selection matrix in robot frame
+	 * @param _sigma_orientation		The orientation selection matrix in robot frame
+	 * @param _sigma_force				The force selection matrix in robot frame
+	 * @param _sigma_moment				The torque selection matrix in robot frame
+	 */
+	void updateSelectionMatrices(const Eigen::Matrix3d sigma_position, const Eigen::Matrix3d sigma_orientation,
+								const Eigen::Matrix3d sigma_force, const Eigen::Matrix3d sigma_moment);
+
 
 
 	/**
@@ -239,6 +250,16 @@ public:
 	void setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
 									const double proxy_orientation_impedance, const double proxy_orientation_damping);
 
+	/**
+	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
+	 * 
+	 * @param force_guidance_position_impedance       		Guidance impedance term in position
+	 * @param force_guidance_position_damping 	  			Guidance damping term in position
+	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
+	 * @param force_guidance_orientation_damping 	  		Guidance damping term in orientation
+	 */
+	void setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
+									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping);	
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
@@ -313,12 +334,14 @@ public:
 										    double device_workspace_tilt_angle_max, double task_workspace_tilt_angle_max);
 
 	/**
-	 * @brief Sets the percentage of drift force compared to the task force feedback
-	 * @details The level of drift force is set with respect to the task force feedback thanscaling_factor_trans to the just noticeable difference percentage
+	 * @brief Sets the percentage of drift force and drift velocity accepted by the user as just noticeable difference
+	 * @details The level of drift force is set with respect to the task force feedback and the the level of drift velocity
+	 *          with respect to the device current velocity.
 	 * 
 	 * @param drift_force_admissible_ratio     Percentage of drift force with repect to the task force feedback
+	 * @param drift_velocity_admissible_ratio  Percentage of drift velocity with respect to the device velocity
 	 */
-	void setForceNoticeableDiff(double drift_force_admissible_ratio);
+	void setNoticeableDiff(double drift_force_admissible_ratio, double drift_velocity_admissible_ratio);
 
 
 	// -------- Haptic guidance related methods --------
@@ -410,6 +433,8 @@ public:
 	// Haptic device velocity
 	Vector3d _current_trans_velocity_device;
 	Vector3d _current_rot_velocity_device;
+	Vector3d _current_trans_velocity_device_RobFrame;
+ 	Vector3d _current_rot_velocity_device_RobFrame;
 	// Sensed force and torque from the haptic device
 	Vector3d _sensed_force_device;
 	Vector3d _sensed_torque_device;
@@ -418,6 +443,9 @@ public:
 	//Commanded position and orientation of the robot (in robot frame) from impedance control
 	Vector3d _desired_position_robot;
 	Matrix3d _desired_rotation_robot;
+	//Commanded force and torque of the robot inoperational space from unified controller
+	Vector3d _desired_force_robot;
+	Vector3d _desired_torque_robot;
 	//Commanded velocity of the robot (in robot frame) from admittance control
 	Vector3d _desired_trans_velocity_robot;
 	Vector3d _desired_rot_velocity_robot;
@@ -474,15 +502,14 @@ public:
 	Vector3d _center_position_robot;
 	Matrix3d _center_rotation_robot;
 
+	// Workspace scaling factors in translation and rotation
+	double _scaling_factor_trans, _scaling_factor_rot;
 
 //// Controllers parameters, set through setting methods ////
 private:
 
 	//Transformation matrix from the device frame to the robot frame
 	Matrix3d _Rotation_Matrix_DeviceToRobot;
-	
-	// Workspace scaling factors in translation and rotation
-	double _scaling_factor_trans, _scaling_factor_rot;
 
 	//Position controller parameters for homing task
 	double _kp_position_ctrl_device;
@@ -508,6 +535,18 @@ private:
 	Matrix3d _reduction_factor_force_feedback;
 	Matrix3d _reduction_factor_torque_feedback;
 
+	// Selection matrices for unified controller in haptic device frame
+	Matrix3d _sigma_position;
+	Matrix3d _sigma_orientation;
+	Matrix3d _sigma_force;
+	Matrix3d _sigma_moment;
+
+	// Virtual force guidance parameters
+	double _force_guidance_position_impedance;
+	double _force_guidance_orientation_impedance;
+	double _force_guidance_orientation_damping;
+	double _force_guidance_position_damping;
+
 	// Sensed force filters
 	ButterworthFilter* _force_filter;
 	ButterworthFilter* _moment_filter;
@@ -518,8 +557,9 @@ private:
 	double _device_workspace_radius_max, _task_workspace_radius_max; // Radius (in meter)
 	double _device_workspace_tilt_angle_max, _task_workspace_tilt_angle_max; // max tilt angles (in degree)
 
-	// Admissible drift force ratio
+	// Admissible drift force and velocity ratio
 	double _drift_force_admissible_ratio; // As a percentage of task force
+	double _drift_velocity_admissible_ratio; // As a percentage of device velocity
 	
 	// Time parameters 
 	chrono::high_resolution_clock::time_point _t_prev;

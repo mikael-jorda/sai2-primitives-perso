@@ -48,7 +48,7 @@ public:
 	~HapticController();
 
 	/**
-	 * @brief Reinitializes the haptic controller parameters to default values.
+	 * @brief Reinitializes the computation when switching controller
 	 */
 	void reInitializeTask();
 
@@ -74,7 +74,17 @@ public:
 	 *				are computed from the velocity error in the robot controller. The current robot position and velocity must be
 	 *				set thanks to updateSensedRobotPositionVelocity().
 	 *
-	 * 			Guidance plane or line can be added to the haptic controller (_enable_plane_guidance=true, _enable_line_guidance=true).
+	 *	 		computeHapticCommandsUnifiedControl3-6d implements a unified Force and Motion controller for haptic teleoperation.
+	 *				The slave robot is controlled in force (desired_force/torque_robot) in the physical interaction direction
+	 *				(defined by the force selection matrices _sigma_force and _sigma_moment) and in motion (desired_position/rotation_robot)
+	 *				in the orthogonal direction (defined by the motion selection matrices _sigma_position and _sigma_orientation).
+	 *				The selection matrices must be defined before calling the controller thanks to updateSelectionMatrices().
+	 *				The haptic feedback is computed as the sum of the sensed task interaction projected into the motion-controlled space
+	 *				and a virtual spring-damper (_force_guidance_xx stiffness and damping parameters) into the force-controlled space.
+	 *				The task force must be sent thanks to updateSensedForce() and the current robot position and velocity must be updated
+	 *				with updateSensedRobotPositionVelocity() before calling this function.
+	 *
+	 * 			Guidance plane or line can be added to the haptic controllers (_enable_plane_guidance=true, _enable_line_guidance=true).
 	 *			The plane is defined thanks to the method setPlane and the line thanks to setLine.
 	 * 
 	 *			computeHapticCommands...6d(): The 6 DOFs are controlled and feedback.
@@ -101,6 +111,14 @@ public:
 												Eigen::Matrix3d& desired_rotation_robot);
 
 	void computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& desired_position_robot);
+
+	void computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& desired_position_robot,
+												Eigen::Matrix3d& desired_rotation_robot,
+												Eigen::Vector3d& desired_force_robot,
+												Eigen::Vector3d& desired_torque_robot);
+
+	void computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& desired_position_robot,
+												Eigen::Vector3d& desired_force_robot);
 
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -156,6 +174,17 @@ public:
 											const Eigen::Vector3d current_trans_velocity_proxy,
 											const Eigen::Matrix3d current_rotation_proxy = Eigen::Matrix3d::Identity(),
 											const Eigen::Vector3d current_rot_velocity_proxy = Eigen::Vector3d::Zero());
+
+	/**
+	 * @brief Update the desired selection matrices to project the haptic feedback in the unified controller
+	 * 
+	 * @param _sigma_position			The position selection matrix in robot frame
+	 * @param _sigma_orientation		The orientation selection matrix in robot frame
+	 * @param _sigma_force				The force selection matrix in robot frame
+	 * @param _sigma_moment				The torque selection matrix in robot frame
+	 */
+	void updateSelectionMatrices(const Eigen::Matrix3d sigma_position, const Eigen::Matrix3d sigma_orientation,
+								const Eigen::Matrix3d sigma_force, const Eigen::Matrix3d sigma_moment);
 
 
 
@@ -244,6 +273,16 @@ public:
 	void setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
 									const double proxy_orientation_impedance, const double proxy_orientation_damping);
 
+	/**
+	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
+	 * 
+	 * @param force_guidance_position_impedance       		Guidance impedance term in position
+	 * @param force_guidance_position_damping 	  			Guidance damping term in position
+	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
+	 * @param force_guidance_orientation_damping 	  		Guidance damping term in orientation
+	 */
+	void setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
+									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping);	
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
@@ -307,13 +346,14 @@ public:
 										    double device_workspace_tilt_angle_max, double task_workspace_tilt_angle_max);
 
 	/**
-	 * @brief Sets the percentage of drift force compared to the task force feedback
-	 * @details The level of drift force is set with respect to the task force feedback thanscaling_factor_trans to the just noticeable difference percentage
+	 * @brief Sets the percentage of drift force and drift velocity accepted by the user as just noticeable difference
+	 * @details The level of drift force is set with respect to the task force feedback and the the level of drift velocity
+	 *          with respect to the device current velocity.
 	 * 
 	 * @param drift_force_admissible_ratio     Percentage of drift force with repect to the task force feedback
+	 * @param drift_velocity_admissible_ratio  Percentage of drift velocity with respect to the device velocity
 	 */
-	void setForceNoticeableDiff(double drift_force_admissible_ratio);
-
+	void setNoticeableDiff(double drift_force_admissible_ratio, double drift_velocity_admissible_ratio);
 
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -396,16 +436,21 @@ public:
 	// Haptic device velocity
 	Vector3d _current_trans_velocity_device;
 	Vector3d _current_rot_velocity_device;
+	Vector3d _current_trans_velocity_device_RobFrame;
+ 	Vector3d _current_rot_velocity_device_RobFrame;
 	double _current_gripper_velocity_device;
 	// Sensed force and torque from the haptic device
 	Vector3d _sensed_force_device;
 	Vector3d _sensed_torque_device;
 
 	// Robot variables
-	//Commanded position and orientation of the robot (in robot frame) from impedance control
+	//Commanded position and orientation of the robot (in robot frame) from impedance or unified controllers
 	Vector3d _desired_position_robot;
 	Matrix3d _desired_rotation_robot;
-	//Commanded velocity of the robot (in robot frame) from admittance control
+	//Commanded force and torque of the robot inoperational space from unified controller
+	Vector3d _desired_force_robot;
+	Vector3d _desired_torque_robot;
+	//Commanded velocity of the robot (in robot frame) from admittance controller
 	Vector3d _desired_trans_velocity_robot;
 	Vector3d _desired_rot_velocity_robot;
 	Vector3d _integrated_trans_velocity_error;
@@ -495,6 +540,18 @@ private:
 	Matrix3d _reduction_factor_force_feedback;
 	Matrix3d _reduction_factor_torque_feedback;
 
+	// Selection matrices for unified controller in haptic device frame
+	Matrix3d _sigma_position;
+	Matrix3d _sigma_orientation;
+	Matrix3d _sigma_force;
+	Matrix3d _sigma_moment;
+
+	// Virtual force guidance parameters
+	double _force_guidance_position_impedance;
+	double _force_guidance_orientation_impedance;
+	double _force_guidance_orientation_damping;
+	double _force_guidance_position_damping;
+
 	// Sensed force filters
 	ButterworthFilter* _force_filter;
 	ButterworthFilter* _moment_filter;
@@ -505,8 +562,9 @@ private:
 	double _device_workspace_radius_max, _task_workspace_radius_max; // Radius (in meter)
 	double _device_workspace_tilt_angle_max, _task_workspace_tilt_angle_max; // max tilt angles (in degree)
 
-	// Admissible drift force ratio
+	// Admissible drift force and velocity ratio
 	double _drift_force_admissible_ratio; // As a percentage of task force
+	double _drift_velocity_admissible_ratio; // As a percentage of device velocity
 	
 	// Time parameters 
 	chrono::high_resolution_clock::time_point _t_prev;

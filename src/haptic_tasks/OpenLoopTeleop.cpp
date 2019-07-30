@@ -116,6 +116,10 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_desired_position_robot = _center_position_robot;
 	_desired_rotation_robot = _center_rotation_robot;
 
+	//Initialize the set force and torque of the controlled robot
+	_desired_force_robot.setZero();
+	_desired_torque_robot.setZero();
+
 	//Initialize the set velocity of the controlled robot
 	_desired_trans_velocity_robot.setZero();
 	_desired_rot_velocity_robot.setZero();
@@ -166,6 +170,18 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 						  0.0, 1/2.0, 0.0,
 						  0.0, 0.0, 1/2.0;
 
+	// Initialize virtual force guidance gains for unified controller
+	_force_guidance_position_impedance = 200.0;
+	_force_guidance_orientation_impedance = 20.0;
+	_force_guidance_position_damping = 40.0;
+	_force_guidance_orientation_damping = 2.0;
+
+	// Set selection matrices to full motion control
+	_sigma_position.setIdentity();
+	_sigma_orientation.setIdentity();
+	_sigma_force.setZero();
+	_sigma_moment.setZero();
+
 	//Initialize sensed force filtering
 	_force_filter = new ButterworthFilter(3);
 	_moment_filter = new ButterworthFilter(3);
@@ -196,7 +212,8 @@ OpenLoopTeleop::OpenLoopTeleop(cHapticDeviceHandler* handler,
 	_drift_trans_velocity.setZero(3);
 
 	// Default drift force percentage (can be change with setForceNoticeableDiff())
-	_drift_force_admissible_ratio=50.0/100.0;
+	_drift_force_admissible_ratio = 50.0/100.0;
+	_drift_velocity_admissible_ratio = 50.0/100.0;
 
 	// Initialization of the controller parameters
 	_device_workspace_radius_max=0.025;
@@ -254,22 +271,13 @@ void OpenLoopTeleop::reInitializeTask()
 	_torque_chai.set(0.0,0.0,0.0);
 	hapticDevice->setForceAndTorque(_force_chai,_torque_chai);
 
-	//reInitialize snesed force to zero
-	_sensed_task_force.setZero(6);
-
-	//reInitialize homing task
-	device_homed = false;
-	// Default home position
-	_home_position_device.setZero();
-	_home_rotation_device.setIdentity();
-
-	//reInitialize Workspace center of the controlled robot to defaut values
-	_center_position_robot.setZero(); 
-	_center_rotation_robot.setIdentity();
-
 	//Initialize the set position and orientation of the controlled robot
-	_desired_position_robot = _center_position_robot;
-	_desired_rotation_robot = _center_rotation_robot;
+	_desired_position_robot = _current_position_robot;
+	_desired_rotation_robot = _current_rotation_robot;
+
+	//Initialize the set force and torque of the controlled robot
+	_desired_force_robot.setZero();
+	_desired_torque_robot.setZero();
 
 	//Initialize the set velocity of the controlled robot
 	_desired_trans_velocity_robot.setZero();
@@ -277,65 +285,7 @@ void OpenLoopTeleop::reInitializeTask()
 	_integrated_trans_velocity_error.setZero();
 	_integrated_rot_velocity_error.setZero();
 	
-	//Set the initial robot position, orientation, and velocity
-	_current_position_robot = _center_position_robot;
-	_current_rotation_robot = _center_rotation_robot;
-	_current_trans_velocity_robot.setZero();
-	_current_rot_velocity_robot.setZero();
-	//Set the initial virtual proxy position, orientation, and velocity
-	_current_position_proxy = _center_position_robot;
-	_current_rotation_proxy = _center_rotation_robot;
-	_current_trans_velocity_proxy.setZero();
-	_current_rot_velocity_proxy.setZero();
-
-	//Initialize the frame trasform from device to robot
-	_Rotation_Matrix_DeviceToRobot.setIdentity();
-
-	//reInitialize scaling factors to defaut values
-	_scaling_factor_trans=1.0;
-	_scaling_factor_rot=1.0;
-
-	//Initialize position controller parameters
-	_kp_position_ctrl_device = 0.2;
-	_kv_position_ctrl_device = 0.7;
-	_kp_orientation_ctrl_device = 0.6;
-	_kv_orientation_ctrl_device = 0.2;
-
-	//Initialize virtual proxy parameters
-	_proxy_position_impedance = 1000.0;
-	_proxy_orientation_impedance = 10.0;
-	_proxy_position_damping = 20.0;
-	_proxy_orientation_damping = 0.5;
-
-	//Initialize force feedback controller parameters
-	_kp_robot_trans_velocity = 10.0;
-	_kp_robot_rot_velocity = 10.0;
-	_ki_robot_trans_velocity = 0.0;
-	_ki_robot_rot_velocity = 0.0;
-
-	_robot_trans_admittance = 1/50.0;
-	_robot_rot_admittance = 1/1.5;
-
-	_reduction_factor_torque_feedback << 1/20.0, 0.0, 0.0,
-						  0.0, 1/20.0, 0.0,
-						  0.0, 0.0, 1/20.0;
-
-	_reduction_factor_force_feedback << 1/2.0, 0.0, 0.0,
-						  0.0, 1/2.0, 0.0,
-						  0.0, 0.0, 1/2.0;
-
-	//reInitialize filter parameters
-	_cutOff_frequency_force = 0.04;
-	_cutOff_frequency_moment = 0.04;
-	_force_filter->setCutoffFrequency(_cutOff_frequency_force);
-	_moment_filter->setCutoffFrequency(_cutOff_frequency_moment);
-	_filter_on = false;
-
-	//Initialiaze force feedback computation mode
-	_haptic_feedback_from_proxy = false;
-	_send_haptic_feedback = false;
-
-	_first_iteration = true; // To initialize the timer
+	_first_iteration = true; // To initialize the timer and integral terms
 
 	// Initialize Workspace extension parameters
 	_center_position_robot_drift.setZero();
@@ -348,14 +298,6 @@ void OpenLoopTeleop::reInitializeTask()
 	_drift_torque.setZero(3);
 	_drift_rot_velocity.setZero(3);
 	_drift_trans_velocity.setZero(3);
-
-	//Initialize haptic guidance parameters
-	_enable_plane_guidance_3D=false;
-	_enable_line_guidance_3D=false;
-	_guidance_stiffness=0.7;
-	_guidance_damping=0.8;
-	_guidance_force_plane.setZero();
-	_guidance_force_line.setZero();
 
 }
 
@@ -383,8 +325,6 @@ void OpenLoopTeleop::computeHapticCommands6d(Eigen::Vector3d& desired_position_r
 	_current_rot_velocity_device = convertChaiToEigenVector(_current_rot_velocity_device_chai);	
 
 	//Transfer device velocity to robot global frame
-	Vector3d _current_trans_velocity_device_RobFrame;
- 	Vector3d _current_rot_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
 
@@ -540,7 +480,6 @@ void OpenLoopTeleop::computeHapticCommands3d(Eigen::Vector3d& desired_position_r
 	_current_trans_velocity_device = convertChaiToEigenVector(_current_trans_velocity_device_chai);
 
 	//Transfer device velocity to robot global frame
-	Vector3d _current_trans_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	
 	// Position of the device with respect with home position
@@ -877,8 +816,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d& 
 	_current_rot_velocity_device = convertChaiToEigenVector(_current_rot_velocity_device_chai);
 
 	//Transfer device velocity to robot global frame
-	Vector3d _current_trans_velocity_device_RobFrame;
- 	Vector3d _current_rot_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
 
@@ -1094,7 +1031,6 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 	}
 
 	//Transfer device velocity to robot global frame
-	Vector3d _current_trans_velocity_device_RobFrame;
 	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
 	
 	// Compute the force feedback in robot frame
@@ -1126,10 +1062,14 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 	_commanded_torque_device = _Rotation_Matrix_DeviceToRobot * f_task_rot;
 
 	//// Evaluation of the drift velocities ////
-	//Translational drift
+	//Compute the drift direction
 	Vector3d relative_position_device;
 	relative_position_device = _current_position_device -_home_position_device;
-	_drift_trans_velocity = -_current_trans_velocity_device.norm()*relative_position_device/(_device_workspace_radius_max*_max_trans_velocity_device);
+	Vector3d drift_unit_vector;
+	drift_unit_vector = - relative_position_device/_device_workspace_radius_max;
+
+	//_drift_trans_velocity = _current_trans_velocity_device.norm()*drift_unit_vector/_max_trans_velocity_device;
+	_drift_trans_velocity = _drift_velocity_admissible_ratio*_current_trans_velocity_device.norm()*drift_unit_vector;
 
 	//// Computation of the scaling factors ////
 	_scaling_factor_trans = 1.0 + relative_position_device.norm()*(_task_workspace_radius_max/_device_workspace_radius_max-1.0)/_device_workspace_radius_max;
@@ -1144,15 +1084,33 @@ void OpenLoopTeleop::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d& 
 
 	// cout << "Ks \n" << _scaling_factor_trans << endl;
 
-	
 	//// Evaluation of the drift force ////
 	// Definition of the velocity gains from task feedback
-	Matrix3d _Kv_translation = _drift_force_admissible_ratio*(_commanded_force_device.asDiagonal());
-
+	//Matrix3d _Kv_translation = _drift_force_admissible_ratio*(_commanded_force_device.asDiagonal());
 	// Drift force computation
-	_drift_force = _Kv_translation * _drift_trans_velocity;
+	//_drift_force = _Kv_translation * _drift_trans_velocity;
+	_drift_force = _drift_force_admissible_ratio * _commanded_force_device.norm() * drift_unit_vector;
+
+	// Compute total drift force to apply to the device
+	_drift_force = 10.0*(_drift_trans_velocity-_current_trans_velocity_device)+_drift_force; //////////////////////////////////
 	
-	cout << "Fdrift \n" << _drift_force << endl;
+	//cout << "Fdrift \n" << _drift_force << endl;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	//// Desired cartesian force to apply to the haptic device ////
 	_commanded_force_device += _drift_force;
@@ -1317,6 +1275,10 @@ void OpenLoopTeleop::updateSensedRobotPositionVelocity(const Eigen::Vector3d cur
 	_current_rotation_robot = current_rotation_robot;
 	_current_trans_velocity_robot = current_trans_velocity_robot;
 	_current_rot_velocity_robot = current_rot_velocity_robot;
+	//Transfer device velocity to robot global frame
+	_current_trans_velocity_device_RobFrame = _scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _current_trans_velocity_device;
+	_current_rot_velocity_device_RobFrame = _scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _current_rot_velocity_device; 
+
 
 }
 
@@ -1329,6 +1291,15 @@ void OpenLoopTeleop::updateVirtualProxyPositionVelocity(const Eigen::Vector3d cu
 	_current_rotation_proxy = current_rotation_proxy;
 	_current_trans_velocity_proxy = current_trans_velocity_proxy;
 	_current_rot_velocity_proxy = current_rot_velocity_proxy;
+}
+
+void OpenLoopTeleop::updateSelectionMatrices(const Eigen::Matrix3d sigma_position, const Eigen::Matrix3d sigma_orientation,
+								const Eigen::Matrix3d sigma_force, const Eigen::Matrix3d sigma_moment)
+{
+	_sigma_position = _Rotation_Matrix_DeviceToRobot * sigma_position * _Rotation_Matrix_DeviceToRobot.transpose();
+	_sigma_orientation = _Rotation_Matrix_DeviceToRobot * sigma_orientation * _Rotation_Matrix_DeviceToRobot.transpose();
+	_sigma_force = _Rotation_Matrix_DeviceToRobot * sigma_force * _Rotation_Matrix_DeviceToRobot.transpose();
+	_sigma_moment = _Rotation_Matrix_DeviceToRobot * sigma_moment * _Rotation_Matrix_DeviceToRobot.transpose();
 }
 
 
@@ -1471,6 +1442,14 @@ void OpenLoopTeleop::setVirtualProxyGains (const double proxy_position_impedance
 	_proxy_orientation_damping = proxy_orientation_damping;
 }
 
+void OpenLoopTeleop::setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
+									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping)
+{
+	_force_guidance_position_impedance = force_guidance_position_impedance;
+	_force_guidance_position_damping = force_guidance_position_damping;
+	_force_guidance_orientation_impedance = force_guidance_orientation_impedance;
+	_force_guidance_orientation_damping = force_guidance_orientation_damping;
+}
 
 void OpenLoopTeleop::setFilterCutOffFreq(const double cutOff_frequency_force, const double cutOff_frequency_moment)
 {
@@ -1534,9 +1513,11 @@ void OpenLoopTeleop::setWorkspaceSize(double device_workspace_radius_max, double
 }
 
 
-void OpenLoopTeleop::setForceNoticeableDiff(double drift_force_admissible_ratio)
+void OpenLoopTeleop::setNoticeableDiff(double drift_force_admissible_ratio, double drift_velocity_admissible_ratio)
+
 {
 	_drift_force_admissible_ratio = drift_force_admissible_ratio;
+	_drift_velocity_admissible_ratio = drift_velocity_admissible_ratio;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
