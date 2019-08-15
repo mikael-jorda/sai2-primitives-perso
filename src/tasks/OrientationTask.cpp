@@ -150,12 +150,9 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_angular_velocity = -_kp / _kv * (_step_orientation_error) - _ki/_kv * _integrated_orientation_error;
-		for(int i=0; i<3; i++)
+		if(_step_desired_angular_velocity.norm() > _saturation_velocity)
 		{
-			if(_step_desired_angular_velocity.norm() > _saturation_velocity)
-			{
-				_step_desired_angular_velocity *= _saturation_velocity/_step_desired_angular_velocity.norm();
-			}
+			_step_desired_angular_velocity *= _saturation_velocity/_step_desired_angular_velocity.norm();
 		}
 		_task_force = _Lambda * (-_kv*(_current_angular_velocity - _step_desired_angular_velocity));
 	}

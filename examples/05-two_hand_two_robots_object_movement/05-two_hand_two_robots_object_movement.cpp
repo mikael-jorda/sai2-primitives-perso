@@ -644,7 +644,7 @@ void control(Simulation::Sai2Simulation* sim)
 				joint_tasks[1]->reInitializeTask();
 
 				two_hand_task->reInitializeTask();
-				two_hand_task->updateObjectMassProperties(0.5, Matrix3d::Identity());
+				two_hand_task->setObjectMassPropertiesAndInitialInertialFrameLocation(0.5, Affine3d::Identity(), Matrix3d::Identity());
 
 				two_hand_task->_desired_object_position(2) += 0.15;
 				two_hand_task->_desired_internal_tension = -1;

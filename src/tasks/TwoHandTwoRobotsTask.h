@@ -114,11 +114,32 @@ public:
 
 	/**
 	 * @brief      reinitializes the desired state to the current robot
-	 *             configuration as well as the integrator terms
+	 *             configuration as well as the integrator terms. 
+	 *             Also reinitialize the control frame to the center of the grasp points, 
+	 *             and the inertial properties to zero.
 	 */
 	void reInitializeTask();
 
-	void updateObjectMassProperties(double object_mass, Eigen::Matrix3d object_inertia = Eigen::Matrix3d::Identity());
+	/**
+	 * @brief      Sets the object mass properties, and compute the transformation between 
+	 *             the frame of the grasp matrix and the object inertial frame
+	 *
+	 * @param[in]  object_mass     The object mass
+	 * @param[in]  T_world_com     The position of the object inertial frame in world frame
+	 * @param[in]  object_inertia  The object inertia tensor in its own inertial frame
+	 */
+	void setObjectMassPropertiesAndInitialInertialFrameLocation(double object_mass, 
+			Eigen::Affine3d T_world_com,
+			Eigen::Matrix3d object_inertia);
+
+	/**
+	 * @brief      Sets the control frame for the object. It will be placed on the object at the specified location and orientation
+	 * 			   when the function is called, and then it will follow the motion of the object assuming it is rigidly attached to the arms.
+	 * 			   Also sets the desired position and orientation to current.
+	 *
+	 * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
+	 */
+	void setInitialControlFrameLocation(Eigen::Affine3d T_world_controlpoint);
 
 	//------------------------------------------------
 	// Attributes
@@ -136,7 +157,8 @@ public:
 	Eigen::Affine3d _control_frame_2;   // in link_frame
 
 	double _object_mass;
-	Eigen::Matrix3d _object_inertia;
+	Eigen::Matrix3d _object_inertia_in_control_frame;
+	Eigen::Affine3d _T_com_controlpoint;
 
 	// object control quantities
 	Eigen::Vector3d _current_object_position;      // world frame
@@ -169,6 +191,12 @@ public:
 	Eigen::MatrixXd _grasp_matrix;
 	Eigen::Matrix3d _R_grasp_matrix;
 
+	// previous robots positions and orientations
+	Eigen::Vector3d _previous_position_r1;
+	Eigen::Vector3d _previous_position_r2;
+	Eigen::Matrix3d _previous_orientation_r1;
+	Eigen::Matrix3d _previous_orientation_r2;
+
 	Eigen::Vector3d _arbitrary_direction_hand1, _arbitrary_direction_hand2;
 	Eigen::Vector3d _x_object_frame, _y_object_frame, _z_object_frame;
 	Eigen::Affine3d _T_world_object;
@@ -190,9 +218,9 @@ public:
 	Eigen::MatrixXd _Jbar_2;
 	Eigen::MatrixXd _N_2;
 
-	bool _use_velocity_saturation_flag = false;
-	Eigen::Vector3d _linear_saturation_velocity;
-	Eigen::Vector3d _angular_saturation_velocity;
+	bool _use_velocity_saturation_flag;
+	double _linear_saturation_velocity;
+	double _angular_saturation_velocity;
 
 	Eigen::VectorXd _step_desired_object_position;
 	Eigen::VectorXd _step_desired_object_velocity;
@@ -205,8 +233,8 @@ public:
 	OTG* _otg_pos;
 	OTG_ori* _otg_ori;
 
-	bool _use_interpolation_pos_flag = true;
-	bool _use_interpolation_ori_flag = true;
+	bool _use_interpolation_pos_flag;
+	bool _use_interpolation_ori_flag;
 #endif
 
 	std::chrono::high_resolution_clock::time_point _t_prev;

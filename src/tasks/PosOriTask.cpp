@@ -280,10 +280,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_step_desired_velocity = -_kp_pos_mat * _kv_pos_mat.inverse() * (_current_position - _step_desired_position) - _ki_pos_mat * _kv_pos_mat.inverse() * _integrated_position_error;
 		for(int i=0; i<3; i++)
 		{
-			if(_step_desired_velocity.norm() > _linear_saturation_velocity)
-			{
-				_step_desired_velocity(i) *= _linear_saturation_velocity/_step_desired_velocity.norm();
-			}
+			_step_desired_velocity *= _linear_saturation_velocity/_step_desired_velocity.norm();
 		}
 		position_related_force = _sigma_position * (-_kv_pos_mat*(_current_velocity - _step_desired_velocity));
 	}
@@ -303,10 +300,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_step_desired_angular_velocity = -_kp_ori_mat * _kv_ori_mat.inverse() * _step_orientation_error - _ki_ori_mat * _kv_ori_mat.inverse() * _integrated_position_error;
 		for(int i=0; i<3; i++)
 		{
-			if(_step_desired_angular_velocity.norm() > _angular_saturation_velocity)
-			{
-				_step_desired_angular_velocity *= _angular_saturation_velocity/_step_desired_angular_velocity.norm();
-			}
+			_step_desired_angular_velocity *= _angular_saturation_velocity/_step_desired_angular_velocity.norm();
 		}
 		orientation_related_force = _sigma_orientation * (-_kv_ori_mat*(_current_angular_velocity - _step_desired_angular_velocity));
 	}

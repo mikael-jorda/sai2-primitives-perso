@@ -4,8 +4,8 @@ PROJECT (SAI2-PRIMITIVES)
 SET (PROJECT_VERSION 0.1.0) #major version is zero for now since api will certainly change in future
 
 SET(CMAKE_CXX_FLAGS "-std=c++11 -I/usr/include -I/usr/local/include")
-# SET(CMAKE_BUILD_TYPE "Debug")
-SET(CMAKE_BUILD_TYPE "Release")
+SET(CMAKE_BUILD_TYPE "Debug")
+# SET(CMAKE_BUILD_TYPE "Release")
 
 # option to use OTG 
 option(USE_OTG "use the Reflexxes library for trajectory generation" OFF)

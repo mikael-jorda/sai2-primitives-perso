@@ -56,6 +56,7 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 	_N_prec_1.setIdentity(dof_1, dof_1);
 	_N_prec_2.setIdentity(dof_2, dof_2);
 
+
 	if(dof_1 < 6 || dof_2 < 6)
 	{
 		throw std::invalid_argument("robots must have at least 6 DoF each for a TwoHandTwoRobotsTask\n");
@@ -74,7 +75,8 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 	_contact_constrained_rotations.push_back(3);
 	_contact_constrained_rotations.push_back(3);
 
-	_current_object_position.setZero();
+	// object position and orientation
+	_current_object_position = (_contact_locations[0] + _contact_locations[1]) / 2.0;
 	_current_object_orientation.setIdentity();
 
 	//gains
@@ -85,7 +87,15 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 	_kv_ori = 20.0;
 	_ki_ori = 0.0;
 
+	// velocity saturation
+	_use_velocity_saturation_flag = false;
+	_linear_saturation_velocity = 0.3;
+	_angular_saturation_velocity = M_PI/3;
+
 #ifdef USING_OTG
+	_use_interpolation_pos_flag = true;
+	_use_interpolation_ori_flag = true;
+
 	_loop_time = loop_time;
 	_otg_pos = new OTG(_current_object_position, _loop_time);
 	_otg_ori = new OTG_ori(_current_object_orientation, _loop_time);
@@ -143,10 +153,14 @@ void TwoHandTwoRobotsTask::updateTaskModel(const Eigen::MatrixXd N_prec_1, const
 
 	Eigen::MatrixXd J1_at_object_center;
 	_robot_arm_1->J_0(J1_at_object_center, _link_name_1, _T_hand1_object.translation());
-	_robot_arm_1->taskInertiaMatrix(_robot_1_effective_inertia, augmented_R1 * J1_at_object_center);
+	J1_at_object_center = augmented_R1 * J1_at_object_center;
+	_robot_arm_1->taskInertiaMatrix(_robot_1_effective_inertia, J1_at_object_center);
 	Eigen::MatrixXd J2_at_object_center;
 	_robot_arm_2->J_0(J2_at_object_center, _link_name_2, _T_hand2_object.translation());
-	_robot_arm_2->taskInertiaMatrix(_robot_2_effective_inertia,  augmented_R2 * J2_at_object_center);
+	J2_at_object_center = augmented_R2 * J2_at_object_center;
+	_robot_arm_2->taskInertiaMatrix(_robot_2_effective_inertia, J2_at_object_center);
+
+	_object_effective_inertia.block<3,3>(3,3) = _current_object_orientation * _object_inertia_in_control_frame * _current_object_orientation.transpose();
 
 	_Lambda_tot = _object_effective_inertia + _robot_1_effective_inertia + _robot_2_effective_inertia;
 
@@ -184,39 +198,58 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_robot_arm_1->rotationInWorld(rot_robot1, _link_name_1);
 	_robot_arm_2->rotationInWorld(rot_robot2, _link_name_2);
 
-	// compute grasp matrix and object frame
-	Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _R_grasp_matrix, _current_object_position,
+	// compute object frame and grasp matrix
+	Eigen::Vector3d position_increment_r1 = _contact_locations[0] - _previous_position_r1;
+	Eigen::Vector3d position_increment_r2 = _contact_locations[1] - _previous_position_r2;
+
+	Eigen::Vector3d object_position_increment = (position_increment_r1 + position_increment_r2) / 2.0;
+	_current_object_position += object_position_increment;
+
+	Eigen::Matrix3d orientation_increment_r1 = rot_robot1 * _previous_orientation_r1.transpose();
+	Eigen::Matrix3d orientation_increment_r2 = rot_robot2 * _previous_orientation_r2.transpose();
+
+	Eigen::Matrix3d added_orientation_increment = orientation_increment_r1 * orientation_increment_r2; // small rotations so we assume they commute
+	Eigen::AngleAxisd ori_increment_aa = Eigen::AngleAxisd(added_orientation_increment);
+	Eigen::Matrix3d object_orientation_increment = Eigen::AngleAxisd(ori_increment_aa.angle()/2.0, ori_increment_aa.axis()).toRotationMatrix();
+
+	_current_object_orientation = object_orientation_increment * _current_object_orientation;
+
+	Sai2Model::graspMatrix(_grasp_matrix, _R_grasp_matrix, _current_object_position,
 				_contact_locations, _contact_constrained_rotations);
 
-	_x_object_frame = _contact_locations[0] - _contact_locations[1];
-	_x_object_frame.normalize();
+	// // compute grasp matrix and object frame
+	// Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _R_grasp_matrix, _current_object_position,
+	// 			_contact_locations, _contact_constrained_rotations);
 
-	Eigen::Matrix3d projector_orthogonal_nullspace_x_object = Eigen::Matrix3d::Identity() - _x_object_frame * _x_object_frame.transpose();
-	Eigen::Vector3d projected_arbitrary_direction_hand1_in_world = projector_orthogonal_nullspace_x_object * rot_robot1 * _arbitrary_direction_hand1;
-	Eigen::Vector3d projected_arbitrary_direction_hand2_in_world = projector_orthogonal_nullspace_x_object * rot_robot2 * _arbitrary_direction_hand2;
+	// _x_object_frame = _contact_locations[0] - _contact_locations[1];
+	// _x_object_frame.normalize();
 
-	if(projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).norm() < 1e-2)
-	{
-		_y_object_frame = projected_arbitrary_direction_hand1_in_world.normalized();
-	}
-	else
-	{
-		double angle = acos(projected_arbitrary_direction_hand1_in_world.dot(projected_arbitrary_direction_hand2_in_world));
-		if (projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).dot(_x_object_frame) < 0)
-		{
-			angle = -angle;
-		}
-		Eigen::Matrix3d half_rotation = Eigen::AngleAxisd(angle/2.0, _x_object_frame).toRotationMatrix(); 
-		_y_object_frame = half_rotation * projected_arbitrary_direction_hand1_in_world;
-		_y_object_frame.normalize();
-	}
+	// Eigen::Matrix3d projector_orthogonal_nullspace_x_object = Eigen::Matrix3d::Identity() - _x_object_frame * _x_object_frame.transpose();
+	// Eigen::Vector3d projected_arbitrary_direction_hand1_in_world = projector_orthogonal_nullspace_x_object * rot_robot1 * _arbitrary_direction_hand1;
+	// Eigen::Vector3d projected_arbitrary_direction_hand2_in_world = projector_orthogonal_nullspace_x_object * rot_robot2 * _arbitrary_direction_hand2;
 
-	_z_object_frame = _x_object_frame.cross(_y_object_frame);
-	_z_object_frame.normalize();
+	// if(projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).norm() < 1e-2)
+	// {
+	// 	_y_object_frame = projected_arbitrary_direction_hand1_in_world.normalized();
+	// }
+	// else
+	// {
+	// 	double angle = acos(projected_arbitrary_direction_hand1_in_world.dot(projected_arbitrary_direction_hand2_in_world));
+	// 	if (projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).dot(_x_object_frame) < 0)
+	// 	{
+	// 		angle = -angle;
+	// 	}
+	// 	Eigen::Matrix3d half_rotation = Eigen::AngleAxisd(angle/2.0, _x_object_frame).toRotationMatrix(); 
+	// 	_y_object_frame = half_rotation * projected_arbitrary_direction_hand1_in_world;
+	// 	_y_object_frame.normalize();
+	// }
 
-	_current_object_orientation.col(0) = _x_object_frame;
-	_current_object_orientation.col(1) = _y_object_frame;
-	_current_object_orientation.col(2) = _z_object_frame;
+	// _z_object_frame = _x_object_frame.cross(_y_object_frame);
+	// _z_object_frame.normalize();
+
+	// _current_object_orientation.col(0) = _x_object_frame;
+	// _current_object_orientation.col(1) = _y_object_frame;
+	// _current_object_orientation.col(2) = _z_object_frame;
 
 	_T_world_object.translation() = _current_object_position;
 	_T_world_object.linear() = _current_object_orientation;
@@ -255,16 +288,9 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_object_velocity = -_kp_pos / _kv_pos * (_current_object_position - _step_desired_object_position) - _ki_pos / _kv_pos * _integrated_object_position_error;
-		for(int i=0; i<3; i++)
+		if(_step_desired_object_velocity.norm() > _linear_saturation_velocity)
 		{
-			if(_step_desired_object_velocity(i) > _linear_saturation_velocity(i))
-			{
-				_step_desired_object_velocity(i) = _linear_saturation_velocity(i);
-			}
-			else if(_step_desired_object_velocity(i) < -_linear_saturation_velocity(i))
-			{
-				_step_desired_object_velocity(i) = -_linear_saturation_velocity(i);
-			}
+			_step_desired_object_velocity *= _linear_saturation_velocity/_step_desired_object_velocity.norm();
 		}
 		position_related_force = -_kv_pos*(_current_object_velocity - _step_desired_object_velocity);
 	}
@@ -293,16 +319,9 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_object_angular_velocity = -_kp_ori / _kv_ori * _step_object_orientation_error - _ki_ori / _kv_ori * _integrated_object_position_error;
-		for(int i=0; i<3; i++)
+		if(_step_desired_object_angular_velocity.norm() > _angular_saturation_velocity)
 		{
-			if(_step_desired_object_angular_velocity(i) > _angular_saturation_velocity(i))
-			{
-				_step_desired_object_angular_velocity(i) = _angular_saturation_velocity(i);
-			}
-			else if(_step_desired_object_angular_velocity(i) < -_angular_saturation_velocity(i))
-			{
-				_step_desired_object_angular_velocity(i) = -_angular_saturation_velocity(i);
-			}
+			_step_desired_object_angular_velocity *= _angular_saturation_velocity / _step_desired_object_angular_velocity.norm();
 		}
 		orientation_related_force = -_kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity);
 	}
@@ -343,8 +362,13 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	task_joint_torques_1 = _projected_jacobian_1.transpose()*robot_1_task_force;
 	task_joint_torques_2 = _projected_jacobian_2.transpose()*robot_2_task_force;
 
-	// update previous time
+	// update previous time and robot positions and orientations
 	_t_prev = _t_curr;
+
+	_previous_position_r1 = _contact_locations[0];
+	_previous_position_r2 = _contact_locations[1];
+	_previous_orientation_r1 = rot_robot1;
+	_previous_orientation_r2 = rot_robot2;
 }
 
 void TwoHandTwoRobotsTask::reInitializeTask()
@@ -353,13 +377,8 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	int dof_2 = _robot_arm_2->dof();
 
 	// contact locations for grasp matrix computation
-	Eigen::Vector3d robot_1_contact = Eigen::Vector3d::Zero();
-	Eigen::Vector3d robot_2_contact = Eigen::Vector3d::Zero();
-	_robot_arm_1->positionInWorld(robot_1_contact, _link_name_1, _control_frame_1.translation());
-	_robot_arm_2->positionInWorld(robot_2_contact, _link_name_2, _control_frame_2.translation());
-
-	_contact_locations[0] = robot_1_contact;
-	_contact_locations[1] = robot_2_contact;
+	_robot_arm_1->positionInWorld(_contact_locations[0], _link_name_1, _control_frame_1.translation());
+	_robot_arm_2->positionInWorld(_contact_locations[1], _link_name_2, _control_frame_2.translation());
 
 	// Pose of robots hands
 	Eigen::Affine3d T_world_hand1 = Eigen::Affine3d::Identity();
@@ -368,52 +387,75 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	_robot_arm_2->transformInWorld(T_world_hand2, _link_name_2);
 
 	// grasp matrix and object position
-	Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _R_grasp_matrix, _current_object_position,
+	Eigen::Matrix3d rot_robot1 = Eigen::Matrix3d::Identity();
+	Eigen::Matrix3d rot_robot2 = Eigen::Matrix3d::Identity();
+	_robot_arm_1->rotationInWorld(rot_robot1, _link_name_1);
+	_robot_arm_2->rotationInWorld(rot_robot2, _link_name_2);
+
+	_previous_position_r1 = _contact_locations[0];
+	_previous_position_r2 = _contact_locations[1];
+	_previous_orientation_r1 = rot_robot1;
+	_previous_orientation_r2 = rot_robot2;
+
+	// _current_object_position.setZero();
+	_current_object_position = (_contact_locations[0] + _contact_locations[1]) / 2.0;
+	_current_object_orientation.setIdentity();
+
+	// object inertial properties
+	_object_mass = 0;
+	_object_inertia_in_control_frame = Eigen::Matrix3d::Zero();
+	_object_effective_inertia.setZero(6,6);
+	_T_com_controlpoint = Eigen::Affine3d::Identity();
+
+
+	Sai2Model::graspMatrix(_grasp_matrix, _R_grasp_matrix, _current_object_position,
 				_contact_locations, _contact_constrained_rotations);
+
 	_desired_object_position = _current_object_position;
-
-	// object orientation
-	_x_object_frame = robot_1_contact - robot_2_contact;
-	_x_object_frame.normalize();
-
-	if(_x_object_frame.dot(Eigen::Vector3d::UnitZ()) < 0.1)
-	{
-		_arbitrary_direction_hand1 = T_world_hand1.linear().transpose() * Eigen::Vector3d::UnitZ();
-		_arbitrary_direction_hand2 = T_world_hand2.linear().transpose() * Eigen::Vector3d::UnitZ();
-	}
-	else
-	{
-		_arbitrary_direction_hand1 = T_world_hand1.linear().transpose() * Eigen::Vector3d::UnitX();
-		_arbitrary_direction_hand2 = T_world_hand2.linear().transpose() * Eigen::Vector3d::UnitX();
-	}
-
-	Eigen::Matrix3d projector_orthogonal_nullspace_x_object = Eigen::Matrix3d::Identity() - _x_object_frame * _x_object_frame.transpose();
-	Eigen::Vector3d projected_arbitrary_direction_hand1_in_world = projector_orthogonal_nullspace_x_object * T_world_hand1.linear() * _arbitrary_direction_hand1;
-	Eigen::Vector3d projected_arbitrary_direction_hand2_in_world = projector_orthogonal_nullspace_x_object * T_world_hand2.linear() * _arbitrary_direction_hand2;
-
-	if(projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).norm() < 1e-2)
-	{
-		_y_object_frame = projected_arbitrary_direction_hand1_in_world.normalized();
-	}
-	else
-	{
-		double angle = acos(projected_arbitrary_direction_hand1_in_world.dot(projected_arbitrary_direction_hand2_in_world));
-		if (projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).dot(_x_object_frame) < 0)
-		{
-			angle = -angle;
-		}
-		Eigen::Matrix3d half_rotation = Eigen::AngleAxisd(angle/2.0, _x_object_frame).toRotationMatrix(); 
-		_y_object_frame = half_rotation * projected_arbitrary_direction_hand1_in_world;
-		_y_object_frame.normalize();
-	}
-
-	_z_object_frame = _x_object_frame.cross(_y_object_frame);
-	_z_object_frame.normalize();
-
-	_current_object_orientation.col(0) = _x_object_frame;
-	_current_object_orientation.col(1) = _y_object_frame;
-	_current_object_orientation.col(2) = _z_object_frame;
 	_desired_object_orientation = _current_object_orientation;
+
+	// // object orientation
+	// _x_object_frame = robot_1_contact - robot_2_contact;
+	// _x_object_frame.normalize();
+
+	// if(_x_object_frame.dot(Eigen::Vector3d::UnitZ()) < 0.1)
+	// {
+	// 	_arbitrary_direction_hand1 = T_world_hand1.linear().transpose() * Eigen::Vector3d::UnitZ();
+	// 	_arbitrary_direction_hand2 = T_world_hand2.linear().transpose() * Eigen::Vector3d::UnitZ();
+	// }
+	// else
+	// {
+	// 	_arbitrary_direction_hand1 = T_world_hand1.linear().transpose() * Eigen::Vector3d::UnitX();
+	// 	_arbitrary_direction_hand2 = T_world_hand2.linear().transpose() * Eigen::Vector3d::UnitX();
+	// }
+
+	// Eigen::Matrix3d projector_orthogonal_nullspace_x_object = Eigen::Matrix3d::Identity() - _x_object_frame * _x_object_frame.transpose();
+	// Eigen::Vector3d projected_arbitrary_direction_hand1_in_world = projector_orthogonal_nullspace_x_object * T_world_hand1.linear() * _arbitrary_direction_hand1;
+	// Eigen::Vector3d projected_arbitrary_direction_hand2_in_world = projector_orthogonal_nullspace_x_object * T_world_hand2.linear() * _arbitrary_direction_hand2;
+
+	// if(projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).norm() < 1e-2)
+	// {
+	// 	_y_object_frame = projected_arbitrary_direction_hand1_in_world.normalized();
+	// }
+	// else
+	// {
+	// 	double angle = acos(projected_arbitrary_direction_hand1_in_world.dot(projected_arbitrary_direction_hand2_in_world));
+	// 	if (projected_arbitrary_direction_hand1_in_world.cross(projected_arbitrary_direction_hand2_in_world).dot(_x_object_frame) < 0)
+	// 	{
+	// 		angle = -angle;
+	// 	}
+	// 	Eigen::Matrix3d half_rotation = Eigen::AngleAxisd(angle/2.0, _x_object_frame).toRotationMatrix(); 
+	// 	_y_object_frame = half_rotation * projected_arbitrary_direction_hand1_in_world;
+	// 	_y_object_frame.normalize();
+	// }
+
+	// _z_object_frame = _x_object_frame.cross(_y_object_frame);
+	// _z_object_frame.normalize();
+
+	// _current_object_orientation.col(0) = _x_object_frame;
+	// _current_object_orientation.col(1) = _y_object_frame;
+	// _current_object_orientation.col(2) = _z_object_frame;
+	// _desired_object_orientation = _current_object_orientation;
 
 	// update object pose in world
 	_T_world_object.translation() = _current_object_position;
@@ -423,15 +465,25 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	_T_hand1_object = T_world_hand1.inverse() * _T_world_object;
 	_T_hand2_object = T_world_hand2.inverse() * _T_world_object;
 
-	_object_effective_inertia.setIdentity(6,6);
+	// _object_effective_inertia.setIdentity(6,6);
+
+	Eigen::MatrixXd augmented_R1 = Eigen::MatrixXd::Zero(6,6);
+	Eigen::MatrixXd augmented_R2 = Eigen::MatrixXd::Zero(6,6);
+	augmented_R1.block<3,3>(0,0) = _robot_arm_1->_T_world_robot.linear();
+	augmented_R1.block<3,3>(3,3) = _robot_arm_1->_T_world_robot.linear();
+	augmented_R2.block<3,3>(0,0) = _robot_arm_2->_T_world_robot.linear();
+	augmented_R2.block<3,3>(3,3) = _robot_arm_2->_T_world_robot.linear();
 
 	_robot_1_effective_inertia.setZero(6,6);
 	Eigen::MatrixXd J1_at_object_center;
 	_robot_arm_1->J_0(J1_at_object_center, _link_name_1, _T_hand1_object.translation());
+	J1_at_object_center = augmented_R1 * J1_at_object_center;
 	_robot_arm_1->taskInertiaMatrix(_robot_1_effective_inertia, J1_at_object_center);
+
 	_robot_2_effective_inertia.setZero(6,6);
 	Eigen::MatrixXd J2_at_object_center;
 	_robot_arm_2->J_0(J2_at_object_center, _link_name_2, _T_hand2_object.translation());
+	J2_at_object_center = augmented_R2 * J2_at_object_center;
 	_robot_arm_2->taskInertiaMatrix(_robot_2_effective_inertia, J2_at_object_center);
 
 	_Lambda_tot = _object_effective_inertia + _robot_1_effective_inertia + _robot_2_effective_inertia;
@@ -477,14 +529,35 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 #endif
 }
 
-void TwoHandTwoRobotsTask::updateObjectMassProperties(double object_mass, Eigen::Matrix3d object_inertia)
+void TwoHandTwoRobotsTask::setObjectMassPropertiesAndInitialInertialFrameLocation(double object_mass, Eigen::Affine3d T_world_com, Eigen::Matrix3d object_inertia)
 {
 	_object_mass = object_mass;
-	_object_inertia = object_inertia;
 
+	// compute the transformation between the control point and the inertial frame
+	Eigen::Affine3d T_world_controlpoint = Eigen::Affine3d::Identity();
+	T_world_controlpoint.translation() = _current_object_position;
+	T_world_controlpoint.linear() = _current_object_orientation;
+
+	_T_com_controlpoint = T_world_com.inverse() * T_world_controlpoint;
+
+	// compute the object inertia tensor in the control frame
+	Eigen::Vector3d p_com_cp = _T_com_controlpoint.translation();
+	Eigen::Matrix3d object_inertia_wrt_control_point = object_inertia +     // parallel axis theorem
+		object_mass * (p_com_cp.transpose()*p_com_cp * Eigen::Matrix3d::Identity() - p_com_cp*p_com_cp.transpose()); 
+	Eigen::Matrix3d _object_inertia_in_control_frame = _T_com_controlpoint.linear().transpose() * object_inertia_wrt_control_point * _T_com_controlpoint.linear();  // we rotate the tensor in the control frame
+
+	// update the object effective inertia in the control frame and the total effective inertia in world frame
 	_object_effective_inertia.setZero(6,6);
 	_object_effective_inertia.block<3,3>(0,0) = _object_mass * Eigen::Matrix3d::Identity();
-	_object_effective_inertia.block<3,3>(3,3) = _object_inertia;
+	_object_effective_inertia.block<3,3>(3,3) = _current_object_orientation * _object_inertia_in_control_frame * _current_object_orientation.transpose();
+
+	_Lambda_tot = _object_effective_inertia + _robot_1_effective_inertia + _robot_2_effective_inertia;
+}
+
+void TwoHandTwoRobotsTask::setInitialControlFrameLocation(Eigen::Affine3d T_world_controlpoint)
+{
+	_current_object_position = T_world_controlpoint.translation();
+	_current_object_orientation = T_world_controlpoint.linear();
 }
 
 
