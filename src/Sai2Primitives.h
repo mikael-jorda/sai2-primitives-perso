@@ -7,6 +7,10 @@
 #include "primitives/RedundantArmMotion.h"
 #include "primitives/SurfaceSurfaceAlignment.h"
 #include "primitives/DualArmObjectMotion.h"
+
+#include "haptic_tasks/OpenLoopTeleop.h"
+#include "haptic_tasks/HapticController.h"
+
 #ifdef USING_OTG
 #include "trajectory_generation/OTG.h"
 #include "trajectory_generation/OTG_ori.h"

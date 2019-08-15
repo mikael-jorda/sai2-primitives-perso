@@ -8,7 +8,7 @@ SET(CMAKE_BUILD_TYPE "Debug")
 # SET(CMAKE_BUILD_TYPE "Release")
 
 # option to use OTG 
-option(USE_OTG "use the Reflexxes library for trajectory generation" OFF)
+option(USE_OTG "use the Reflexxes library for trajectory generation" ON)
 if(USE_OTG)
 	# need to set these two paths manually depending on install path of Reflexxes library
 	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeIV) # need to manually set the path
@@ -41,8 +41,24 @@ if(NOT EIGEN3_INCLUDE_DIR)
 	endif()
 endif()
 
+# include Chai3d 
+# -- this is required by Chai3d to pick the correct path for OpenGL headers
+FIND_PACKAGE(CHAI3D REQUIRED)
+ADD_DEFINITIONS(${CHAI3D_DEFINITIONS})
+if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
+  ADD_DEFINITIONS(-D_MACOSX -DMACOSX)
+elseif (CMAKE_SYSTEM_NAME MATCHES Linux)
+  ADD_DEFINITIONS(-D_LINUX -DLINUX)
+endif () #NOTE: Windows is currently unsupported
+LINK_DIRECTORIES(${CHAI3D_LIBRARY_DIRS})
+
 # include sai2-model
 find_package(SAI2-MODEL REQUIRED)
+
+# - SAI2-COMMON
+find_package(SAI2-COMMON REQUIRED)
+include_directories(${SAI2-COMMON_INCLUDE_DIRS})
+add_definitions(${SAI2-COMMON_DEFINITIONS})
 
 # add tasks
 SET(TASKS_SOURCE 
@@ -61,6 +77,12 @@ SET(PRIMITIVES_SOURCE
 	${PROJECT_SOURCE_DIR}/src/primitives/DualArmObjectMotion.cpp
 	)
 
+# add haptic_tasks
+SET(HAPTIC_TASKS_SOURCE
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
+	)
+
 # add header files
 SET(SAI2-PRIMITIVES_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src)
 
@@ -69,6 +91,7 @@ INCLUDE_DIRECTORIES (
 	${SAI2-PRIMITIVES_INCLUDE_DIRS}
 	${EIGEN3_INCLUDE_DIR}
 	${SAI2-MODEL_INCLUDE_DIRS}
+	${CHAI3D_INCLUDE_DIRS}
 	)
 
 # Create the library
@@ -76,12 +99,14 @@ if(USE_OTG)
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PRIMITIVES_SOURCE}
+		${HAPTIC_TASKS_SOURCE}
 		${OTG_SOURCE}
 		)
 else()
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PRIMITIVES_SOURCE}
+		${HAPTIC_TASKS_SOURCE}
 		)
 endif()
 
@@ -94,10 +119,14 @@ if(USE_OTG)
 	SET(SAI2-PRIMITIVES_LIBRARIES
 	sai2-primitives
 	${OTG_LIBRARY}
+	${CHAI3D_LIBARIES}
+	${SAI2-COMMON_LIBRARIES}
 	)
 else()
 	SET(SAI2-PRIMITIVES_LIBRARIES
 	sai2-primitives
+	${CHAI3D_LIBARIES}
+	${SAI2-COMMON_LIBRARIES}
 	)
 endif()
 
@@ -129,4 +158,4 @@ write_basic_package_version_file(
 )
 
 # add examples
-ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/examples)
+#ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/examples)
