@@ -144,6 +144,10 @@ void PosOriTask::reInitializeTask()
 	_closed_loop_force_control = false;
 	_closed_loop_moment_control = false;
 
+	_passivity_enabled = true;
+	_passivity_observer = 0;
+	_Rc = 0;
+
 	_task_force.setZero(6);
 	_first_iteration = true;	
 
@@ -232,6 +236,24 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		// compute the feedback term
 		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error - _kv_force * _current_velocity;
 
+		// implement passivity observer and controller
+		if(_passivity_enabled)
+		{
+			Eigen::Vector3d f_diff = _desired_force - _sensed_force;
+			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term) - 
+					// (double) (_Rc * force_feedback_term.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
+			_passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
+
+			if(_passivity_observer > 0)
+			{
+				double Rcb = _Rc - _passivity_observer / ((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _t_diff.count());
+				// std::cout << "Rcbis : " << Rcb << std::endl;
+			}
+
+
+			// std::cout << _passivity_observer << "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+		}
+
 		// compute the final contribution
 		force_related_force = _sigma_force * (_desired_force + force_feedback_term);
 	}
@@ -278,7 +300,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_velocity = -_kp_pos_mat * _kv_pos_mat.inverse() * (_current_position - _step_desired_position) - _ki_pos_mat * _kv_pos_mat.inverse() * _integrated_position_error;
-		for(int i=0; i<3; i++)
+		if(_step_desired_velocity.norm() > _linear_saturation_velocity)
 		{
 			_step_desired_velocity *= _linear_saturation_velocity/_step_desired_velocity.norm();
 		}
@@ -297,8 +319,8 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// final contribution
 	if(_use_velocity_saturation_flag)
 	{
-		_step_desired_angular_velocity = -_kp_ori_mat * _kv_ori_mat.inverse() * _step_orientation_error - _ki_ori_mat * _kv_ori_mat.inverse() * _integrated_position_error;
-		for(int i=0; i<3; i++)
+		_step_desired_angular_velocity = -_kp_ori_mat * _kv_ori_mat.inverse() * _step_orientation_error - _ki_ori_mat * _kv_ori_mat.inverse() * _integrated_orientation_error;
+		if(_step_desired_angular_velocity.norm() > _angular_saturation_velocity)
 		{
 			_step_desired_angular_velocity *= _angular_saturation_velocity/_step_desired_angular_velocity.norm();
 		}
