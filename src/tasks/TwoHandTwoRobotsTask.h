@@ -116,7 +116,7 @@ public:
 	 * @brief      reinitializes the desired state to the current robot
 	 *             configuration as well as the integrator terms. 
 	 *             Also reinitialize the control frame to the center of the grasp points, 
-	 *             and the inertial properties to zero.
+	 *             and the inertial properties to zero, and the object controller to be on motion for all axes.
 	 */
 	void reInitializeTask();
 
@@ -139,7 +139,38 @@ public:
 	 *
 	 * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
 	 */
-	void setInitialControlFrameLocation(Eigen::Affine3d T_world_controlpoint);
+	void setControlFrameLocationInitial(Eigen::Affine3d T_world_controlpoint);
+
+	//////////////////////////// Object force control related functions /////////////////////////////////////
+
+	void setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 
+										const std::string link_name_2, const Eigen::Affine3d sensor_in_link_r2);
+
+	void updateSensedForcesAndMoments(const Eigen::Vector3d sensed_force_sensor_frame_r1,
+										const Eigen::Vector3d sensed_moment_sensor_frame_r1,
+										const Eigen::Vector3d sensed_force_sensor_frame_r2,
+										const Eigen::Vector3d sensed_moment_sensor_frame_r2);
+
+	void setForceAxis(const Eigen::Vector3d force_axis);
+
+	void setLinearMotionAxis(const Eigen::Vector3d linear_motion_axis);
+
+	void setMomentAxis(const Eigen::Vector3d moment_axis);
+
+	void setAngularMotionAxis(const Eigen::Vector3d angular_motion_axis);
+
+	void setFullLinearMotionControl();
+
+	void setFullForceControl();
+
+	void setFullAngularMotionControl();
+
+	void setFullMomentControl();
+
+	void setClosedLoopForceControl();
+
+	void setClosedLoopMomentControl();
+
 
 	//------------------------------------------------
 	// Attributes
@@ -171,6 +202,8 @@ public:
 	Eigen::Vector3d _current_object_angular_velocity;   // world frame
 	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
 
+	Eigen::VectorXd _object_gravity;
+
 	double _kp_pos, _kp_ori;
 	double _kv_pos, _kv_ori;
 	double _ki_pos, _ki_ori;
@@ -179,7 +212,39 @@ public:
 	Eigen::Vector3d _integrated_object_orientation_error;    // world frame
 	Eigen::Vector3d _integrated_object_position_error;       // world frame
 
+	Eigen::Matrix3d _sigma_position;
+	Eigen::Matrix3d _sigma_orientation;
+
+	// object force control quantities
+	Eigen::Affine3d _T_contact_fsensor_r1;
+	Eigen::Affine3d _T_contact_fsensor_r2;
+
+	Eigen::Vector3d _sensed_force_r1;          // world frame
+	Eigen::Vector3d _sensed_force_r2;          // world frame
+	Eigen::Vector3d _sensed_moment_r1;          // world frame
+	Eigen::Vector3d _sensed_moment_r2;          // world frame
+
+	Eigen::Vector3d _object_sensed_force;
+	Eigen::Vector3d _object_sensed_moment;
+	Eigen::Vector3d _object_desired_force;
+	Eigen::Vector3d _object_desired_moment;
+
+	Eigen::Vector3d _integrated_object_force_error;    // world frame
+	Eigen::Vector3d _integrated_object_moment_error;   // world frame
+
+	bool _closed_loop_force_control;
+	bool _closed_loop_moment_control;
+
+	double _kp_force, _kp_moment;
+	double _ki_force, _ki_moment;
+	double _kv_force, _kv_moment;
+
+	Eigen::Matrix3d _sigma_force;
+	Eigen::Matrix3d _sigma_moment;
+
 	// internal forces quantities
+	double _sensed_internal_tension;
+	Eigen::VectorXd _sensed_internal_moments;
 	double _desired_internal_tension;;
 	Eigen::VectorXd _desired_internal_moments;
 

@@ -87,6 +87,15 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 	_kv_ori = 20.0;
 	_ki_ori = 0.0;
 
+	_kp_force = 1.0;
+	_ki_force = 1.7;
+	_kv_force = 10.0;
+	_kp_moment = 1.0;
+	_ki_moment = 1.7;
+	_kv_moment = 10.0;
+
+	_object_gravity.setZero(6);
+
 	// velocity saturation
 	_use_velocity_saturation_flag = false;
 	_linear_saturation_velocity = 0.3;
@@ -187,6 +196,8 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 
 	Eigen::Vector3d position_related_force = Eigen::Vector3d::Zero();
 	Eigen::Vector3d orientation_related_force = Eigen::Vector3d::Zero();
+	Eigen::Vector3d force_related_force = Eigen::Vector3d::Zero();
+	Eigen::Vector3d moment_related_force = Eigen::Vector3d::Zero();
 
 	// update controller state
 	_robot_arm_1->positionInWorld(_contact_locations[0], _link_name_1, _control_frame_1.translation());
@@ -271,6 +282,40 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_step_object_orientation_error = _object_orientation_error;
 	_step_desired_object_angular_velocity = _desired_object_angular_velocity;
 
+	// force related terms
+	if(_closed_loop_force_control)
+	{
+		// update the integrated error
+		_integrated_object_force_error += (_object_sensed_force - _object_desired_force) * _t_diff.count();
+
+		// compute the feedback term
+		Eigen::Vector3d force_feedback_term = - _kp_force * (_object_sensed_force - _object_desired_force) - _ki_force * _integrated_object_force_error - _kv_force * _current_object_velocity;
+
+		// compute the final contribution
+		force_related_force = _sigma_force * (_object_desired_force + force_feedback_term);
+	}
+	else
+	{
+		force_related_force = _sigma_force * _object_desired_force;
+	}
+
+	// moment related terms
+	if(_closed_loop_moment_control)
+	{
+		// update the integrated error
+		_integrated_object_moment_error += (_object_sensed_moment - _object_desired_moment) * _t_diff.count();
+
+		// compute the feedback term
+		Eigen::Vector3d moment_feedback_term = - _kp_moment * (_object_sensed_moment - _object_desired_moment) - _ki_moment * _integrated_object_moment_error - _kv_moment * _current_object_angular_velocity;
+
+		// compute the final contribution
+		moment_related_force = _sigma_moment * (_object_desired_moment + moment_feedback_term);
+	}
+	else
+	{
+		moment_related_force = _sigma_moment * _object_desired_moment;
+	}
+
 	// linear motion related terms
 	// compute next state from trajectory generation
 #ifdef USING_OTG
@@ -296,8 +341,8 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	}
 	else
 	{
-		position_related_force = -_kp_pos*(_current_object_position - _step_desired_object_position) - 
-			_kv_pos*(_current_object_velocity - _step_desired_object_velocity ) - _ki_pos * _integrated_object_position_error;
+		position_related_force = _sigma_position * ( -_kp_pos*(_current_object_position - _step_desired_object_position) - 
+			_kv_pos*(_current_object_velocity - _step_desired_object_velocity ) - _ki_pos * _integrated_object_position_error);
 	}
 
 
@@ -327,12 +372,19 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	}
 	else
 	{
-		orientation_related_force = -_kp_ori*_step_object_orientation_error - _kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity) - 
-			_ki_ori*_integrated_object_orientation_error;
+		orientation_related_force = _sigma_orientation * ( -_kp_ori*_step_object_orientation_error - _kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity) - 
+			_ki_ori*_integrated_object_orientation_error);
 	}
 
 	// object gravity compensation
-	Eigen::VectorXd object_gravity = Eigen::VectorXd::Zero(6);
+	Eigen::Affine3d T_controlpoint_com = _T_com_controlpoint.inverse();
+	Eigen::Vector3d p_controlpoint_com_world_frame = _current_object_orientation*T_controlpoint_com.translation();
+
+	Eigen::Vector3d object_linear_gravity = Eigen::Vector3d::Zero(3);
+	object_linear_gravity(2) = -9.81 * _object_mass;
+
+	_object_gravity.head(3) = object_linear_gravity;
+	_object_gravity.tail(3) = p_controlpoint_com_world_frame.cross(object_linear_gravity);
 	// object_gravity << 0, 0, _object_mass * 9.81, 0, 0, 0;
 
 	// internal forces contribution
@@ -342,11 +394,14 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 
 	// compute task force
 	Eigen::VectorXd position_orientation_contribution(6);
-
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
 
-	Eigen::VectorXd object_task_force = _Lambda_tot * position_orientation_contribution + object_gravity;
+	Eigen::VectorXd force_moment_contribution(6);
+	force_moment_contribution.head(3) = force_related_force;
+	force_moment_contribution.tail(3) = moment_related_force;
+
+	Eigen::VectorXd object_task_force = _Lambda_tot * position_orientation_contribution + force_moment_contribution - _object_gravity;
 	// Eigen::VectorXd object_task_force = position_orientation_contribution + object_gravity;
 
 	_task_force << object_task_force, internal_task_force;
@@ -357,7 +412,6 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	Eigen::VectorXd robot_2_task_force = Eigen::VectorXd::Zero(6);
 	robot_1_task_force << robots_task_forces.segment<3>(0), robots_task_forces.segment<3>(6);
 	robot_2_task_force << robots_task_forces.segment<3>(3), robots_task_forces.segment<3>(9);
-
 
 	task_joint_torques_1 = _projected_jacobian_1.transpose()*robot_1_task_force;
 	task_joint_torques_2 = _projected_jacobian_2.transpose()*robot_2_task_force;
@@ -507,9 +561,30 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	_integrated_object_orientation_error.setZero();
 	_integrated_object_position_error.setZero();
 
+	// object force quantities
+	_sigma_position.setIdentity();
+	_sigma_orientation.setIdentity();
+	_sigma_force.setZero();
+	_sigma_moment.setZero();
+
+	_sensed_force_r1.setZero();
+	_sensed_force_r2.setZero();
+	_sensed_moment_r1.setZero();
+	_sensed_moment_r2.setZero();
+
+	_object_sensed_force.setZero();
+	_object_sensed_moment.setZero();
+	_object_desired_force.setZero();
+	_object_desired_moment.setZero();
+
+	_closed_loop_force_control = false;
+	_closed_loop_moment_control = false;
+
 	// internal forces quantities
 	_desired_internal_tension = 0;
 	_desired_internal_moments.setZero(5);
+	_sensed_internal_tension = 0;
+	_sensed_internal_moments.setZero(5);
 
 	// task force
 	_task_force.setZero(12);
@@ -554,10 +629,131 @@ void TwoHandTwoRobotsTask::setObjectMassPropertiesAndInitialInertialFrameLocatio
 	_Lambda_tot = _object_effective_inertia + _robot_1_effective_inertia + _robot_2_effective_inertia;
 }
 
-void TwoHandTwoRobotsTask::setInitialControlFrameLocation(Eigen::Affine3d T_world_controlpoint)
+void TwoHandTwoRobotsTask::setControlFrameLocationInitial(Eigen::Affine3d T_world_controlpoint)
 {
 	_current_object_position = T_world_controlpoint.translation();
 	_current_object_orientation = T_world_controlpoint.linear();
+}
+
+void TwoHandTwoRobotsTask::setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 
+									const std::string link_name_2, const Eigen::Affine3d sensor_in_link_r2)
+{
+	if(link_name_1 != _link_name_1  ||  link_name_2 != _link_name_2)
+	{
+		throw std::invalid_argument("The link to which is attached the sensor should be the same as the link to which is attached the control frame in TwoHandTwoRobotsTask::setForceSensorFrames\n");
+	}
+
+	_T_contact_fsensor_r1 = _control_frame_1.inverse() * sensor_in_link_r1;
+	_T_contact_fsensor_r2 = _control_frame_2.inverse() * sensor_in_link_r2;
+}
+
+
+void TwoHandTwoRobotsTask::updateSensedForcesAndMoments(const Eigen::Vector3d sensed_force_sensor_frame_r1,
+									const Eigen::Vector3d sensed_moment_sensor_frame_r1,
+									const Eigen::Vector3d sensed_force_sensor_frame_r2,
+									const Eigen::Vector3d sensed_moment_sensor_frame_r2)
+{
+
+	// find forces at the contact points in world frame
+	// first, the transform frem world frame to each arm contact frame
+	Eigen::Affine3d T_world_hand_1;
+	Eigen::Affine3d T_world_hand_2;
+	_robot_arm_1->transformInWorld(T_world_hand_1, _link_name_1);
+	_robot_arm_2->transformInWorld(T_world_hand_2, _link_name_2);
+	Eigen::Affine3d T_world_contact_1 = T_world_hand_1 * _control_frame_1;
+	Eigen::Affine3d T_world_contact_2 = T_world_hand_2 * _control_frame_2;
+
+	// find the resolved sensed force and moment in control frame
+	_sensed_force_r1 = _T_contact_fsensor_r1.rotation() * sensed_force_sensor_frame_r1;
+	_sensed_force_r2 = _T_contact_fsensor_r2.rotation() * sensed_force_sensor_frame_r2;
+	_sensed_moment_r1 = _T_contact_fsensor_r1.translation().cross(_sensed_force_r1) + _T_contact_fsensor_r1.rotation() * sensed_moment_sensor_frame_r1;
+	_sensed_moment_r2 = _T_contact_fsensor_r2.translation().cross(_sensed_force_r2) + _T_contact_fsensor_r2.rotation() * sensed_moment_sensor_frame_r2;
+
+	// rotate the quantities in world frame
+	_sensed_force_r1 = T_world_contact_1.rotation() * _sensed_force_r1;
+	_sensed_force_r2 = T_world_contact_2.rotation() * _sensed_force_r2;
+	_sensed_moment_r1 = T_world_contact_1.rotation() * _sensed_moment_r1;
+	_sensed_moment_r2 = T_world_contact_2.rotation() * _sensed_moment_r2;
+
+	// compute the object forces and internal froces from the grasp matrix
+	Eigen::VectorXd full_contact_forces = Eigen::VectorXd::Zero(12);
+	full_contact_forces << _sensed_force_r1, _sensed_force_r2, _sensed_moment_r1, _sensed_moment_r2;
+
+	Eigen::VectorXd resultant_and_internal_forces = _grasp_matrix * full_contact_forces;
+
+	_object_sensed_force = resultant_and_internal_forces.segment<3>(0) + _object_gravity.head(3);
+	_object_sensed_moment = resultant_and_internal_forces.segment<3>(3) + _object_gravity.tail(3);
+	_sensed_internal_tension = resultant_and_internal_forces(6);
+	_sensed_internal_moments = resultant_and_internal_forces.segment<5>(7);
+}
+
+void TwoHandTwoRobotsTask::setForceAxis(const Eigen::Vector3d force_axis)
+{
+	Eigen::Vector3d normalized_axis = force_axis.normalized();
+
+	_sigma_force = normalized_axis*normalized_axis.transpose();
+	_sigma_position = Eigen::Matrix3d::Identity() - _sigma_force;
+}
+
+void TwoHandTwoRobotsTask::setLinearMotionAxis(const Eigen::Vector3d linear_motion_axis)
+{
+	Eigen::Vector3d normalized_axis = linear_motion_axis.normalized();
+
+	_sigma_position = normalized_axis*normalized_axis.transpose();
+	_sigma_force = Eigen::Matrix3d::Identity() - _sigma_position;
+}
+
+void TwoHandTwoRobotsTask::setMomentAxis(const Eigen::Vector3d moment_axis)
+{
+	Eigen::Vector3d normalized_axis = moment_axis.normalized();
+
+	_sigma_moment = normalized_axis*normalized_axis.transpose();
+	_sigma_orientation = Eigen::Matrix3d::Identity() - _sigma_moment;
+}
+
+void TwoHandTwoRobotsTask::setAngularMotionAxis(const Eigen::Vector3d angular_motion_axis)
+{
+	Eigen::Vector3d normalized_axis = angular_motion_axis.normalized();
+
+	_sigma_orientation = normalized_axis*normalized_axis.transpose();
+	_sigma_moment = Eigen::Matrix3d::Identity() - _sigma_orientation;
+}
+
+void TwoHandTwoRobotsTask::setFullLinearMotionControl()
+{
+	_sigma_position = Eigen::Matrix3d::Identity();
+	_sigma_force.setZero();
+}
+
+void TwoHandTwoRobotsTask::setFullForceControl()
+{
+	_sigma_force = Eigen::Matrix3d::Identity();
+	_sigma_position.setZero();
+}
+
+void TwoHandTwoRobotsTask::setFullAngularMotionControl()
+{
+	_sigma_orientation = Eigen::Matrix3d::Identity();
+	_sigma_moment.setZero();
+}
+
+void TwoHandTwoRobotsTask::setFullMomentControl()
+{
+	_sigma_moment = Eigen::Matrix3d::Identity();
+	_sigma_orientation.setZero();
+}
+
+void TwoHandTwoRobotsTask::setClosedLoopForceControl()
+{
+	_closed_loop_force_control = true;
+	_integrated_object_force_error.setZero();
+}
+
+
+void TwoHandTwoRobotsTask::setClosedLoopMomentControl()
+{
+	_closed_loop_moment_control = true;
+	_integrated_object_moment_error.setZero();
 }
 
 
