@@ -123,6 +123,10 @@ public:
 	 */
 	void reInitializeTask();
 
+	bool goalPositionReached(const double tolerance, const bool verbose = false);
+	
+	bool goalOrientationReached(const double tolerance, const bool verbose = false);
+
 	// -------- force control related methods --------
 
 	/**
@@ -461,7 +465,7 @@ public:
 
 	bool _passivity_enabled;
 	double _passivity_observer;
-	double _Rc;
+	double _Rc_inv;
 
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
@@ -475,6 +479,8 @@ public:
 	Eigen::MatrixXd _N;
 
 	bool _first_iteration;
+
+	Eigen::VectorXd _unit_mass_force;
 
 	Eigen::Vector3d _step_desired_position;
 	Eigen::Vector3d _step_desired_velocity;

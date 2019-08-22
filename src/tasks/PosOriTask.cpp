@@ -146,9 +146,10 @@ void PosOriTask::reInitializeTask()
 
 	_passivity_enabled = true;
 	_passivity_observer = 0;
-	_Rc = 0;
+	_Rc_inv = 1.0;
 
 	_task_force.setZero(6);
+	_unit_mass_force.setZero(6);
 	_first_iteration = true;	
 
 #ifdef USING_OTG 
@@ -234,28 +235,40 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_integrated_force_error += (_sensed_force - _desired_force) * _t_diff.count();
 
 		// compute the feedback term
-		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error - _kv_force * _current_velocity;
+		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error; // - _kv_force * _current_velocity;
 
 		// implement passivity observer and controller
 		if(_passivity_enabled)
 		{
 			Eigen::Vector3d f_diff = _desired_force - _sensed_force;
-			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term) - 
-					// (double) (_Rc * force_feedback_term.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
-			_passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
+			_passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term) - 
+					(double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
+			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
 
-			if(_passivity_observer > 0)
-			{
-				double Rcb = _Rc - _passivity_observer / ((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _t_diff.count());
-				// std::cout << "Rcbis : " << Rcb << std::endl;
-			}
+			std::cout << "PO : " << _passivity_observer << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+			std::cout << "Rc inv : " << _Rc_inv << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+			std::cout << "f_sensed: " << _sensed_force(2) << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+			// if(_passivity_observer < 0)
+			// {
+				double Rcb_inv = _Rc_inv + _passivity_observer / ((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _t_diff.count());
+				if(Rcb_inv > 1)
+				{
+					Rcb_inv = 1;
+				}
+				if(Rcb_inv < 0)
+				{
+					Rcb_inv = 0;
+				}
+				// std::cout << "Rcbis : " << 1.0 / Rcb_inv << std::endl;
+				_passivity_observer += (double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * (_Rc_inv - Rcb_inv) * _t_diff.count();
+				_Rc_inv = Rcb_inv;
+			// }
 
 
-			// std::cout << _passivity_observer << "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
 		}
 
 		// compute the final contribution
-		force_related_force = _sigma_force * (_desired_force + force_feedback_term);
+		force_related_force = _sigma_force * (_desired_force + force_feedback_term * _Rc_inv - _kv_force * _current_velocity);
 	}
 	else
 	{
@@ -339,6 +352,8 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
 
+	_unit_mass_force = position_orientation_contribution;
+
 	_task_force = _Lambda * position_orientation_contribution + force_moment_contribution;
 
 	// compute task torques
@@ -348,6 +363,35 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_t_prev = _t_curr;
 }
 
+bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
+{
+	double position_error = (_desired_position - _current_position).transpose() * (_sigma_position) * (_desired_position - _current_position);
+	position_error = sqrt(position_error);
+	bool goal_reached = position_error < tolerance;
+	if(verbose)
+	{
+		std::cout << "position error in PosOriTask : " << position_error << std::endl;
+		std::cout << "Tolerance : " << tolerance << std::endl;
+		std::cout << "Goal reached : " << goal_reached << std::endl << std::endl;
+	}
+
+	return goal_reached;
+}
+
+bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbose)
+{
+	double orientation_error = _orientation_error.transpose() * _sigma_orientation * _orientation_error;
+	orientation_error = sqrt(orientation_error);
+	bool goal_reached = orientation_error < tolerance;
+	if(verbose)
+	{
+		std::cout << "orientation error in PosOriTask : " << orientation_error << std::endl;
+		std::cout << "Tolerance : " << tolerance << std::endl;
+		std::cout << "Goal reached : " << goal_reached << std::endl << std::endl;
+	}
+
+	return goal_reached;
+}
 
 void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link)
 {
