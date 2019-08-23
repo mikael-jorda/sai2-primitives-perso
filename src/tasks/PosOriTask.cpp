@@ -76,6 +76,8 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_linear_saturation_velocity = 0.3;
 	_angular_saturation_velocity = M_PI/3;
 
+	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+
 	// initialize matrices sizes
 	_jacobian.setZero(6,dof);
 	_projected_jacobian.setZero(6,dof);
@@ -167,6 +169,7 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
+	// _robot->operationalSpaceMatricesWithPseudoInverse(_Lambda, _Jbar, _N, _projected_jacobian, _N_prec);
 	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _projected_jacobian, _N_prec);
 
 }
@@ -323,7 +326,25 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
 
-	_task_force = _Lambda * position_orientation_contribution + force_moment_contribution;
+	if(_dynamic_decoupling_type == FULL_DYNAMIC_DECOUPLING)
+	{
+		_task_force = _Lambda * position_orientation_contribution + force_moment_contribution;
+	}
+	else if(_dynamic_decoupling_type == POSITION_ONLY_DYNAMIC_DECOUPLNG)
+	{
+		Eigen::MatrixXd Lambda_tmp = Eigen::MatrixXd::Identity(6,6);
+		Lambda_tmp.block<3,3>(0,0) = _Lambda.block<3,3>(0,0);
+		// std::cout << Lambda_tmp << std::endl;
+		_task_force = Lambda_tmp * position_orientation_contribution + force_moment_contribution;
+	}
+	else if(_dynamic_decoupling_type == NO_DYNAMIC_DECOUPLING)
+	{
+		_task_force = position_orientation_contribution + force_moment_contribution;
+	}
+	else
+	{
+		_task_force.setZero();
+	}
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;

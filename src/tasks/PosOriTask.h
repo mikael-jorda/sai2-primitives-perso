@@ -412,6 +412,15 @@ public:
 	Eigen::Vector3d _kv_pos_vec, _kv_ori_vec;
 	Eigen::Vector3d _ki_pos_vec, _ki_ori_vec;
 
+	enum DynamicDecouplingType
+	{
+		FULL_DYNAMIC_DECOUPLING,
+		POSITION_ONLY_DYNAMIC_DECOUPLNG,
+		NO_DYNAMIC_DECOUPLING
+	};
+
+	DynamicDecouplingType _dynamic_decoupling_type;
+
 // trajectory generation via interpolation using Reflexxes Library
 // on by defalut
 #ifdef USING_OTG
