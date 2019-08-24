@@ -18,6 +18,7 @@
 #include <Eigen/Dense>
 #include <string>
 #include <chrono>
+#include <queue> 
 
 #ifdef USING_OTG
 	#include "trajectory_generation/OTG_posori.h"
@@ -465,7 +466,12 @@ public:
 
 	bool _passivity_enabled;
 	double _passivity_observer;
+	double _stored_energy;
 	double _Rc_inv;
+	// Eigen::VectorXd _PO_buffer = Eigen::Vector3d::Zero();
+	// Eigen::Vector3d _stored_energy_buffer = Eigen::Vector3d::Zero();
+	std::queue<double> _PO_buffer;
+	const int _PO_buffer_size = 30;
 
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;

@@ -240,35 +240,87 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		// implement passivity observer and controller
 		if(_passivity_enabled)
 		{
-			Eigen::Vector3d f_diff = _desired_force - _sensed_force;
-			_passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term) - 
-					(double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
-			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
-
-			std::cout << "PO : " << _passivity_observer << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
-			std::cout << "Rc inv : " << _Rc_inv << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
-			std::cout << "f_sensed: " << _sensed_force(2) << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
-			// if(_passivity_observer < 0)
+			// if(_PO_buffer(0) + _stored_energy_buffer(0) >= _PO_buffer(1) + _stored_energy_buffer(1) && 
+				// _PO_buffer(1) + _stored_energy_buffer(1) <= _PO_buffer(2) + _stored_energy_buffer(2) && 
+				// _PO_buffer(1) + _stored_energy_buffer(1) >= 0)
 			// {
-				double Rcb_inv = _Rc_inv + _passivity_observer / ((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _t_diff.count());
+				// std::cout << "\n\n\n\n\n\n" << std::endl;
+				// _PO_buffer(0) -= _PO_buffer(1);
+				// _PO_buffer(1) -= _PO_buffer(1);
+				// _PO_buffer(2) -= _PO_buffer(1);
+				// _passivity_observer -= _PO_buffer(1); 
+			// }
+
+			Eigen::Vector3d f_diff = _desired_force - _sensed_force;
+			// _passivity_observer +=  -((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
+			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term) - 
+					// (double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
+			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
+			
+			double power_inpur_output = ((double)(_desired_force.transpose() * _sigma_force * force_feedback_term) -
+					(double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
+
+
+
+			_passivity_observer += power_inpur_output;
+
+			// _passivity_observer +=  ((double)(_desired_force.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
+
+			_stored_energy = 0.5 * _ki_force * (double) (_integrated_force_error.transpose() * _sigma_force * _integrated_force_error);
+			_stored_energy = 0.0;
+
+			// _PO_buffer(0) = _PO_buffer(1);
+			// _PO_buffer(1) = _PO_buffer(2);
+			// _PO_buffer(2) = _passivity_observer;
+
+			// _stored_energy_buffer(0) = _stored_energy_buffer(1);
+			// _stored_energy_buffer(1) = _stored_energy_buffer(2);
+			// _stored_energy_buffer(2) = _stored_energy;
+
+			_PO_buffer.push(power_inpur_output);
+
+			if(_passivity_observer + _stored_energy > _PO_buffer.front() && _passivity_observer + _stored_energy > 0 && _PO_buffer.size() > _PO_buffer_size)
+			{
+				if(_PO_buffer.front() > 0)
+				{
+					_passivity_observer -= _PO_buffer.front();
+				}
+				_PO_buffer.pop();
+			}
+
+
+			// if(_passivity_observer + _stored_energy < 0)
+			// {
+				double Rcb_inv = _Rc_inv + (_passivity_observer + _stored_energy) / ((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _t_diff.count());
+				// double Rcb_inv = _Rc_inv + tanh(_passivity_observer + _stored_energy);
 				if(Rcb_inv > 1)
 				{
 					Rcb_inv = 1;
 				}
-				if(Rcb_inv < 0)
+				if(Rcb_inv < 0.05)
 				{
-					Rcb_inv = 0;
+					Rcb_inv = 0.05;
 				}
 				// std::cout << "Rcbis : " << 1.0 / Rcb_inv << std::endl;
 				_passivity_observer += (double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * (_Rc_inv - Rcb_inv) * _t_diff.count();
 				_Rc_inv = Rcb_inv;
 			// }
+			// else
+			// {
+				// _Rc_inv = (_Rc_inv + 1)/2.0;
+			// }
 
+			// std::cout << "PO : " << _passivity_observer + _stored_energy << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+			// std::cout << "Rc inv : " << _Rc_inv << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+			// std::cout << "Vc squared : " << force_feedback_term.squaredNorm() << std::endl;
+			// std::cout << "PO buffer : " << _PO_buffer.transpose() << std::endl;
+			// std::cout << "f_sensed: " << _sensed_force(2) << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
+			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
 
 		}
 
 		// compute the final contribution
-		force_related_force = _sigma_force * (_desired_force + force_feedback_term * _Rc_inv - _kv_force * _current_velocity);
+		force_related_force = _sigma_force * (0.9 * _desired_force + force_feedback_term * _Rc_inv - _kv_force * _current_velocity);
 	}
 	else
 	{
