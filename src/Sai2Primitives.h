@@ -10,6 +10,7 @@
 
 #include "haptic_tasks/OpenLoopTeleop.h"
 #include "haptic_tasks/HapticController.h"
+#include "haptic_tasks/BilateralPassivityController.h"
 
 #ifdef USING_OTG
 #include "trajectory_generation/OTG.h"

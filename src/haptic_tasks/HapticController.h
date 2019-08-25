@@ -9,6 +9,10 @@
  *      Authors: Margot Vulliez & Mikael Jorda
  */
 
+#ifndef SAI2_HAPTIC_CONTROLLER_H_
+#define SAI2_HAPTIC_CONTROLLER_H_
+
+
 #include "Sai2Model.h"
 #include "filters/ButterworthFilter.h"
 #include <Eigen/Dense>
@@ -23,6 +27,8 @@ namespace Sai2Primitives
 
 class HapticController
 {
+friend class BilateralPassivityController;
+
 public:
 
 
@@ -576,3 +582,5 @@ private:
 
 } /* namespace Sai2Primitives */
 
+/* SAI2_HAPTIC_CONTROLLER_H_ */
+#endif
