@@ -14,8 +14,8 @@ BilateralPassivityController::BilateralPassivityController(PosOriTask* posori_ta
 	_posori_task = posori_task;
 	_haptic_task = haptic_task;
 
-	_max_alpha_force = 30.0;
-	_max_alpha_moment = 30.0;
+	_max_alpha_force = 25.0;
+	_max_alpha_moment = 25.0;
 
 	reInitializeTask();
 }
@@ -71,7 +71,7 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 	_passivity_observer_force += total_power_input;
 
 	// compute the passivity controller
-	if(_passivity_observer_force + _stored_energy_force < 0)
+	if(_passivity_observer_force + _stored_energy_force < 0 && !_first_iteration_force)
 	{
 		double vh_norm_square = _haptic_task->_current_trans_velocity_device.squaredNorm();
 		
@@ -112,12 +112,17 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 				}
 				_PO_buffer_force.pop();
 			}
+			else
+			{
+				break;
+			}
 		}
 	}
 
 	haptic_damping_force_command = _damping_force;
 
 	_t_prev_force = t_curr;
+
 }
 	
 void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_damping_moment_command)
@@ -151,7 +156,7 @@ void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_dam
 	_passivity_observer_moment += total_power_input;
 
 	// compute the passivity controller
-	if(_passivity_observer_moment + _stored_energy_moment < 0)
+	if(_passivity_observer_moment + _stored_energy_moment < 0 && !_first_iteration_moment)
 	{
 		double vh_norm_square = _haptic_task->_current_rot_velocity_device.squaredNorm();
 		
@@ -191,6 +196,10 @@ void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_dam
 					_passivity_observer_moment -= _PO_buffer_moment.front();
 				}
 				_PO_buffer_moment.pop();
+			}
+			else
+			{
+				break;
 			}
 		}
 	}

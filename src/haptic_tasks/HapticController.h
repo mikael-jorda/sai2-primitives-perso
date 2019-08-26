@@ -512,13 +512,13 @@ public:
 	Vector3d _center_position_robot;
 	Matrix3d _center_rotation_robot;
 
+	//Transformation matrix from the device frame to the robot frame
+	Matrix3d _Rotation_Matrix_DeviceToRobot;
+	
 
 //// Controllers parameters, set through setting methods ////
 private:
 
-	//Transformation matrix from the device frame to the robot frame
-	Matrix3d _Rotation_Matrix_DeviceToRobot;
-	
 	// Workspace scaling factors in translation and rotation
 	double _scaling_factor_trans, _scaling_factor_rot;
 
