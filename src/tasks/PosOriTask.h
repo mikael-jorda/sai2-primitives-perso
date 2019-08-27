@@ -471,7 +471,10 @@ public:
 	// Eigen::VectorXd _PO_buffer = Eigen::Vector3d::Zero();
 	// Eigen::Vector3d _stored_energy_buffer = Eigen::Vector3d::Zero();
 	std::queue<double> _PO_buffer;
-	const int _PO_buffer_size = 30;
+	const int _PO_buffer_size = 15;
+	const int _PO_counter_activity = 30;
+	const int _PO_counter_passivity = 350;
+	int _PO_counter = 0;
 
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
@@ -480,6 +483,7 @@ public:
 	// model quantities
 	Eigen::MatrixXd _jacobian;
 	Eigen::MatrixXd _projected_jacobian;
+	Eigen::MatrixXd _prev_projected_jacobian;
 	Eigen::MatrixXd _Lambda;
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;

@@ -14,8 +14,8 @@ BilateralPassivityController::BilateralPassivityController(PosOriTask* posori_ta
 	_posori_task = posori_task;
 	_haptic_task = haptic_task;
 
-	_max_alpha_force = 25.0;
-	_max_alpha_moment = 25.0;
+	_max_alpha_force = 35.0;
+	_max_alpha_moment = 35.0;
 
 	reInitializeTask();
 }
@@ -89,7 +89,17 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 			_alpha_force = _max_alpha_force;
 		}
 
-		_damping_force = - _alpha_force * _haptic_task->_current_trans_velocity_device;
+		Eigen::Matrix3d sigma_damping = Eigen::Matrix3d::Identity();
+
+		// Eigen::Vector3d force_direction = _haptic_task->_commanded_force_device;
+		// if(force_direction.norm() > 0.01)
+		// {
+		// 	sigma_damping = force_direction * force_direction.transpose() / force_direction.squaredNorm();
+		// }
+
+
+		_damping_force = - _alpha_force * sigma_damping * _haptic_task->_current_trans_velocity_device;
+		_damping_force = _haptic_task->_sigma_position * _damping_force;
 
 		double passivity_observer_correction = dt * _haptic_task->_current_trans_velocity_device.dot(_damping_force);
 		_passivity_observer_force -= passivity_observer_correction;
@@ -118,6 +128,7 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 			}
 		}
 	}
+
 
 	haptic_damping_force_command = _damping_force;
 
