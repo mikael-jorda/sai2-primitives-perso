@@ -283,12 +283,10 @@ public:
 	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
 	 * 
 	 * @param force_guidance_position_impedance       		Guidance impedance term in position
-	 * @param force_guidance_position_damping 	  			Guidance damping term in position
 	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
-	 * @param force_guidance_orientation_damping 	  		Guidance damping term in orientation
 	 */
-	void setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
-									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping);	
+	void setVirtualGuidanceGains (const double force_guidance_position_impedance,
+									const double force_guidance_orientation_impedance);	
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
@@ -555,8 +553,6 @@ private:
 	// Virtual force guidance parameters
 	double _force_guidance_position_impedance;
 	double _force_guidance_orientation_impedance;
-	double _force_guidance_orientation_damping;
-	double _force_guidance_position_damping;
 
 	// Sensed force filters
 	ButterworthFilter* _force_filter;

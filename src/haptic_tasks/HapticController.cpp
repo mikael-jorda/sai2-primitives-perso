@@ -113,8 +113,6 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	// Initialize virtual force guidance gains for unified controller
 	_force_guidance_position_impedance = 200.0;
 	_force_guidance_orientation_impedance = 20.0;
-	_force_guidance_position_damping = 40.0;
-	_force_guidance_orientation_damping = 2.0;
 
 	// Set selection matrices to full motion control
 	_sigma_position.setIdentity();
@@ -1047,11 +1045,11 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	Vector3d f_virtual_trans;
 	Vector3d f_virtual_rot;
 	// Evaluate the virtual guidance force with the spring-damping model
-	f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot) - _force_guidance_position_damping * (_current_trans_velocity_device_RobFrame - _current_trans_velocity_robot);
+	f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
 	// Compute the orientation error
 	Sai2Model::orientationError(orientation_dev, _desired_rotation_robot, _current_rotation_robot);
 	// Evaluate task torque
-	f_virtual_rot = _force_guidance_orientation_impedance*orientation_dev - _force_guidance_orientation_damping * (_current_rot_velocity_device_RobFrame - _current_rot_velocity_robot);
+	f_virtual_rot = _force_guidance_orientation_impedance*orientation_dev;
 	//Transfer guidance force from robot to haptic device global frame
 	f_virtual_trans = _Rotation_Matrix_DeviceToRobot * f_virtual_trans;
 	f_virtual_rot = _Rotation_Matrix_DeviceToRobot * f_virtual_rot;
@@ -1187,7 +1185,7 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	//// Compute the virtual force guidance in robot frame ////
 	Vector3d f_virtual_trans;
 	// Evaluate the virtual guidance force with the spring-damping model
-	f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot) - _force_guidance_position_damping * (_current_trans_velocity_device_RobFrame - _current_trans_velocity_robot);
+	f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
 	//Transfer guidance force from robot to haptic device global frame
 	f_virtual_trans = _Rotation_Matrix_DeviceToRobot * f_virtual_trans;
 	
@@ -1512,13 +1510,11 @@ void HapticController::setVirtualProxyGains (const double proxy_position_impedan
 }
 
 
-void HapticController::setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
-									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping)
+void HapticController::setVirtualGuidanceGains (const double force_guidance_position_impedance,
+									const double force_guidance_orientation_impedance)
 {
 	_force_guidance_position_impedance = force_guidance_position_impedance;
-	_force_guidance_position_damping = force_guidance_position_damping;
 	_force_guidance_orientation_impedance = force_guidance_orientation_impedance;
-	_force_guidance_orientation_damping = force_guidance_orientation_damping;
 }	
 
 
