@@ -18,6 +18,7 @@
 #include <Eigen/Dense>
 #include <string>
 #include <chrono>
+#include <queue> 
 
 #ifdef USING_OTG
 	#include "trajectory_generation/OTG_posori.h"
@@ -123,6 +124,10 @@ public:
 	 */
 	void reInitializeTask();
 
+	bool goalPositionReached(const double tolerance, const bool verbose = false);
+	
+	bool goalOrientationReached(const double tolerance, const bool verbose = false);
+
 	// -------- force control related methods --------
 
 	/**
@@ -163,7 +168,7 @@ public:
 	 *             the force. It can be called anytime to change the behavior of
 	 *             the controller and reset the integral terms.
 	 *
-	 * @param      force_axis  The axis in control frame coordinates along which
+	 * @param      force_axis  The axis in robot frame coordinates along which
 	 *                         the controller behaves as a force controller.
 	 */
 	void setForceAxis(const Eigen::Vector3d force_axis);
@@ -176,7 +181,7 @@ public:
 	 *             This does not reset the integral terms. In setting up the
 	 *             controller for the first time, prefer setForceAxis.
 	 *
-	 * @param      force_axis  The axis in control frame coordinates along which
+	 * @param      force_axis  The axis in robot frame coordinates along which
 	 *                         the controller behaves as a force controller.
 	 */
 	void updateForceAxis(const Eigen::Vector3d force_axis);
@@ -192,7 +197,7 @@ public:
 	 *             reset the integral terms.
 	 *
 	 * @param[in]  motion_axis  The motion axis
-	 * @param      force_axis  The axis in control frame coordinates along which the
+	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a motion controller.
 	 */
 	void setLinearMotionAxis(const Eigen::Vector3d motion_axis);
@@ -206,7 +211,7 @@ public:
 	 *             setMotionAxis.
 	 *
 	 * @param[in]  motion_axis  The motion axis
-	 * @param      force_axis  The axis in control frame coordinates along which the
+	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a motion controller.
 	 */
 	void updateLinearMotionAxis(const Eigen::Vector3d motion_axis);
@@ -243,7 +248,7 @@ public:
 	 *             It can be called anytime to change the behavior of the controller 
 	 *             and reset the integral terms.
 	 *
-	 * @param      moment_axis  The axis in control frame coordinates along
+	 * @param      moment_axis  The axis in robot frame coordinates along
 	 *                          which the controller behaves as a moment
 	 *                          controller.
 	 */
@@ -258,7 +263,7 @@ public:
 	 *             In setting up the controller for the first time, prefer
 	 *             setMomentAxis.
 	 *
-	 * @param      moment_axis  The axis in control frame coordinates along
+	 * @param      moment_axis  The axis in robot frame coordinates along
 	 *                          which the controller behaves as a moment
 	 *                          controller.
 	 */
@@ -278,7 +283,7 @@ public:
 	 *             the behavior of the controller and reset the integral terms.
 	 *
 	 * @param[in]  motion_axis  The motion axis
-	 * @param      force_axis  The axis in control frame coordinates along which the
+	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a rotational motion controller.
 	 */
 	void setAngularMotionAxis(const Eigen::Vector3d motion_axis);
@@ -295,7 +300,7 @@ public:
 	 *             time, prefer setAngularMotionAxis.
 	 *
 	 * @param[in]  motion_axis  The motion axis
-	 * @param      force_axis  The axis in control frame coordinates along which the
+	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a rotational motion controller.
 	 */
 	void updateAngularMotionAxis(const Eigen::Vector3d motion_axis);
@@ -407,6 +412,11 @@ public:
 	double _linear_saturation_velocity;   // defaults to 0.3 m/s
 	double _angular_saturation_velocity;  // defaults to PI/3 Rad/s
 
+	bool _use_isotropic_gains;              // defaults to true
+	Eigen::Vector3d _kp_pos_vec, _kp_ori_vec;
+	Eigen::Vector3d _kv_pos_vec, _kv_ori_vec;
+	Eigen::Vector3d _ki_pos_vec, _ki_ori_vec;
+
 // trajectory generation via interpolation using Reflexxes Library
 // on by defalut
 #ifdef USING_OTG
@@ -436,8 +446,8 @@ public:
 	Eigen::Vector3d _integrated_orientation_error;    // robot frame
 	Eigen::Vector3d _integrated_position_error;       // robot frame
 	
-	Eigen::Matrix3d _sigma_position;        // control frame
-	Eigen::Matrix3d _sigma_orientation;     // control frame
+	Eigen::Matrix3d _sigma_position;        // robot frame
+	Eigen::Matrix3d _sigma_orientation;     // robot frame
 
 	// force quantities
 	Eigen::Affine3d _T_control_to_sensor;  
@@ -448,20 +458,39 @@ public:
 	Eigen::Vector3d _integrated_force_error;    // robot frame
 	Eigen::Vector3d _integrated_moment_error;   // robot frame
 
-	Eigen::Matrix3d _sigma_force;     // control frame
-	Eigen::Matrix3d _sigma_moment;    // control frame
+	Eigen::Matrix3d _sigma_force;     // robot frame
+	Eigen::Matrix3d _sigma_moment;    // robot frame
 
 	bool _closed_loop_force_control;
 	bool _closed_loop_moment_control;
 
+	bool _passivity_enabled;
+	double _passivity_observer;
+	double _stored_energy;
+	double _Rc_inv;
+	// Eigen::VectorXd _PO_buffer = Eigen::Vector3d::Zero();
+	// Eigen::Vector3d _stored_energy_buffer = Eigen::Vector3d::Zero();
+	std::queue<double> _PO_buffer;
+	const int _PO_buffer_size = 15;
+	const int _PO_counter_activity = 30;
+	const int _PO_counter_passivity = 350;
+	int _PO_counter = 0;
+
+	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
+	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
+	Eigen::Matrix3d _ki_pos_mat, _ki_ori_mat;
+
 	// model quantities
 	Eigen::MatrixXd _jacobian;
 	Eigen::MatrixXd _projected_jacobian;
+	Eigen::MatrixXd _prev_projected_jacobian;
 	Eigen::MatrixXd _Lambda;
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
 	bool _first_iteration;
+
+	Eigen::VectorXd _unit_mass_force;
 
 	Eigen::Vector3d _step_desired_position;
 	Eigen::Vector3d _step_desired_velocity;

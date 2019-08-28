@@ -9,6 +9,10 @@
  *      Authors: Margot Vulliez & Mikael Jorda
  */
 
+#ifndef SAI2_HAPTIC_CONTROLLER_H_
+#define SAI2_HAPTIC_CONTROLLER_H_
+
+
 #include "Sai2Model.h"
 #include "filters/ButterworthFilter.h"
 #include <Eigen/Dense>
@@ -23,6 +27,8 @@ namespace Sai2Primitives
 
 class HapticController
 {
+friend class BilateralPassivityController;
+
 public:
 
 
@@ -277,12 +283,10 @@ public:
 	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
 	 * 
 	 * @param force_guidance_position_impedance       		Guidance impedance term in position
-	 * @param force_guidance_position_damping 	  			Guidance damping term in position
 	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
-	 * @param force_guidance_orientation_damping 	  		Guidance damping term in orientation
 	 */
-	void setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
-									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping);	
+	void setVirtualGuidanceGains (const double force_guidance_position_impedance,
+									const double force_guidance_orientation_impedance);	
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
@@ -506,13 +510,13 @@ public:
 	Vector3d _center_position_robot;
 	Matrix3d _center_rotation_robot;
 
+	//Transformation matrix from the device frame to the robot frame
+	Matrix3d _Rotation_Matrix_DeviceToRobot;
+	
 
 //// Controllers parameters, set through setting methods ////
 private:
 
-	//Transformation matrix from the device frame to the robot frame
-	Matrix3d _Rotation_Matrix_DeviceToRobot;
-	
 	// Workspace scaling factors in translation and rotation
 	double _scaling_factor_trans, _scaling_factor_rot;
 
@@ -549,8 +553,6 @@ private:
 	// Virtual force guidance parameters
 	double _force_guidance_position_impedance;
 	double _force_guidance_orientation_impedance;
-	double _force_guidance_orientation_damping;
-	double _force_guidance_position_damping;
 
 	// Sensed force filters
 	ButterworthFilter* _force_filter;
@@ -576,3 +578,5 @@ private:
 
 } /* namespace Sai2Primitives */
 
+/* SAI2_HAPTIC_CONTROLLER_H_ */
+#endif
