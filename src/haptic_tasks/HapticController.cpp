@@ -1042,21 +1042,19 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	f_task_rot = _Rotation_Matrix_DeviceToRobot * f_task_rot;
 
 	//// Compute the virtual force guidance in robot frame ////
-	Vector3d f_virtual_trans;
-	Vector3d f_virtual_rot;
 	// Evaluate the virtual guidance force with the spring-damping model
-	f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
+	_f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
 	// Compute the orientation error
 	Sai2Model::orientationError(orientation_dev, _desired_rotation_robot, _current_rotation_robot);
 	// Evaluate task torque
-	f_virtual_rot = _force_guidance_orientation_impedance*orientation_dev;
+	_f_virtual_rot = _force_guidance_orientation_impedance*orientation_dev;
 	//Transfer guidance force from robot to haptic device global frame
-	f_virtual_trans = _Rotation_Matrix_DeviceToRobot * f_virtual_trans;
-	f_virtual_rot = _Rotation_Matrix_DeviceToRobot * f_virtual_rot;
+	_f_virtual_trans = _Rotation_Matrix_DeviceToRobot * _f_virtual_trans;
+	_f_virtual_rot = _Rotation_Matrix_DeviceToRobot * _f_virtual_rot;
 
 	//// Projection of the sensed interaction and virtual guidance forces along the force/motion-controlled directions ////
-	_commanded_force_device = _sigma_force*f_virtual_trans + _sigma_position*f_task_trans;
-	_commanded_torque_device = _sigma_moment*f_virtual_rot + _sigma_orientation*f_task_rot;
+	_commanded_force_device = _sigma_force*_f_virtual_trans + _sigma_position*f_task_trans;
+	_commanded_torque_device = _sigma_moment*_f_virtual_rot + _sigma_orientation*f_task_rot;
 
 	// Apply reduction factors to force feedback
 	_commanded_force_device = _reduction_factor_force_feedback * _commanded_force_device;
@@ -1183,14 +1181,14 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	f_task_trans = _Rotation_Matrix_DeviceToRobot * f_task_trans;
 
 	//// Compute the virtual force guidance in robot frame ////
-	Vector3d f_virtual_trans;
+	Vector3d _f_virtual_trans;
 	// Evaluate the virtual guidance force with the spring-damping model
-	f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
+	_f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
 	//Transfer guidance force from robot to haptic device global frame
-	f_virtual_trans = _Rotation_Matrix_DeviceToRobot * f_virtual_trans;
+	_f_virtual_trans = _Rotation_Matrix_DeviceToRobot * _f_virtual_trans;
 	
 	//// Projection of the sensed interaction and virtual guidance forces along the force/motion-controlled directions ////
-	_commanded_force_device = _sigma_force*f_virtual_trans + _sigma_position*f_task_trans;
+	_commanded_force_device = _sigma_force*_f_virtual_trans + _sigma_position*f_task_trans;
 	_commanded_torque_device.setZero();
 
 	// Apply reduction factors to force feedback
