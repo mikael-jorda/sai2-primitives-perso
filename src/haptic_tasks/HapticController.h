@@ -474,6 +474,9 @@ public:
 	// Device task force
 	Vector3d _device_force;
 	Vector3d _device_torque;
+	// Virtual spring force for force control
+	Vector3d _f_virtual_trans;
+	Vector3d _f_virtual_rot;
 
 	// Workspace extension parameters
 	bool _first_iteration;
