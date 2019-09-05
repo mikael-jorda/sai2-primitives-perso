@@ -1134,8 +1134,8 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
 	//// Compute the new desired robot force from the haptic device ////
-	_desired_force_robot = -_Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
-	_desired_torque_robot = -_Rotation_Matrix_DeviceToRobot.transpose() * _commanded_torque_device;
+	_desired_force_robot = -_scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
+	_desired_torque_robot = -_scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_torque_device;
 
     // Send set position and orientation to the robot
 	desired_position_robot = _desired_position_robot;
@@ -1247,7 +1247,7 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
 	//// Compute the new desired robot force from the haptic device ////
-	_desired_force_robot = -_Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
+	_desired_force_robot = -_scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
 
     // Send set position and orientation to the robot
 	desired_position_robot = _desired_position_robot;
