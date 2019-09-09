@@ -446,6 +446,9 @@ public:
 	// Sensed force and torque from the haptic device
 	Vector3d _sensed_force_device;
 	Vector3d _sensed_torque_device;
+	// Virtual spring force for force control
+	Vector3d _f_virtual_trans;
+	Vector3d _f_virtual_rot;
 
 	// Robot variables
 	//Commanded position and orientation of the robot (in robot frame) from impedance or unified controllers
