@@ -1052,13 +1052,9 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	_f_virtual_trans = _Rotation_Matrix_DeviceToRobot * _f_virtual_trans;
 	_f_virtual_rot = _Rotation_Matrix_DeviceToRobot * _f_virtual_rot;
 
-	//// Projection of the sensed interaction and virtual guidance forces along the force/motion-controlled directions ////
-	_commanded_force_device = _sigma_force*_f_virtual_trans + _sigma_position*f_task_trans;
-	_commanded_torque_device = _sigma_moment*_f_virtual_rot + _sigma_orientation*f_task_rot;
-
 	// Apply reduction factors to force feedback
-	_commanded_force_device = _reduction_factor_force_feedback * _commanded_force_device;
-	_commanded_torque_device = _reduction_factor_torque_feedback * _commanded_torque_device;
+	f_task_trans = _reduction_factor_force_feedback * f_task_trans;
+	f_task_rot = _reduction_factor_torque_feedback * f_task_rot;
 
 	// Scaling of the force feedback
 	Eigen::Matrix3d scaling_factor_trans;
@@ -1069,8 +1065,14 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	scaling_factor_rot << 1/_scaling_factor_rot, 0.0, 0.0, 
 					  0.0, 1/_scaling_factor_rot, 0.0,
 					  0.0, 0.0, 1/_scaling_factor_rot;
-	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
-	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
+
+	f_task_trans = scaling_factor_trans * f_task_trans;
+	f_task_rot = scaling_factor_rot * f_task_rot;
+
+	//// Projection of the sensed interaction and virtual guidance forces along the force/motion-controlled directions ////
+	_commanded_force_device = _sigma_force*_f_virtual_trans + _sigma_position*f_task_trans;
+	_commanded_torque_device = _sigma_moment*_f_virtual_rot + _sigma_orientation*f_task_rot;
+
 
 	// Apply haptic guidances if activated
 	if (_enable_plane_guidance)
@@ -1134,8 +1136,8 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
 	//// Compute the new desired robot force from the haptic device ////
-	_desired_force_robot = -_scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
-	_desired_torque_robot = -_scaling_factor_rot * _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_torque_device;
+	_desired_force_robot = - _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
+	_desired_torque_robot = - _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_torque_device;
 
     // Send set position and orientation to the robot
 	desired_position_robot = _desired_position_robot;
@@ -1187,19 +1189,20 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	//Transfer guidance force from robot to haptic device global frame
 	_f_virtual_trans = _Rotation_Matrix_DeviceToRobot * _f_virtual_trans;
 	
-	//// Projection of the sensed interaction and virtual guidance forces along the force/motion-controlled directions ////
-	_commanded_force_device = _sigma_force*_f_virtual_trans + _sigma_position*f_task_trans;
-	_commanded_torque_device.setZero();
-
 	// Apply reduction factors to force feedback
-	_commanded_force_device = _reduction_factor_force_feedback * _commanded_force_device;
+	f_task_trans = _reduction_factor_force_feedback * f_task_trans;
 
 	// Scaling of the force feedback
 	Eigen::Matrix3d scaling_factor_trans;
 	scaling_factor_trans << 1/_scaling_factor_trans, 0.0, 0.0,
 					  0.0, 1/_scaling_factor_trans, 0.0, 
 					  0.0, 0.0, 1/_scaling_factor_trans;
-	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
+	f_task_trans = scaling_factor_trans * f_task_trans;
+
+	//// Projection of the sensed interaction and virtual guidance forces along the force/motion-controlled directions ////
+	_commanded_force_device = _sigma_force*_f_virtual_trans + _sigma_position*f_task_trans;
+	_commanded_torque_device.setZero();
+
 
 	// Apply haptic guidances if activated
 	if (_enable_plane_guidance)
@@ -1247,7 +1250,7 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	_desired_position_robot = _desired_position_robot + _center_position_robot;
 
 	//// Compute the new desired robot force from the haptic device ////
-	_desired_force_robot = -_scaling_factor_trans * _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
+	_desired_force_robot = - _Rotation_Matrix_DeviceToRobot.transpose() * _commanded_force_device;
 
     // Send set position and orientation to the robot
 	desired_position_robot = _desired_position_robot;
