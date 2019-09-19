@@ -19,6 +19,7 @@
 #include <string>
 #include <chrono>
 #include <queue> 
+#include "filters/ButterworthFilter.h"
 
 #ifdef USING_OTG
 	#include "trajectory_generation/OTG_posori.h"
@@ -465,16 +466,25 @@ public:
 	bool _closed_loop_moment_control;
 
 	bool _passivity_enabled;
-	double _passivity_observer;
-	double _stored_energy;
-	double _Rc_inv;
+	double _passivity_observer_force;
+	double _stored_energy_force;
+	double _Rc_inv_force;
 	// Eigen::VectorXd _PO_buffer = Eigen::Vector3d::Zero();
 	// Eigen::Vector3d _stored_energy_buffer = Eigen::Vector3d::Zero();
-	std::queue<double> _PO_buffer;
-	const int _PO_buffer_size = 15;
-	const int _PO_counter_activity = 30;
-	const int _PO_counter_passivity = 350;
-	int _PO_counter = 0;
+	std::queue<double> _PO_buffer_force;
+	const int _PO_buffer_size_force = 15;
+	// const int _PO_counter_activity_force = 30;
+	// const int _PO_counter_passivity_force = 350;
+	// int _PO_counter = 0;
+
+	double _passivity_observer_moment;
+	double _stored_energy_moment;
+	double _Rc_inv_moment;
+	std::queue<double> _PO_buffer_moment;
+	const int _PO_buffer_size_moment = 15;
+
+	ButterworthFilter* _filter_feedback_force;
+	ButterworthFilter* _filter_feedback_moment;
 
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;

@@ -14,8 +14,8 @@ BilateralPassivityController::BilateralPassivityController(PosOriTask* posori_ta
 	_posori_task = posori_task;
 	_haptic_task = haptic_task;
 
-	_max_alpha_force = 35.0;
-	_max_alpha_moment = 35.0;
+	_max_alpha_force = 30.0;
+	_max_alpha_moment = 0.04;
 
 	reInitializeTask();
 }
@@ -55,6 +55,7 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 	// compute stored energy
 	Eigen::Vector3d dx = _posori_task->_sigma_position * (_posori_task->_desired_position - _posori_task->_current_position);
 	_stored_energy_force = 0.5 * _posori_task->_kp_pos * dx.squaredNorm(); 
+	_stored_energy_force = 0;
 
 	// compute power input and output
 	// upit mass force already contains the projection into the motion space
@@ -71,7 +72,7 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 	_passivity_observer_force += total_power_input;
 
 	// compute the passivity controller
-	if(_passivity_observer_force + _stored_energy_force < 0 && !_first_iteration_force)
+	if(_passivity_observer_force + _stored_energy_force < 0.0 && !_first_iteration_force)
 	{
 		double vh_norm_square = _haptic_task->_current_trans_velocity_device.squaredNorm();
 		
@@ -114,7 +115,7 @@ void BilateralPassivityController::computePOPCForce(Eigen::Vector3d& haptic_damp
 		while(_PO_buffer_force.size() > _PO_buffer_size_force)
 		{
 			// do not reset if it would make your system think it is going to be active
-			if(_passivity_observer_force + _stored_energy_force > _PO_buffer_force.front())
+			if(_passivity_observer_force > _PO_buffer_force.front())
 			{
 				if(_PO_buffer_force.front() > 0) // only forget dissipated energy
 				{
@@ -149,8 +150,9 @@ void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_dam
 	double dt = t_diff.count();
 
 	// compute stored energy
-	Eigen::Vector3d ori_error = _posori_task->_sigma_orientation * _posori_task->_orientation_error;
+	Eigen::Vector3d ori_error = - _posori_task->_sigma_orientation * _posori_task->_orientation_error;
 	_stored_energy_moment = 0.5 * _posori_task->_kp_ori * ori_error.squaredNorm(); 
+	// _stored_energy_moment = 0;
 
 	// compute power input and output
 	// upit mass force already contains the projection into the motion space
@@ -166,8 +168,10 @@ void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_dam
 	_PO_buffer_moment.push(total_power_input);
 	_passivity_observer_moment += total_power_input;
 
+	std::cout << _passivity_observer_moment << std::endl;
+
 	// compute the passivity controller
-	if(_passivity_observer_moment + _stored_energy_moment < 0 && !_first_iteration_moment)
+	if(_passivity_observer_moment + _stored_energy_moment < 0.0 && !_first_iteration_moment)
 	{
 		double vh_norm_square = _haptic_task->_current_rot_velocity_device.squaredNorm();
 		
@@ -200,7 +204,7 @@ void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_dam
 		while(_PO_buffer_moment.size() > _PO_buffer_size_moment)
 		{
 			// do not reset if it would make your system think it is going to be active
-			if(_passivity_observer_moment + _stored_energy_moment > _PO_buffer_moment.front())
+			if(_passivity_observer_moment > _PO_buffer_moment.front())
 			{
 				if(_PO_buffer_moment.front() > 0) // only forget dissipated energy
 				{
