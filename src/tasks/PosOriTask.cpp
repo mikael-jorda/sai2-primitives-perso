@@ -77,7 +77,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_angular_saturation_velocity = M_PI/3;
 
 	_filter_feedback_force = new ButterworthFilter(3, 0.015);
-	_filter_feedback_moment = new ButterworthFilter(3, 0.045);
+	_filter_feedback_moment = new ButterworthFilter(3, 0.015);
 
 	// initialize matrices sizes
 	_jacobian.setZero(6,dof);

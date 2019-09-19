@@ -168,8 +168,6 @@ void BilateralPassivityController::computePOPCTorque(Eigen::Vector3d& haptic_dam
 	_PO_buffer_moment.push(total_power_input);
 	_passivity_observer_moment += total_power_input;
 
-	std::cout << _passivity_observer_moment << std::endl;
-
 	// compute the passivity controller
 	if(_passivity_observer_moment + _stored_energy_moment < 0.0 && !_first_iteration_moment)
 	{
