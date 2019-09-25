@@ -30,6 +30,16 @@ namespace Sai2Primitives
 
 class PosOriTask : public TemplateTask
 {
+
+enum DynamicDecouplingType
+{
+	FULL_DYNAMIC_DECOUPLING,   // use the real Lambda matrix
+	INERTIA_SATURATION,        // use a Lambda matrix computed from saturating the minimal values of the Mass Matrix
+	DECOUPLED_POS_ORI,          // decouple position part and decouple position from orientation
+	DECOUPLED_POS_ONLY,         // decouple position part only
+	IMPEDANCE,                 // use Identity for the mass matrix
+};
+
 public:
 
 	//------------------------------------------------
@@ -128,6 +138,15 @@ public:
 	bool goalPositionReached(const double tolerance, const bool verbose = false);
 	
 	bool goalOrientationReached(const double tolerance, const bool verbose = false);
+
+
+	// ---------- set dynamic decoupling type for the controller  ----------------
+	void setDynamicDecouplingFull();
+	void setDynamicDecouplingInertiaSaturation();
+	void setDynamicDecouplingPosOnly();
+	void setDynamicDecouplingPosOri();
+	void setDynamicDecouplingNone();
+
 
 	// -------- force control related methods --------
 
@@ -490,11 +509,13 @@ public:
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
 	Eigen::Matrix3d _ki_pos_mat, _ki_ori_mat;
 
+	int _dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+
 	// model quantities
 	Eigen::MatrixXd _jacobian;
 	Eigen::MatrixXd _projected_jacobian;
 	Eigen::MatrixXd _prev_projected_jacobian;
-	Eigen::MatrixXd _Lambda;
+	Eigen::MatrixXd _Lambda, _Lambda_modified;
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 

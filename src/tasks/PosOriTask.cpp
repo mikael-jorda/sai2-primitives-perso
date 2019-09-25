@@ -84,6 +84,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_projected_jacobian.setZero(6,dof);
 	_prev_projected_jacobian.setZero(6,dof);
 	_Lambda.setZero(6,6);
+	_Lambda_modified.setZero(6,6);
 	_Jbar.setZero(dof,6);
 	_N.setZero(dof,dof);
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
@@ -182,6 +183,59 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _projected_jacobian, _N_prec);
+
+	switch(_dynamic_decoupling_type)
+	{
+		case FULL_DYNAMIC_DECOUPLING :
+		{
+			_Lambda_modified = _Lambda;
+			break;
+		}
+
+		case INERTIA_SATURATION :
+		{
+			Eigen::MatrixXd M_modif = _robot->_M;
+			for(int i=0 ; i<_robot->dof() ; i++)
+			{
+				if(M_modif(i,i) < 0.1)
+				{
+					M_modif(i,i) = 0.1;
+				}
+			}
+			Eigen::MatrixXd M_inv_modif = M_modif.inverse();
+			Eigen::MatrixXd Lambda_inv_modif = _projected_jacobian * (M_inv_modif * _projected_jacobian.transpose());
+			_Lambda_modified = Lambda_inv_modif.inverse();
+			break;
+		}
+
+		case DECOUPLED_POS_ORI :
+		{
+			_Lambda_modified = _Lambda;
+			_Lambda_modified.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
+			break;
+		}
+
+		case DECOUPLED_POS_ONLY :
+		{
+			_Lambda_modified = _Lambda;
+			_Lambda_modified.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
+			_Lambda_modified.block<3,3>(0,3) = Eigen::Matrix3d::Zero();
+			_Lambda_modified.block<3,3>(3,0) = Eigen::Matrix3d::Zero();
+			break;
+		}
+
+		case IMPEDANCE :
+		{
+			_Lambda_modified = Eigen::MatrixXd::Identity(6,6);
+			break;
+		}
+
+		default :
+		{
+			_Lambda_modified = _Lambda;
+			break;			
+		}
+	}
 
 }
 
@@ -461,8 +515,8 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	feedforward_force_moment.head(3) = _sigma_force * _desired_force;
 	feedforward_force_moment.tail(3) = _sigma_moment * _desired_moment;
 
-	_task_force = _Lambda * (position_orientation_contribution) + force_moment_contribution + feedforward_force_moment + mu;
-	// _task_force = _Lambda * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
+	_task_force = _Lambda_modified * (position_orientation_contribution) + force_moment_contribution + feedforward_force_moment + mu;
+	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;
@@ -501,6 +555,33 @@ bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbo
 
 	return goal_reached;
 }
+
+void PosOriTask::setDynamicDecouplingFull()
+{
+	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+}
+
+void PosOriTask::setDynamicDecouplingInertiaSaturation()
+{
+	_dynamic_decoupling_type = INERTIA_SATURATION;
+}
+
+void PosOriTask::setDynamicDecouplingPosOnly()
+{
+	_dynamic_decoupling_type = DECOUPLED_POS_ONLY;
+}
+
+void PosOriTask::setDynamicDecouplingPosOri()
+{
+	_dynamic_decoupling_type = DECOUPLED_POS_ORI;
+}
+
+void PosOriTask::setDynamicDecouplingNone()
+{
+	_dynamic_decoupling_type = IMPEDANCE;
+}
+
+
 
 void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link)
 {
