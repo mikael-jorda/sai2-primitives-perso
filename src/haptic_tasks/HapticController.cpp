@@ -96,8 +96,8 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	//Initialize force feedback controller parameters
 	_kp_robot_trans_velocity = 10.0;
 	_kp_robot_rot_velocity = 10.0;
-	_ki_robot_trans_velocity = 0.0;
-	_ki_robot_rot_velocity = 0.0;
+	_kv_robot_trans_velocity = 0.0;
+	_kv_robot_rot_velocity = 0.0;
 
 	_robot_trans_admittance = 1/50.0;
 	_robot_rot_admittance = 1/1.5;
@@ -525,11 +525,11 @@ void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desire
 	// Integrate the translational velocity error
 	_integrated_trans_velocity_error += (_desired_trans_velocity_robot - _current_trans_velocity_robot) * _t_diff.count();
 	// Evaluate the task force 
-	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _ki_robot_trans_velocity * _integrated_trans_velocity_error;
+	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _kv_robot_trans_velocity * _integrated_trans_velocity_error;
 	// Integrate the rotational velocity error
 	_integrated_rot_velocity_error += (_desired_rot_velocity_robot - _current_rot_velocity_robot) * _t_diff.count();
 	// Evaluate task torque
-	f_task_rot = - _kp_robot_rot_velocity * (_desired_rot_velocity_robot - _current_rot_velocity_robot)- _ki_robot_rot_velocity * _integrated_rot_velocity_error;
+	f_task_rot = - _kp_robot_rot_velocity * (_desired_rot_velocity_robot - _current_rot_velocity_robot)- _kv_robot_rot_velocity * _integrated_rot_velocity_error;
 
 
 	// Apply reduction factors to force feedback
@@ -605,7 +605,7 @@ void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desire
 	// Integrate the translational velocity error
 	_integrated_trans_velocity_error += (_desired_trans_velocity_robot - _current_trans_velocity_robot) * _t_diff.count();
 	// Evaluate the task force 
-	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _ki_robot_trans_velocity * _integrated_trans_velocity_error;
+	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _kv_robot_trans_velocity * _integrated_trans_velocity_error;
 	f_task_rot.setZero();
 
 	// Apply reduction factors to force feedback
@@ -1484,8 +1484,8 @@ void HapticController::setPosCtrlGains (const double kp_position_ctrl_device, co
 	_kv_orientation_ctrl_device = kv_orientation_ctrl_device;
 }
 
-void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
-										const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
+void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double kv_robot_trans_velocity,
+										const double kp_robot_rot_velocity, const double kv_robot_rot_velocity,
 										const double robot_trans_admittance,
 										const double robot_rot_admittance,
 										const Matrix3d reduction_factor_force_feedback,
@@ -1493,14 +1493,20 @@ void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_ve
 {
 	_kp_robot_trans_velocity = kp_robot_trans_velocity;
 	_kp_robot_rot_velocity = kp_robot_rot_velocity;
-	_ki_robot_trans_velocity = ki_robot_trans_velocity;
-	_ki_robot_rot_velocity = ki_robot_rot_velocity;
+	_kv_robot_trans_velocity = kv_robot_trans_velocity;
+	_kv_robot_rot_velocity = kv_robot_rot_velocity;
 	_robot_trans_admittance = robot_trans_admittance;
 	_robot_rot_admittance = robot_rot_admittance;
 	_reduction_factor_force_feedback = reduction_factor_force_feedback;
 	_reduction_factor_torque_feedback = reduction_factor_torque_feedback;
 }
 
+void HapticController::setReductionFactorForceFeedback (const Matrix3d reduction_factor_force_feedback,
+									const Matrix3d reduction_factor_torque_feedback)
+{
+	_reduction_factor_force_feedback = reduction_factor_force_feedback;
+	_reduction_factor_torque_feedback = reduction_factor_torque_feedback;
+}
 
 void HapticController::setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
 									const double proxy_orientation_impedance, const double proxy_orientation_damping)

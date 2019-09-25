@@ -254,19 +254,23 @@ public:
 	 * 
 	 * @param kp_robot_trans_velocity       		Robot impedance term in position for feedback computation
 	 * @param ki_robot_trans_velocity 	  			Robot damping term in position for feedback computation
-	 * @param kp_robot_rot_velocity       	Robot impedance term in orientation for feedback computation
-	 * @param ki_robot_rot_velocity 	  		Robot damping term in orientation for feedback computation
+	 * @param kp_robot_rot_velocity       			Robot impedance term in orientation for feedback computation
+	 * @param ki_robot_rot_velocity 	  			Robot damping term in orientation for feedback computation
 	 * @param robot_trans_admittance 				Robot desired admittance in translation
 	 * @param robot_rot_admittance 					Robot desired admittance in rotation
 	 * @param reduction_factor_torque_feedback 		Matrix of force reduction factors
 	 * @param reduction_factor_force_feedback 		Matrix of torque reduction factors
 	 */
-	void setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
-									const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
+	void setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double kv_robot_trans_velocity,
+									const double kp_robot_rot_velocity, const double kv_robot_rot_velocity,
 									const double robot_trans_admittance,
 									const double robot_rot_admittance,
 									const Matrix3d reduction_factor_force_feedback = Matrix3d::Identity(),
 									const Matrix3d reduction_factor_torque_feedback = Matrix3d::Identity());
+
+	void setReductionFactorForceFeedback (const Matrix3d reduction_factor_force_feedback,
+									const Matrix3d reduction_factor_torque_feedback);
+
 
 	/**
 	 * @brief Set the impedance/damping terms for the force feedback evaluation via virtual proxy
@@ -550,8 +554,8 @@ private:
 	// Force feedback controller parameters
 	double _kp_robot_trans_velocity;
 	double _kp_robot_rot_velocity;
-	double _ki_robot_rot_velocity;
-	double _ki_robot_trans_velocity;
+	double _kv_robot_rot_velocity;
+	double _kv_robot_trans_velocity;
 
 	double _robot_trans_admittance;
 	double _robot_rot_admittance;
