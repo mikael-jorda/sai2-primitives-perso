@@ -618,7 +618,7 @@ void TwoHandTwoRobotsTask::setObjectMassPropertiesAndInitialInertialFrameLocatio
 	// compute the object inertia tensor in the control frame
 	Eigen::Vector3d p_com_cp = _T_com_controlpoint.translation();
 	Eigen::Matrix3d object_inertia_wrt_control_point = object_inertia +     // parallel axis theorem
-		object_mass * (p_com_cp.transpose()*p_com_cp * Eigen::Matrix3d::Identity() - p_com_cp*p_com_cp.transpose()); 
+		object_mass * (p_com_cp.dot(p_com_cp) * Eigen::Matrix3d::Identity() - p_com_cp*p_com_cp.transpose()); 
 	Eigen::Matrix3d _object_inertia_in_control_frame = _T_com_controlpoint.linear().transpose() * object_inertia_wrt_control_point * _T_com_controlpoint.linear();  // we rotate the tensor in the control frame
 
 	// update the object effective inertia in the control frame and the total effective inertia in world frame
