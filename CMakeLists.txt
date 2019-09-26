@@ -11,8 +11,8 @@ SET(CMAKE_BUILD_TYPE "Release")
 option(USE_OTG "use the Reflexxes library for trajectory generation" ON)
 if(USE_OTG)
 	# need to set these two paths manually depending on install path of Reflexxes library
-	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeIV) # need to manually set the path
-	SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeIV.so)
+	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeII) # need to manually set the path
+	SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeII.so)
 
 	SET (PROJECT_DEFINITIONS -DUSING_OTG)
 	SET (OTG_INCLUDE_DIRS ${OTG_SOURCE_DIR}/include)
