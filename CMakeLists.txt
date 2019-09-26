@@ -66,22 +66,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/OrientationTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
-	${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
-	)
-
-# add primitives 
-SET(PRIMITIVES_SOURCE 
-	${PROJECT_SOURCE_DIR}/src/primitives/RedundantArmMotion.cpp
-	${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
-	${PROJECT_SOURCE_DIR}/src/primitives/DualArmObjectMotion.cpp
-	)
-
-# add haptic_tasks
-SET(HAPTIC_TASKS_SOURCE
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
 	)
 
 # add header files
@@ -99,15 +84,11 @@ INCLUDE_DIRECTORIES (
 if(USE_OTG)
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
-		${PRIMITIVES_SOURCE}
-		${HAPTIC_TASKS_SOURCE}
 		${OTG_SOURCE}
 		)
 else()
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
-		${PRIMITIVES_SOURCE}
-		${HAPTIC_TASKS_SOURCE}
 		)
 endif()
 
