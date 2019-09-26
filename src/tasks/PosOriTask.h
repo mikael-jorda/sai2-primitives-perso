@@ -135,8 +135,24 @@ public:
 	 */
 	void reInitializeTask();
 
+	/**
+	 * @brief      Checks if the desired position is reached op to a certain tolerance
+	 *
+	 * @param[in]  tolerance  The tolerance
+	 * @param[in]  verbose    display info or not
+	 *
+	 * @return     true of the position error is smaller than the tolerance
+	 */
 	bool goalPositionReached(const double tolerance, const bool verbose = false);
 	
+	/**
+	 * @brief      Checks if the desired orientation has reched the goal up to a tolerance
+	 *
+	 * @param[in]  tolerance  The tolerance
+	 * @param[in]  verbose    display info or not
+	 *
+	 * @return     true if the norm of the orientation error is smaller than the tolerance
+	 */
 	bool goalOrientationReached(const double tolerance, const bool verbose = false);
 
 

@@ -135,7 +135,7 @@ public:
 	/**
 	 * @brief      Sets the control frame for the object. It will be placed on the object at the specified location and orientation
 	 * 			   when the function is called, and then it will follow the motion of the object assuming it is rigidly attached to the arms.
-	 * 			   Also sets the desired position and orientation to current.
+	 * 			   Also sets the desired position and orientation to current ones.
 	 *
 	 * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
 	 */
@@ -173,9 +173,53 @@ public:
 
 
 	//------------------------------------------------
-	// Attributes
+	// Attributes to be modified by user
 	//------------------------------------------------
+	Eigen::Vector3d _desired_object_position;      // world frame
+	Eigen::Matrix3d _desired_object_orientation;   // world frame
 
+	Eigen::Vector3d _desired_object_velocity;           // world frame
+	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
+
+	// gains for position control
+	double _kp_pos, _kp_ori;
+	double _kv_pos, _kv_ori;
+	double _ki_pos, _ki_ori;
+
+	Eigen::Vector3d _object_desired_force;        // world frame
+	Eigen::Vector3d _object_desired_moment;       // world frame
+
+	double _desired_internal_tension;;
+	Eigen::VectorXd _desired_internal_moments;    // dimension 5
+
+	// gains for force control
+	double _kp_force, _kp_moment;
+	double _ki_force, _ki_moment;
+	double _kv_force, _kv_moment;
+
+	// velocity saturation
+	bool _use_velocity_saturation_flag;     // false by default
+	double _linear_saturation_velocity;     // defaults to 0.3
+	double _angular_saturation_velocity;    // defaults to PI/3
+
+	// trajectory interpolation
+#ifdef USING_OTG
+	bool _use_interpolation_pos_flag;   // defaults to true
+	bool _use_interpolation_ori_flag;   // defaults to true
+
+	// default values for the limits :
+	// _otg_pos->setMaxVelocity(0.3);
+	// _otg_pos->setMaxAcceleration(0.6);
+	// _otg_pos->setMaxJerk(1.2);
+
+	// _otg_ori->setMaxVelocity(M_PI/4);
+	// _otg_ori->setMaxAcceleration(M_PI/2);
+	// _otg_ori->setMaxJerk(M_PI);
+#endif
+
+	//------------------------------------------------
+	// Attributes that the user should not touch
+	//------------------------------------------------
 	Sai2Model::Sai2Model* _robot_arm_1;
 	Sai2Model::Sai2Model* _robot_arm_2;
 
@@ -193,20 +237,12 @@ public:
 
 	// object control quantities
 	Eigen::Vector3d _current_object_position;      // world frame
-	Eigen::Vector3d _desired_object_position;      // world frame
 	Eigen::Matrix3d _current_object_orientation;   // world frame
-	Eigen::Matrix3d _desired_object_orientation;   // world frame
 
 	Eigen::Vector3d _current_object_velocity;           // world frame
-	Eigen::Vector3d _desired_object_velocity;           // world frame
 	Eigen::Vector3d _current_object_angular_velocity;   // world frame
-	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
 
 	Eigen::VectorXd _object_gravity;
-
-	double _kp_pos, _kp_ori;
-	double _kv_pos, _kv_ori;
-	double _ki_pos, _ki_ori;
 
 	Eigen::Vector3d _object_orientation_error;               // world frame
 	Eigen::Vector3d _integrated_object_orientation_error;    // world frame
@@ -226,8 +262,6 @@ public:
 
 	Eigen::Vector3d _object_sensed_force;
 	Eigen::Vector3d _object_sensed_moment;
-	Eigen::Vector3d _object_desired_force;
-	Eigen::Vector3d _object_desired_moment;
 
 	Eigen::Vector3d _integrated_object_force_error;    // world frame
 	Eigen::Vector3d _integrated_object_moment_error;   // world frame
@@ -235,18 +269,12 @@ public:
 	bool _closed_loop_force_control;
 	bool _closed_loop_moment_control;
 
-	double _kp_force, _kp_moment;
-	double _ki_force, _ki_moment;
-	double _kv_force, _kv_moment;
-
 	Eigen::Matrix3d _sigma_force;
 	Eigen::Matrix3d _sigma_moment;
 
 	// internal forces quantities
 	double _sensed_internal_tension;
 	Eigen::VectorXd _sensed_internal_moments;
-	double _desired_internal_tension;;
-	Eigen::VectorXd _desired_internal_moments;
 
 	Eigen::VectorXd _task_force;
 
@@ -283,10 +311,6 @@ public:
 	Eigen::MatrixXd _Jbar_2;
 	Eigen::MatrixXd _N_2;
 
-	bool _use_velocity_saturation_flag;
-	double _linear_saturation_velocity;
-	double _angular_saturation_velocity;
-
 	Eigen::VectorXd _step_desired_object_position;
 	Eigen::VectorXd _step_desired_object_velocity;
 	Eigen::Matrix3d _step_desired_object_orientation;
@@ -297,9 +321,6 @@ public:
 	double _loop_time;
 	OTG* _otg_pos;
 	OTG_ori* _otg_ori;
-
-	bool _use_interpolation_pos_flag;
-	bool _use_interpolation_ori_flag;
 #endif
 
 	std::chrono::high_resolution_clock::time_point _t_prev;

@@ -25,6 +25,14 @@ namespace Sai2Primitives
 
 class JointTask : public TemplateTask
 {
+
+enum DynamicDecouplingType
+{
+	FULL_DYNAMIC_DECOUPLING,   // use the real Mass matrix
+	INERTIA_SATURATION,        // use a Mass matrix computed from saturating the minimal values of the Mass Matrix
+	IMPEDANCE,                 // use Identity for the Mass matrix
+};
+
 public:
 
 	/**
@@ -65,6 +73,10 @@ public:
 	 */
 	void reInitializeTask();
 
+	// ---------- set dynamic decoupling type for the controller  ----------------
+	void setDynamicDecouplingFull();
+	void setDynamicDecouplingInertiaSaturation();
+	void setDynamicDecouplingNone();
 
 	//-----------------------------------------------
 	//         Member variables
@@ -108,6 +120,9 @@ public:
 	Eigen::MatrixXd _kp_mat;
 	Eigen::MatrixXd _kv_mat;
 	Eigen::MatrixXd _ki_mat;
+
+	Eigen::MatrixXd _M_modified;
+	int _dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
 
 #ifdef USING_OTG
 	double _loop_time;

@@ -40,6 +40,7 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 
 	// initialize matrices sizes
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
+	_M_modified = Eigen::MatrixXd::Zero(dof,dof);
 
 #ifdef USING_OTG 
 	_use_interpolation_flag = true;
@@ -72,6 +73,21 @@ void JointTask::reInitializeTask()
 #endif
 }
 
+void JointTask::setDynamicDecouplingFull()
+{
+	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+}
+
+void JointTask::setDynamicDecouplingInertiaSaturation()
+{
+	_dynamic_decoupling_type = INERTIA_SATURATION;
+}
+
+void JointTask::setDynamicDecouplingNone()
+{
+	_dynamic_decoupling_type = IMPEDANCE;
+}
+
 void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 {
 	if(N_prec.rows() != N_prec.cols())
@@ -84,6 +100,40 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	}
 
 	_N_prec = N_prec;
+
+	switch(_dynamic_decoupling_type)
+	{
+		case FULL_DYNAMIC_DECOUPLING :
+		{
+			_M_modified = _robot->_M;
+			break;
+		}
+
+		case INERTIA_SATURATION :
+		{
+			_M_modified = _robot->_M;
+			for(int i=0 ; i<_robot->dof() ; i++)
+			{
+				if(_M_modified(i,i) < 0.1)
+				{
+					_M_modified(i,i) = 0.1;
+				}
+			}
+			break;
+		}
+
+		case IMPEDANCE :
+		{
+			_M_modified = Eigen::MatrixXd::Identity(_robot->dof(), _robot->dof());
+			break;
+		}
+
+		default :
+		{
+			_M_modified = _robot->_M;
+			break;		
+		}
+	}
 }
 
 
@@ -151,12 +201,14 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 				_step_desired_velocity(i) = -_saturation_velocity(i);
 			}
 		}
-		_task_force = _robot->_M * (-_kv_mat*(_current_velocity - _step_desired_velocity));
+		_task_force = (-_kv_mat*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		_task_force = _robot->_M*(-_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
+		_task_force = (-_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
 	}
+
+	_task_force = _M_modified * _task_force;
 
 	// compute task torques
 	task_joint_torques = _N_prec.transpose() * _task_force;
