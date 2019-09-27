@@ -82,9 +82,9 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	_scaling_factor_rot=1.0;
 
 	//Initialize position controller parameters
-	_kp_position_ctrl_device = 0.2;
-	_kv_position_ctrl_device = 0.7;
-	_kp_orientation_ctrl_device = 0.6;
+	_kp_position_ctrl_device = 0.15;
+	_kv_position_ctrl_device = 0.5;
+	_kp_orientation_ctrl_device = 0.5;
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
