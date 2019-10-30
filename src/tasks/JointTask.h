@@ -129,7 +129,7 @@ public:
 	Eigen::MatrixXd _ki_mat;
 
 	Eigen::MatrixXd _M_modified;
-	int _dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+	int _dynamic_decoupling_type = INERTIA_SATURATION;
 
 #ifdef USING_OTG
 	double _loop_time;
