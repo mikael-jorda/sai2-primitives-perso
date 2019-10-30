@@ -171,7 +171,7 @@ void OTG_ori::setGoalPositionAndVelocity(const Eigen::Matrix3d goal_orientation,
 
 }
 
-void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3d& next_angular_velocity)
+void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3d& next_angular_velocity, Eigen::Vector3d& next_angular_acceleration)
 {
 	Eigen::Vector3d next_ori_representation = Eigen::Vector3d::Zero();
 
@@ -182,6 +182,7 @@ void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3
 	    _IP->CurrentAccelerationVector->VecData[i] = _OP->NewAccelerationVector->VecData[i];
 		next_ori_representation(i) = _IP->TargetPositionVector->VecData[i];
 		next_angular_velocity(i) = 0;
+		next_angular_acceleration(i) = 0;
 	}
 
 	if(!_goal_reached)
@@ -204,6 +205,7 @@ void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3
 		{
 			next_ori_representation(i) = _OP->NewPositionVector->VecData[i];
 			next_angular_velocity(i) = _OP->NewVelocityVector->VecData[i];
+			next_angular_acceleration(i) = _OP->NewAccelerationVector->VecData[i];
 		}
 	}
 
@@ -218,6 +220,7 @@ void OTG_ori::computeNextState(Eigen::Matrix3d& next_orientation, Eigen::Vector3
 
 	next_orientation = _initial_orientation*next_orientation;
 	next_angular_velocity = _initial_orientation*next_angular_velocity;
+	next_angular_acceleration = _initial_orientation*next_angular_acceleration;
 
 	_goal_reached = (_ResultValue == ReflexxesAPI::RML_FINAL_STATE_REACHED);
 	

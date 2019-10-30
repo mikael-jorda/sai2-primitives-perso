@@ -33,11 +33,10 @@ class PosOriTask : public TemplateTask
 
 enum DynamicDecouplingType
 {
-	FULL_DYNAMIC_DECOUPLING,   // use the real Lambda matrix
-	INERTIA_SATURATION,        // use a Lambda matrix computed from saturating the minimal values of the Mass Matrix
-	DECOUPLED_POS_ORI,          // decouple position part and decouple position from orientation
-	DECOUPLED_POS_ONLY,         // decouple position part only
-	IMPEDANCE,                 // use Identity for the mass matrix
+	FULL_DYNAMIC_DECOUPLING,            // use the real Lambda matrix
+	PARTIAL_DYNAMIC_DECOUPLING,         // Use Lambda for position part, Identity for orientation and Zero for cross coupling
+	IMPEDANCE,                          // use Identity for the mass matrix
+	JOINT_INERTIA_SATURATION,           // Use a Lambda computed from a saturated joint space mass matrix
 };
 
 public:
@@ -158,11 +157,17 @@ public:
 
 	// ---------- set dynamic decoupling type for the controller  ----------------
 	void setDynamicDecouplingFull();
-	void setDynamicDecouplingInertiaSaturation();
-	void setDynamicDecouplingPosOnly();
-	void setDynamicDecouplingPosOri();
+	void setDynamicDecouplingPartial();
 	void setDynamicDecouplingNone();
+	void setDynamicDecouplingInertiaSaturation();
 
+	void setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
+		const Eigen::Vector3d& kv, const Eigen::Vector3d& ki);
+	void setNonIsotropicGainsOrientation(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
+		const Eigen::Vector3d& kv, const Eigen::Vector3d& ki);
+
+	void setIsotropicGainsPosition(const double kp, const double kv, const double ki);
+	void setIsotropicGainsOrientation(const double kp, const double kv, const double ki);
 
 	// -------- force control related methods --------
 
@@ -422,6 +427,8 @@ public:
 	Eigen::Matrix3d _desired_orientation;        // in robot frame
 	Eigen::Vector3d _desired_velocity;           // in robot frame
 	Eigen::Vector3d _desired_angular_velocity;   // in robot frame
+	Eigen::Vector3d _desired_acceleration;
+	Eigen::Vector3d _desired_angular_acceleration;
 
 	// gains for motion controller
 	// defaults to 50 for p gains, 14 for d gains and 0 fir i gains
@@ -448,10 +455,9 @@ public:
 	double _linear_saturation_velocity;   // defaults to 0.3 m/s
 	double _angular_saturation_velocity;  // defaults to PI/3 Rad/s
 
-	bool _use_isotropic_gains;              // defaults to true
-	Eigen::Vector3d _kp_pos_vec, _kp_ori_vec;
-	Eigen::Vector3d _kv_pos_vec, _kv_ori_vec;
-	Eigen::Vector3d _ki_pos_vec, _ki_ori_vec;
+	// Eigen::Vector3d _kp_pos_vec, _kp_ori_vec;
+	// Eigen::Vector3d _kv_pos_vec, _kv_ori_vec;
+	// Eigen::Vector3d _ki_pos_vec, _ki_ori_vec;
 
 // trajectory generation via interpolation using Reflexxes Library
 // on by defalut
@@ -521,11 +527,13 @@ public:
 	ButterworthFilter* _filter_feedback_force;
 	ButterworthFilter* _filter_feedback_moment;
 
+	bool _use_isotropic_gains_position;                 // defaults to true
+	bool _use_isotropic_gains_orientation;              // defaults to true
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
 	Eigen::Matrix3d _ki_pos_mat, _ki_ori_mat;
 
-	int _dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+	int _dynamic_decoupling_type = JOINT_INERTIA_SATURATION;
 
 	// model quantities
 	Eigen::MatrixXd _jacobian;
@@ -544,6 +552,8 @@ public:
 	Eigen::Matrix3d _step_desired_orientation;
 	Eigen::Vector3d _step_orientation_error;
 	Eigen::Vector3d _step_desired_angular_velocity;
+	Eigen::Vector3d _step_desired_acceleration;
+	Eigen::Vector3d _step_desired_angular_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;

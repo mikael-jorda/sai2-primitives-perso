@@ -181,6 +181,9 @@ public:
 	Eigen::Vector3d _desired_object_velocity;           // world frame
 	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
 
+	Eigen::Vector3d _desired_object_acceleration;           // world frame
+	Eigen::Vector3d _desired_object_angular_acceleration;   // world frame
+
 	// gains for position control
 	double _kp_pos, _kp_ori;
 	double _kv_pos, _kv_ori;
@@ -313,9 +316,11 @@ public:
 
 	Eigen::VectorXd _step_desired_object_position;
 	Eigen::VectorXd _step_desired_object_velocity;
+	Eigen::VectorXd _step_desired_object_acceleration;
 	Eigen::Matrix3d _step_desired_object_orientation;
 	Eigen::Vector3d _step_object_orientation_error;
 	Eigen::Vector3d _step_desired_object_angular_velocity;
+	Eigen::Vector3d _step_desired_object_angular_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;

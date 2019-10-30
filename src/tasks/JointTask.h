@@ -78,13 +78,18 @@ public:
 	void setDynamicDecouplingInertiaSaturation();
 	void setDynamicDecouplingNone();
 
+	void setNonIsotropicGains(const Eigen::VectorXd& kp, const Eigen::VectorXd& kv, const Eigen::VectorXd& ki);
+	void setIsotropicGains(const double kp, const double kv, const double ki);
+
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
 
 	// inputs to be defined by the user
-	Eigen::VectorXd _desired_position;   // defaults to the current configuration when the task is created
-	Eigen::VectorXd _desired_velocity;   // defaults to zero
+	Eigen::VectorXd _desired_position;       // defaults to the current configuration when the task is created
+	Eigen::VectorXd _desired_velocity;       // defaults to zero
+	Eigen::VectorXd _desired_acceleration;   // defaults to zero
+
 
 	double _kp;      // defaults to 50.0
 	double _kv;      // defaults to 14.0
@@ -93,10 +98,10 @@ public:
 	bool _use_velocity_saturation_flag;    // defaults to false
 	Eigen::VectorXd _saturation_velocity;  // defaults to PI/3 for all axes
 
-	bool _use_isotropic_gains;              // defaults to true
-	Eigen::VectorXd _kp_vec;
-	Eigen::VectorXd _kv_vec;
-	Eigen::VectorXd _ki_vec;
+	// bool _use_isotropic_gains;              // defaults to true
+	// Eigen::VectorXd _kp_vec;
+	// Eigen::VectorXd _kv_vec;
+	// Eigen::VectorXd _ki_vec;
 
 // trajectory generation via interpolation using Reflexxes Library
 #ifdef USING_OTG
@@ -116,7 +121,9 @@ public:
 
 	Eigen::VectorXd _step_desired_position;
 	Eigen::VectorXd _step_desired_velocity;
+	Eigen::VectorXd _step_desired_acceleration;
 
+	bool _use_isotropic_gains;
 	Eigen::MatrixXd _kp_mat;
 	Eigen::MatrixXd _kv_mat;
 	Eigen::MatrixXd _ki_mat;

@@ -75,9 +75,11 @@ void PositionTask::reInitializeTask()
 
 	_robot->position(_desired_position, _link_name, _control_frame.translation());
 	_desired_velocity.setZero();
+	_desired_acceleration.setZero();
 
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
+	_step_desired_acceleration = _desired_acceleration;
 
 	_integrated_position_error.setZero();
 
@@ -130,13 +132,14 @@ void PositionTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_current_velocity = _projected_jacobian * _robot->_dq;
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
+	_step_desired_acceleration = _desired_acceleration;
 
 	// compute next state from trajectory generation
 #ifdef USING_OTG
 	if(_use_interpolation_flag)
 	{
 		_otg->setGoalPositionAndVelocity(_desired_position, _desired_velocity);
-		_otg->computeNextState(_step_desired_position, _step_desired_velocity);
+		_otg->computeNextState(_step_desired_position, _step_desired_velocity, _step_desired_acceleration);
 	}
 #endif
 
@@ -151,11 +154,11 @@ void PositionTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		{
 			_step_desired_velocity *= _saturation_velocity / _step_desired_velocity.norm();
 		}
-		_task_force = _Lambda * (-_kv*(_current_velocity - _step_desired_velocity));
+		_task_force = _Lambda * (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		_task_force = _Lambda*(-_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error);
+		_task_force = _Lambda*(_step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error);
 	}
 
 	// compute task torques

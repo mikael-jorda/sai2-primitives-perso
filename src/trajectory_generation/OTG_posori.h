@@ -158,8 +158,8 @@ public:
 	 *                                    step
 	 * @param      next_angular_velocity  The desired velocity in the next step
 	 */
-	void computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3d& next_velocity,
-		Eigen::Matrix3d& next_orientation, Eigen::Vector3d& next_angular_velocity);
+	void computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3d& next_velocity, Eigen::Vector3d& next_acceleration,
+		Eigen::Matrix3d& next_orientation, Eigen::Vector3d& next_angular_velocity, Eigen::Vector3d& next_angular_acceleration);
 
 	/**
 	 * @brief      Function to know if the goal position and velocity is reached

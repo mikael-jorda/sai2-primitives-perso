@@ -30,10 +30,6 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 	_saturation_velocity = M_PI/3.0*Eigen::VectorXd::Ones(dof);
 
 	_use_isotropic_gains = true;
-	_kp_vec = _kp*Eigen::VectorXd::Ones(dof);
-	_kv_vec = _kv*Eigen::VectorXd::Ones(dof);
-	_ki_vec = _ki*Eigen::VectorXd::Ones(dof);
-
 	_kp_mat = Eigen::MatrixXd::Zero(dof,dof);
 	_kv_mat = Eigen::MatrixXd::Zero(dof,dof);
 	_ki_mat = Eigen::MatrixXd::Zero(dof,dof);
@@ -60,9 +56,11 @@ void JointTask::reInitializeTask()
 
 	_desired_position = _robot->_q;
 	_desired_velocity.setZero(dof);
+	_desired_acceleration.setZero(dof);
 
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
+	_step_desired_acceleration = _desired_acceleration;
 
 	_task_force.setZero();
 	_integrated_position_error.setZero(dof);
@@ -87,6 +85,39 @@ void JointTask::setDynamicDecouplingNone()
 {
 	_dynamic_decoupling_type = IMPEDANCE;
 }
+
+void JointTask::setNonIsotropicGains(const Eigen::VectorXd& kp, const Eigen::VectorXd& kv, const Eigen::VectorXd& ki)
+{
+	int dof = _robot->dof();
+
+	if(kp.size() != dof || kv.size() != dof || ki.size() != dof)
+	{
+		throw std::invalid_argument("size of gain vector inconsistent with number of robot joints in JointTask::useNonIsotropicGains\n");
+	}
+
+	_use_isotropic_gains = false;
+
+	_kp_mat.setZero(dof,dof);
+	_kv_mat.setZero(dof,dof);
+	_ki_mat.setZero(dof,dof);
+
+	for(int i=0 ; i<dof ; i++)
+	{
+		_kp_mat(i,i) = kp(i);
+		_kv_mat(i,i) = kv(i);
+		_ki_mat(i,i) = ki(i);
+	}
+}
+	
+void JointTask::setIsotropicGains(const double kp, const double kv, const double ki)
+{
+	_use_isotropic_gains = true;
+
+	_kp = kp;
+	_kv = kv;
+	_ki = ki;
+}
+
 
 void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 {
@@ -157,15 +188,9 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// update matrix gains
 	if(_use_isotropic_gains)
 	{
-		_kp_vec = _kp*Eigen::VectorXd::Ones(dof);
-		_kv_vec = _kv*Eigen::VectorXd::Ones(dof);
-		_ki_vec = _ki*Eigen::VectorXd::Ones(dof);
-	}
-	for(int i=0 ; i<dof ; i++)
-	{
-		_kp_mat(i,i) = _kp_vec(i);
-		_kv_mat(i,i) = _kv_vec(i);
-		_ki_mat(i,i) = _ki_vec(i);
+		_kp_mat = _kp * Eigen::MatrixXd::Identity(dof,dof);
+		_kv_mat = _kv * Eigen::MatrixXd::Identity(dof,dof);
+		_ki_mat = _ki * Eigen::MatrixXd::Identity(dof,dof);
 	}
 
 	// update constroller state
@@ -173,13 +198,14 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_current_velocity = _robot->_dq;
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
+	_step_desired_acceleration = _desired_acceleration;
 
 	// compute next state from trajectory generation
 #ifdef USING_OTG
 	if(_use_interpolation_flag)
 	{
 		_otg->setGoalPositionAndVelocity(_desired_position, _desired_velocity);
-		_otg->computeNextState(_step_desired_position, _step_desired_velocity);
+		_otg->computeNextState(_step_desired_position, _step_desired_velocity, _step_desired_acceleration);
 	}
 #endif
 
@@ -201,11 +227,11 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 				_step_desired_velocity(i) = -_saturation_velocity(i);
 			}
 		}
-		_task_force = (-_kv_mat*(_current_velocity - _step_desired_velocity));
+		_task_force = (_step_desired_acceleration -_kv_mat*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		_task_force = (-_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
+		_task_force = (_step_desired_acceleration -_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
 	}
 
 	_task_force = _M_modified * _task_force;

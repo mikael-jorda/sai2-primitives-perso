@@ -102,6 +102,7 @@ public:
 	// inputs to be defined by the user
 	Eigen::Matrix3d _desired_orientation;       // defaults to the current orientation when the task is created
 	Eigen::Vector3d _desired_angular_velocity;  // defaults to Zero
+	Eigen::Vector3d _desired_angular_acceleration;  // defaults to Zero
 
 	double _kp;    // defaults to 50.0 
 	double _kv;    // defaults to 14.0
@@ -139,6 +140,7 @@ public:
 	Eigen::Matrix3d _step_desired_orientation;
 	Eigen::Vector3d _step_orientation_error;
 	Eigen::Vector3d _step_desired_angular_velocity;
+	Eigen::Vector3d _step_desired_angular_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;

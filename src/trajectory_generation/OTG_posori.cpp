@@ -233,8 +233,8 @@ void OTG_posori::setGoalOrientationAndAngularVelocity(const Eigen::Matrix3d goal
 
 }
 
-void OTG_posori::computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3d& next_linear_velocity,
-			Eigen::Matrix3d& next_orientation, Eigen::Vector3d& next_angular_velocity)
+void OTG_posori::computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3d& next_linear_velocity, Eigen::Vector3d& next_linear_acceleration,
+			Eigen::Matrix3d& next_orientation, Eigen::Vector3d& next_angular_velocity, Eigen::Vector3d& next_angular_acceleration)
 {
 	Eigen::Vector3d next_ori_representation = Eigen::Vector3d::Zero();
 
@@ -245,12 +245,14 @@ void OTG_posori::computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3
 	    _IP->CurrentAccelerationVector->VecData[i] = _OP->NewAccelerationVector->VecData[i];
 		next_position(i) = _IP->CurrentPositionVector->VecData[i];
 		next_linear_velocity(i) = 0;
+		next_linear_acceleration(i) = 0;
 
 		_IP->CurrentPositionVector->VecData[i+3] = _OP->NewPositionVector->VecData[i+3];
 	    _IP->CurrentVelocityVector->VecData[i+3] = _OP->NewVelocityVector->VecData[i+3];
 	    _IP->CurrentAccelerationVector->VecData[i+3] = _OP->NewAccelerationVector->VecData[i+3];
 		next_ori_representation(i) = _IP->CurrentPositionVector->VecData[i+3];
 		next_angular_velocity(i) = 0;
+		next_angular_acceleration(i) = 0;
 	}
 
 	if(!_goal_reached)
@@ -274,8 +276,10 @@ void OTG_posori::computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3
 		{
 			next_position(i) = _OP->NewPositionVector->VecData[i];
 			next_linear_velocity(i) = _OP->NewVelocityVector->VecData[i];
+			next_linear_acceleration(i) = _OP->NewAccelerationVector->VecData[i];
 			next_ori_representation(i) = _OP->NewPositionVector->VecData[i+3];
 			next_angular_velocity(i) = _OP->NewVelocityVector->VecData[i+3];
+			next_angular_acceleration(i) = _OP->NewAccelerationVector->VecData[i+3];
 		}
 	}
 
@@ -290,6 +294,7 @@ void OTG_posori::computeNextState(Eigen::Vector3d& next_position, Eigen::Vector3
 
 	next_orientation = _initial_orientation*next_orientation;
 	next_angular_velocity = _initial_orientation*next_angular_velocity;
+	next_angular_acceleration = _initial_orientation*next_angular_acceleration;
 
 	_goal_reached = (_ResultValue == ReflexxesAPI::RML_FINAL_STATE_REACHED);
 	

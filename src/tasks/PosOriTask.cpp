@@ -50,14 +50,8 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_kv_ori = 14.0;
 	_ki_ori = 0.0;
 
-	_use_isotropic_gains = true;
-	_kp_pos_vec = _kp_pos * Eigen::Vector3d::Ones();
-	_kv_pos_vec = _kv_pos * Eigen::Vector3d::Ones();
-	_ki_pos_vec = _ki_pos * Eigen::Vector3d::Ones();
-	_kp_ori_vec = _kp_ori * Eigen::Vector3d::Ones();
-	_kv_ori_vec = _kv_ori * Eigen::Vector3d::Ones();
-	_ki_ori_vec = _ki_ori * Eigen::Vector3d::Ones();
-
+	_use_isotropic_gains_position = true;
+	_use_isotropic_gains_orientation = true;
 	_kp_pos_mat = Eigen::Matrix3d::Zero();
 	_kv_pos_mat = Eigen::Matrix3d::Zero();
 	_ki_pos_mat = Eigen::Matrix3d::Zero();
@@ -121,6 +115,8 @@ void PosOriTask::reInitializeTask()
 	_desired_velocity.setZero();
 	_current_angular_velocity.setZero();
 	_desired_angular_velocity.setZero();
+	_desired_acceleration.setZero();
+	_desired_angular_acceleration.setZero();
 
 	_orientation_error.setZero();
 	_integrated_position_error.setZero();
@@ -129,8 +125,10 @@ void PosOriTask::reInitializeTask()
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
 	_step_desired_orientation = _desired_orientation;
-	_step_orientation_error.setZero(3);
-	_step_desired_angular_velocity.setZero(3);
+	_step_orientation_error.setZero();
+	_step_desired_angular_velocity.setZero();
+	_step_desired_acceleration.setZero();
+	_step_desired_angular_acceleration.setZero();
 
 	_sigma_position = Eigen::Matrix3d::Identity();
 	_sigma_orientation = Eigen::Matrix3d::Identity();
@@ -192,7 +190,22 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 			break;
 		}
 
-		case INERTIA_SATURATION :
+		case PARTIAL_DYNAMIC_DECOUPLING :
+		{
+			_Lambda_modified = _Lambda;
+			_Lambda_modified.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
+			_Lambda_modified.block<3,3>(0,3) = Eigen::Matrix3d::Zero();
+			_Lambda_modified.block<3,3>(3,0) = Eigen::Matrix3d::Zero();
+			break;
+		}
+
+		case IMPEDANCE :
+		{
+			_Lambda_modified = Eigen::MatrixXd::Identity(6,6);
+			break;
+		}
+
+		case JOINT_INERTIA_SATURATION :
 		{
 			Eigen::MatrixXd M_modif = _robot->_M;
 			for(int i=0 ; i<_robot->dof() ; i++)
@@ -208,28 +221,6 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 			break;
 		}
 
-		case DECOUPLED_POS_ORI :
-		{
-			_Lambda_modified = _Lambda;
-			_Lambda_modified.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
-			break;
-		}
-
-		case DECOUPLED_POS_ONLY :
-		{
-			_Lambda_modified = _Lambda;
-			_Lambda_modified.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
-			_Lambda_modified.block<3,3>(0,3) = Eigen::Matrix3d::Zero();
-			_Lambda_modified.block<3,3>(3,0) = Eigen::Matrix3d::Zero();
-			break;
-		}
-
-		case IMPEDANCE :
-		{
-			_Lambda_modified = Eigen::MatrixXd::Identity(6,6);
-			break;
-		}
-
 		default :
 		{
 			_Lambda_modified = _Lambda;
@@ -238,7 +229,6 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	}
 
 }
-
 
 void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 {
@@ -267,23 +257,17 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 
 	// update matrix gains
-	if(_use_isotropic_gains)
+	if(_use_isotropic_gains_position)
 	{
-		_kp_pos_vec = _kp_pos * Eigen::Vector3d::Ones();
-		_kv_pos_vec = _kv_pos * Eigen::Vector3d::Ones();
-		_ki_pos_vec = _ki_pos * Eigen::Vector3d::Ones();
-		_kp_ori_vec = _kp_ori * Eigen::Vector3d::Ones();
-		_kv_ori_vec = _kv_ori * Eigen::Vector3d::Ones();
-		_ki_ori_vec = _ki_ori * Eigen::Vector3d::Ones();
+		_kp_pos_mat = _kp_pos * Eigen::Matrix3d::Identity();
+		_kv_pos_mat = _kv_pos * Eigen::Matrix3d::Identity();
+		_ki_pos_mat = _ki_pos * Eigen::Matrix3d::Identity();
 	}
-	for(int i=0 ; i<3 ; i++)
+	if(_use_isotropic_gains_orientation)
 	{
-		_kp_pos_mat(i,i) = _kp_pos_vec(i);
-		_kv_pos_mat(i,i) = _kv_pos_vec(i);
-		_ki_pos_mat(i,i) = _ki_pos_vec(i);
-		_kp_ori_mat(i,i) = _kp_ori_vec(i);
-		_kv_ori_mat(i,i) = _kv_ori_vec(i);
-		_ki_ori_mat(i,i) = _ki_ori_vec(i);
+		_kp_ori_mat = _kp_ori * Eigen::Matrix3d::Identity();
+		_kv_ori_mat = _kv_ori * Eigen::Matrix3d::Identity();
+		_ki_ori_mat = _ki_ori * Eigen::Matrix3d::Identity();
 	}
 
 	Eigen::Vector3d force_related_force = Eigen::Vector3d::Zero();
@@ -301,9 +285,11 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
+	_step_desired_acceleration = _desired_acceleration;
 	_step_desired_orientation = _desired_orientation;
 	_step_orientation_error = _orientation_error;
 	_step_desired_angular_velocity = _desired_angular_velocity;
+	_step_desired_angular_acceleration = _desired_angular_acceleration;
 
 	// force related terms
 	if(_closed_loop_force_control)
@@ -387,54 +373,54 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		Eigen::Vector3d moment_feedback_term = _filter_feedback_moment->update(moment_feedback_term_raw);
 		// Eigen::Vector3d moment_feedback_term = moment_feedback_term_raw;
 
-		if(_passivity_enabled)
-		{
-			Eigen::Vector3d f_diff = _desired_moment - _sensed_moment;
+		// if(_passivity_enabled)
+		// {
+		// 	Eigen::Vector3d f_diff = _desired_moment - _sensed_moment;
 			
-			double power_input_output = ((double)(_desired_moment.transpose() * _sigma_moment * moment_feedback_term) -
-					(double) (moment_feedback_term.transpose() * _sigma_moment * moment_feedback_term) * _Rc_inv_moment) * _t_diff.count();
+		// 	double power_input_output = ((double)(_desired_moment.transpose() * _sigma_moment * moment_feedback_term) -
+		// 			(double) (moment_feedback_term.transpose() * _sigma_moment * moment_feedback_term) * _Rc_inv_moment) * _t_diff.count();
 
-			_passivity_observer_moment += power_input_output;
+		// 	_passivity_observer_moment += power_input_output;
 
-			_stored_energy_moment = 0.5 * _ki_moment * (double) (_integrated_moment_error.transpose() * _sigma_moment * _integrated_moment_error);
-			_stored_energy_moment = 0.0;
+		// 	_stored_energy_moment = 0.5 * _ki_moment * (double) (_integrated_moment_error.transpose() * _sigma_moment * _integrated_moment_error);
+		// 	_stored_energy_moment = 0.0;
 
-			_PO_buffer_moment.push(power_input_output);
+		// 	_PO_buffer_moment.push(power_input_output);
 
-			if(_passivity_observer_moment + _stored_energy_moment > 0)
-			{
-				while(_PO_buffer_moment.size() > _PO_buffer_size_moment)
-				{
-					if(_passivity_observer_moment + _stored_energy_moment > _PO_buffer_moment.front())
-					{
-						if(_PO_buffer_moment.front() > 0)
-						{
-							_passivity_observer_moment -= _PO_buffer_moment.front();
-						}
-						_PO_buffer_moment.pop();
-					}
-					else
-					{
-						break;
-					}
-				}
-			}
+		// 	if(_passivity_observer_moment + _stored_energy_moment > 0)
+		// 	{
+		// 		while(_PO_buffer_moment.size() > _PO_buffer_size_moment)
+		// 		{
+		// 			if(_passivity_observer_moment + _stored_energy_moment > _PO_buffer_moment.front())
+		// 			{
+		// 				if(_PO_buffer_moment.front() > 0)
+		// 				{
+		// 					_passivity_observer_moment -= _PO_buffer_moment.front();
+		// 				}
+		// 				_PO_buffer_moment.pop();
+		// 			}
+		// 			else
+		// 			{
+		// 				break;
+		// 			}
+		// 		}
+		// 	}
 
-			double Rcb_inv = _Rc_inv_moment + (_passivity_observer_moment + _stored_energy_moment) / ((double) (moment_feedback_term.transpose() * _sigma_moment * moment_feedback_term) * _t_diff.count());
+		// 	double Rcb_inv = _Rc_inv_moment + (_passivity_observer_moment + _stored_energy_moment) / ((double) (moment_feedback_term.transpose() * _sigma_moment * moment_feedback_term) * _t_diff.count());
 
-			if(Rcb_inv > 1)
-			{
-				Rcb_inv = 1;
-			}
-			if(Rcb_inv < 0.001)
-			{
-				Rcb_inv = 0.001;
-			}
+		// 	if(Rcb_inv > 1)
+		// 	{
+		// 		Rcb_inv = 1;
+		// 	}
+		// 	if(Rcb_inv < 0.001)
+		// 	{
+		// 		Rcb_inv = 0.001;
+		// 	}
 
-			_passivity_observer_moment += (double) (moment_feedback_term.transpose() * _sigma_moment * moment_feedback_term) * (_Rc_inv_moment - Rcb_inv) * _t_diff.count();
-			_Rc_inv_moment = Rcb_inv;
+		// 	_passivity_observer_moment += (double) (moment_feedback_term.transpose() * _sigma_moment * moment_feedback_term) * (_Rc_inv_moment - Rcb_inv) * _t_diff.count();
+		// 	_Rc_inv_moment = Rcb_inv;
 
-		}
+		// }
 
 		// compute the final contribution
 		// moment_related_force = _sigma_moment * (_desired_moment + moment_feedback_term - _kv_moment * _current_angular_velocity);
@@ -454,8 +440,8 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	{
 		_otg->setGoalPositionAndLinearVelocity(_desired_position, _desired_velocity);
 		_otg->setGoalOrientationAndAngularVelocity(_desired_orientation, _current_orientation, _desired_angular_velocity);
-		_otg->computeNextState(_step_desired_position, _step_desired_velocity,
-							_step_desired_orientation, _step_desired_angular_velocity);
+		_otg->computeNextState(_step_desired_position, _step_desired_velocity, _step_desired_acceleration,
+							_step_desired_orientation, _step_desired_angular_velocity, _step_desired_angular_acceleration);
 		Sai2Model::orientationError(_step_orientation_error, _step_desired_orientation, _current_orientation);
 	}
 #endif
@@ -472,12 +458,12 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		{
 			_step_desired_velocity *= _linear_saturation_velocity/_step_desired_velocity.norm();
 		}
-		position_related_force = _sigma_position * (-_kv_pos_mat*(_current_velocity - _step_desired_velocity));
+		position_related_force = _sigma_position * (_step_desired_acceleration -_kv_pos_mat*(_current_velocity - _step_desired_velocity));
 		// position_related_force = -_kv_pos_mat*(_current_velocity - _step_desired_velocity);
 	}
 	else
 	{
-		position_related_force = _sigma_position*(-_kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error);
+		position_related_force = _sigma_position*( _step_desired_acceleration - _kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error);
 		// position_related_force = -_kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error;
 	}
 
@@ -494,11 +480,11 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		{
 			_step_desired_angular_velocity *= _angular_saturation_velocity/_step_desired_angular_velocity.norm();
 		}
-		orientation_related_force = _sigma_orientation * (-_kv_ori_mat*(_current_angular_velocity - _step_desired_angular_velocity));
+		orientation_related_force = _sigma_orientation * (_step_desired_angular_acceleration - _kv_ori_mat*(_current_angular_velocity - _step_desired_angular_velocity));
 	}
 	else
 	{
-		orientation_related_force = _sigma_orientation * ( -_kp_ori_mat*_step_orientation_error - _kv_ori_mat*(_current_angular_velocity - _step_desired_angular_velocity) - _ki_ori_mat*_integrated_orientation_error);
+		orientation_related_force = _sigma_orientation * (_step_desired_angular_acceleration - _kp_ori_mat*_step_orientation_error - _kv_ori_mat*(_current_angular_velocity - _step_desired_angular_velocity) - _ki_ori_mat*_integrated_orientation_error);
 	}
 
 	// compute task force
@@ -561,19 +547,9 @@ void PosOriTask::setDynamicDecouplingFull()
 	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
 }
 
-void PosOriTask::setDynamicDecouplingInertiaSaturation()
+void PosOriTask::setDynamicDecouplingPartial()
 {
-	_dynamic_decoupling_type = INERTIA_SATURATION;
-}
-
-void PosOriTask::setDynamicDecouplingPosOnly()
-{
-	_dynamic_decoupling_type = DECOUPLED_POS_ONLY;
-}
-
-void PosOriTask::setDynamicDecouplingPosOri()
-{
-	_dynamic_decoupling_type = DECOUPLED_POS_ORI;
+	_dynamic_decoupling_type = PARTIAL_DYNAMIC_DECOUPLING;
 }
 
 void PosOriTask::setDynamicDecouplingNone()
@@ -581,7 +557,81 @@ void PosOriTask::setDynamicDecouplingNone()
 	_dynamic_decoupling_type = IMPEDANCE;
 }
 
+void PosOriTask::setDynamicDecouplingInertiaSaturation()
+{
+	_dynamic_decoupling_type = JOINT_INERTIA_SATURATION;
+}
 
+void PosOriTask::setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
+	const Eigen::Vector3d& kv, const Eigen::Vector3d& ki)
+{
+	if( (Eigen::Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
+	{
+		throw std::invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsPosition\n");
+	}
+
+	_use_isotropic_gains_position = false;
+
+	Eigen::Matrix3d kp_pos_mat_tmp = Eigen::Matrix3d::Zero();
+	Eigen::Matrix3d kv_pos_mat_tmp = Eigen::Matrix3d::Zero();
+	Eigen::Matrix3d ki_pos_mat_tmp = Eigen::Matrix3d::Zero();
+
+	for(int i=0 ; i<3 ; i++)
+	{
+		kp_pos_mat_tmp(i,i) = kp(i);
+		kv_pos_mat_tmp(i,i) = kv(i);
+		ki_pos_mat_tmp(i,i) = ki(i);
+	}
+
+	_kp_pos_mat = frame * kp_pos_mat_tmp * frame.transpose();
+	_kv_pos_mat = frame * kv_pos_mat_tmp * frame.transpose();
+	_ki_pos_mat = frame * ki_pos_mat_tmp * frame.transpose();
+
+}
+
+void PosOriTask::setNonIsotropicGainsOrientation(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
+	const Eigen::Vector3d& kv, const Eigen::Vector3d& ki)
+{
+	if( (Eigen::Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
+	{
+		throw std::invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsOrientation\n");
+	}
+
+	_use_isotropic_gains_orientation = false;
+
+	Eigen::Matrix3d kp_ori_mat_tmp = Eigen::Matrix3d::Zero();
+	Eigen::Matrix3d kv_ori_mat_tmp = Eigen::Matrix3d::Zero();
+	Eigen::Matrix3d ki_ori_mat_tmp = Eigen::Matrix3d::Zero();
+
+	for(int i=0 ; i<3 ; i++)
+	{
+		kp_ori_mat_tmp(i,i) = kp(i);
+		kv_ori_mat_tmp(i,i) = kv(i);
+		ki_ori_mat_tmp(i,i) = ki(i);
+	}
+
+	_kp_ori_mat = frame * kp_ori_mat_tmp * frame.transpose();
+	_kv_ori_mat = frame * kv_ori_mat_tmp * frame.transpose();
+	_ki_ori_mat = frame * ki_ori_mat_tmp * frame.transpose();	
+}
+
+void PosOriTask::setIsotropicGainsPosition(const double kp, const double kv, const double ki)
+{
+	_use_isotropic_gains_position = true;
+
+	_kp_pos = kp;
+	_kv_pos = kv;
+	_ki_pos = ki;
+}
+
+void PosOriTask::setIsotropicGainsOrientation(const double kp, const double kv, const double ki)
+{
+	_use_isotropic_gains_orientation = true;
+
+	_kp_ori = kp;
+	_kv_ori = kv;
+	_ki_ori = ki;	
+}
 
 void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link)
 {

@@ -141,7 +141,7 @@ void OTG::setGoalPositionAndVelocity(const Eigen::VectorXd goal_position, const 
 }
 
 
-void OTG::computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next_velocity)
+void OTG::computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next_velocity, Eigen::VectorXd& next_acceleration)
 {
 	next_position.setZero(_task_dof);
 	for(int i=0 ; i<_task_dof ; i++)
@@ -151,6 +151,7 @@ void OTG::computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next
 	    _IP->CurrentAccelerationVector->VecData[i] = _OP->NewAccelerationVector->VecData[i];
 		next_position(i) = _IP->TargetPositionVector->VecData[i];
 		next_velocity(i) = 0;
+		next_acceleration(i) = 0;
 	}
 
 	if(!_goal_reached)
@@ -173,6 +174,7 @@ void OTG::computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next
 		{
 			next_position(i) = _OP->NewPositionVector->VecData[i];
 			next_velocity(i) = _OP->NewVelocityVector->VecData[i];
+			next_acceleration(i) = _OP->NewAccelerationVector->VecData[i];
 		}
 	}
 

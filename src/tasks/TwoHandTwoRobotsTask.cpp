@@ -278,9 +278,11 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 
 	_step_desired_object_position = _desired_object_position;
 	_step_desired_object_velocity = _desired_object_velocity;
+	_step_desired_object_acceleration = _desired_object_acceleration;
 	_step_desired_object_orientation = _desired_object_orientation;
 	_step_object_orientation_error = _object_orientation_error;
 	_step_desired_object_angular_velocity = _desired_object_angular_velocity;
+	_step_desired_object_angular_acceleration = _desired_object_angular_acceleration;
 
 	// force related terms
 	if(_closed_loop_force_control)
@@ -322,7 +324,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	if(_use_interpolation_pos_flag)
 	{
 		_otg_pos->setGoalPositionAndVelocity(_desired_object_position, _desired_object_velocity);
-		_otg_pos->computeNextState(_step_desired_object_position, _step_desired_object_velocity);
+		_otg_pos->computeNextState(_step_desired_object_position, _step_desired_object_velocity, _step_desired_object_acceleration);
 	}
 #endif
 	
@@ -337,11 +339,11 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 		{
 			_step_desired_object_velocity *= _linear_saturation_velocity/_step_desired_object_velocity.norm();
 		}
-		position_related_force = -_kv_pos*(_current_object_velocity - _step_desired_object_velocity);
+		position_related_force = _sigma_position * ( _step_desired_object_acceleration -_kv_pos*(_current_object_velocity - _step_desired_object_velocity));
 	}
 	else
 	{
-		position_related_force = _sigma_position * ( -_kp_pos*(_current_object_position - _step_desired_object_position) - 
+		position_related_force = _sigma_position * ( _step_desired_object_acceleration -_kp_pos*(_current_object_position - _step_desired_object_position) - 
 			_kv_pos*(_current_object_velocity - _step_desired_object_velocity ) - _ki_pos * _integrated_object_position_error);
 	}
 
@@ -352,7 +354,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	if(_use_interpolation_ori_flag)
 	{
 		_otg_ori->setGoalPositionAndVelocity(_desired_object_orientation, _current_object_orientation, _desired_object_angular_velocity);
-		_otg_ori->computeNextState(_step_desired_object_orientation, _step_desired_object_angular_velocity);
+		_otg_ori->computeNextState(_step_desired_object_orientation, _step_desired_object_angular_velocity, _step_desired_object_angular_acceleration);
 		Sai2Model::orientationError(_step_object_orientation_error, _step_desired_object_orientation, _current_object_orientation);
 	}
 #endif
@@ -368,11 +370,11 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 		{
 			_step_desired_object_angular_velocity *= _angular_saturation_velocity / _step_desired_object_angular_velocity.norm();
 		}
-		orientation_related_force = -_kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity);
+		orientation_related_force = _sigma_orientation * (_step_desired_object_angular_acceleration -_kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity));
 	}
 	else
 	{
-		orientation_related_force = _sigma_orientation * ( -_kp_ori*_step_object_orientation_error - _kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity) - 
+		orientation_related_force = _sigma_orientation * ( _step_desired_object_angular_acceleration -_kp_ori*_step_object_orientation_error - _kv_ori*(_current_object_angular_velocity - _step_desired_object_angular_velocity) - 
 			_ki_ori*_integrated_object_orientation_error);
 	}
 
@@ -556,6 +558,9 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	_current_object_angular_velocity.setZero();
 	_desired_object_angular_velocity.setZero();
 
+	_desired_object_acceleration.setZero();
+	_desired_object_angular_acceleration.setZero();
+
 	// orientation error and I terms
 	_object_orientation_error.setZero();
 	_integrated_object_orientation_error.setZero();
@@ -593,9 +598,11 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 
 	_step_desired_object_position = _desired_object_position;
 	_step_desired_object_velocity = _desired_object_velocity;
+	_step_desired_object_acceleration = _desired_object_acceleration;
 	_step_desired_object_orientation = _desired_object_orientation;
 	_step_object_orientation_error.setZero(3);
-	_step_desired_object_angular_velocity.setZero(3);
+	_step_desired_object_angular_velocity = _desired_object_angular_velocity;
+	_step_desired_object_angular_acceleration = _desired_object_angular_acceleration;
 
 #ifdef USING_OTG
 	_otg_pos->reInitialize(_current_object_position);
