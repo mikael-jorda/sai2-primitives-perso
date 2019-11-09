@@ -192,13 +192,20 @@ public:
 	Eigen::Vector3d _object_desired_force;        // world frame
 	Eigen::Vector3d _object_desired_moment;       // world frame
 
-	double _desired_internal_tension;;
+	double _desired_internal_tension;
 	Eigen::VectorXd _desired_internal_moments;    // dimension 5
+
+	double _desired_internal_separation;
+	double _internal_force_control_flag = false;  // if false, the relative behavior is controlled in motion and the orientation holds while the position can be controlled
 
 	// gains for force control
 	double _kp_force, _kp_moment;
 	double _ki_force, _ki_moment;
 	double _kv_force, _kv_moment;
+
+	// gains for relative behavior control
+	double _kp_internal_separation, _kp_internal_ori;
+	double _kv_internal_separation, _kv_internal_ori;
 
 	// velocity saturation
 	bool _use_velocity_saturation_flag;     // false by default
@@ -278,6 +285,10 @@ public:
 	// internal forces quantities
 	double _sensed_internal_tension;
 	Eigen::VectorXd _sensed_internal_moments;
+
+	double _current_internal_separation;
+	Eigen::Matrix3d _desired_rotation_r1;
+	Eigen::Matrix3d _desired_rotation_r2;
 
 	Eigen::VectorXd _task_force;
 
