@@ -94,10 +94,10 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 	_ki_moment = 1.7;
 	_kv_moment = 10.0;
 
-	_kp_internal_separation = 10.0;
-	_kv_internal_separation = 5.0;
-	_kp_internal_ori = 10.0;
-	_kv_internal_ori = 5.0;
+	_kp_internal_separation = 20.0;
+	_kv_internal_separation = 15.0;
+	_kp_internal_ori = 5.0;
+	_kv_internal_ori = 10.0;
 
 	_object_gravity.setZero(6);
 
@@ -270,17 +270,6 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_T_world_object.translation() = _current_object_position;
 	_T_world_object.linear() = _current_object_orientation;
 
-	// compute internal object state
-	_current_internal_separation = (_contact_locations[1] - _contact_locations[0]).norm();
-
-	_desired_rotation_r1 = object_orientation_increment * _desired_rotation_r1;
-	_desired_rotation_r2 = object_orientation_increment * _desired_rotation_r2;
-
-	Eigen::Vector3d ori_error_r1 = Eigen::Vector3d::Zero();
-	Eigen::Vector3d ori_error_r2 = Eigen::Vector3d::Zero();
-
-	Sai2Model::orientationError(ori_error_r1, _desired_rotation_r1, rot_robot1);
-	Sai2Model::orientationError(ori_error_r2, _desired_rotation_r2, rot_robot2);
 
 	// compute object velocities from robot velocities and grasp matrix
 	Eigen::VectorXd r1_velocity = _projected_jacobian_1 * _robot_arm_1->_dq;
@@ -292,6 +281,10 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_current_object_angular_velocity = object_full_velocities.segment<3>(3);
 
 	Sai2Model::orientationError(_object_orientation_error, _desired_object_orientation, _current_object_orientation);
+
+	// compute internal object state
+	_current_internal_separation = (_contact_locations[1] - _contact_locations[0]).norm();
+	_current_internal_angles += object_full_velocities.tail(5) * _t_diff.count();
 
 	_step_desired_object_position = _desired_object_position;
 	_step_desired_object_velocity = _desired_object_velocity;
@@ -420,12 +413,8 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	}
 	else
 	{
-		Eigen::VectorXd internal_ori_force = Eigen::VectorXd::Zero(6);
-		internal_ori_force.head(3) = -_kp_internal_ori * ori_error_r1;
-		internal_ori_force.tail(3) = -_kp_internal_ori * ori_error_r2;
-
-		// internal_task_force(0) = -_kp_internal_separation * (_current_internal_separation - _desired_internal_separation) - _kv_internal_separation * object_full_velocities(6);
-		internal_task_force.tail(5) = _grasp_matrix.block<5,6>(6,6) * internal_ori_force - _kv_internal_ori * object_full_velocities.tail(5);
+		internal_task_force(0) = -_kp_internal_separation * (_current_internal_separation - _desired_internal_separation) - _kv_internal_separation * object_full_velocities(6);
+		internal_task_force.tail(5) = -_kp_internal_ori * (_current_internal_angles - _desired_internal_angles) - _kv_internal_ori * object_full_velocities.tail(5);
 	}
 
 
@@ -493,11 +482,10 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	_current_object_orientation.setIdentity();
 
 	_current_internal_separation = (_contact_locations[1] - _contact_locations[0]).norm();
-	
-	_desired_rotation_r1 = rot_robot1;
-	_desired_rotation_r2 = rot_robot2;
+	_current_internal_angles = Eigen::VectorXd::Zero(5);
 
 	_desired_internal_separation = _current_internal_separation;
+	_desired_internal_angles = _current_internal_angles;
 
 	// object inertial properties
 	_object_mass = 0;
@@ -684,6 +672,10 @@ void TwoHandTwoRobotsTask::setControlFrameLocationInitial(Eigen::Affine3d T_worl
 	_current_object_orientation = T_world_controlpoint.linear();
 
 	_current_internal_separation = (_contact_locations[1] - _contact_locations[0]).norm();
+	_current_internal_angles = Eigen::VectorXd::Zero(5);
+
+	_desired_internal_separation = _current_internal_separation;
+	_desired_internal_angles = _current_internal_angles;
 }
 
 void TwoHandTwoRobotsTask::setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 

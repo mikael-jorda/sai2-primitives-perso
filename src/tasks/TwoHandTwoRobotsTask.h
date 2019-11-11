@@ -196,6 +196,7 @@ public:
 	Eigen::VectorXd _desired_internal_moments;    // dimension 5
 
 	double _desired_internal_separation;
+	Eigen::VectorXd _desired_internal_angles;
 	double _internal_force_control_flag = false;  // if false, the relative behavior is controlled in motion and the orientation holds while the position can be controlled
 
 	// gains for force control
@@ -287,8 +288,7 @@ public:
 	Eigen::VectorXd _sensed_internal_moments;
 
 	double _current_internal_separation;
-	Eigen::Matrix3d _desired_rotation_r1;
-	Eigen::Matrix3d _desired_rotation_r2;
+	Eigen::VectorXd _current_internal_angles;
 
 	Eigen::VectorXd _task_force;
 
