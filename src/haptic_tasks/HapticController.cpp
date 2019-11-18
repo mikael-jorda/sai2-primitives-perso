@@ -82,9 +82,9 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	_scaling_factor_rot=1.0;
 
 	//Initialize position controller parameters
-	_kp_position_ctrl_device = 0.2;
-	_kv_position_ctrl_device = 0.7;
-	_kp_orientation_ctrl_device = 0.6;
+	_kp_position_ctrl_device = 0.15;
+	_kv_position_ctrl_device = 0.5;
+	_kp_orientation_ctrl_device = 0.5;
 	_kv_orientation_ctrl_device = 0.2;
 
 	//Initialize virtual proxy parameters
@@ -96,8 +96,8 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	//Initialize force feedback controller parameters
 	_kp_robot_trans_velocity = 10.0;
 	_kp_robot_rot_velocity = 10.0;
-	_ki_robot_trans_velocity = 0.0;
-	_ki_robot_rot_velocity = 0.0;
+	_kv_robot_trans_velocity = 0.0;
+	_kv_robot_rot_velocity = 0.0;
 
 	_robot_trans_admittance = 1/50.0;
 	_robot_rot_admittance = 1/1.5;
@@ -113,6 +113,8 @@ HapticController::HapticController(const Eigen::Vector3d center_position_robot,
 	// Initialize virtual force guidance gains for unified controller
 	_force_guidance_position_impedance = 200.0;
 	_force_guidance_orientation_impedance = 20.0;
+	_force_guidance_position_damping = 20.0;
+	_force_guidance_orientation_damping = 0.04;
 
 	// Set selection matrices to full motion control
 	_sigma_position.setIdentity();
@@ -523,11 +525,11 @@ void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desire
 	// Integrate the translational velocity error
 	_integrated_trans_velocity_error += (_desired_trans_velocity_robot - _current_trans_velocity_robot) * _t_diff.count();
 	// Evaluate the task force 
-	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _ki_robot_trans_velocity * _integrated_trans_velocity_error;
+	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _kv_robot_trans_velocity * _integrated_trans_velocity_error;
 	// Integrate the rotational velocity error
 	_integrated_rot_velocity_error += (_desired_rot_velocity_robot - _current_rot_velocity_robot) * _t_diff.count();
 	// Evaluate task torque
-	f_task_rot = - _kp_robot_rot_velocity * (_desired_rot_velocity_robot - _current_rot_velocity_robot)- _ki_robot_rot_velocity * _integrated_rot_velocity_error;
+	f_task_rot = - _kp_robot_rot_velocity * (_desired_rot_velocity_robot - _current_rot_velocity_robot)- _kv_robot_rot_velocity * _integrated_rot_velocity_error;
 
 
 	// Apply reduction factors to force feedback
@@ -603,7 +605,7 @@ void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desire
 	// Integrate the translational velocity error
 	_integrated_trans_velocity_error += (_desired_trans_velocity_robot - _current_trans_velocity_robot) * _t_diff.count();
 	// Evaluate the task force 
-	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _ki_robot_trans_velocity * _integrated_trans_velocity_error;
+	f_task_trans = - _kp_robot_trans_velocity * (_desired_trans_velocity_robot - _current_trans_velocity_robot)- _kv_robot_trans_velocity * _integrated_trans_velocity_error;
 	f_task_rot.setZero();
 
 	// Apply reduction factors to force feedback
@@ -1043,11 +1045,11 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 
 	//// Compute the virtual force guidance in robot frame ////
 	// Evaluate the virtual guidance force with the spring-damping model
-	_f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
+	_f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot) - _force_guidance_position_damping * (_current_trans_velocity_device_RobFrame - _current_trans_velocity_robot);
 	// Compute the orientation error
 	Sai2Model::orientationError(orientation_dev, _desired_rotation_robot, _current_rotation_robot);
 	// Evaluate task torque
-	_f_virtual_rot = _force_guidance_orientation_impedance*orientation_dev;
+	_f_virtual_rot = _force_guidance_orientation_impedance*orientation_dev - _force_guidance_orientation_damping * (_current_rot_velocity_device_RobFrame - _current_rot_velocity_robot);
 	//Transfer guidance force from robot to haptic device global frame
 	_f_virtual_trans = _Rotation_Matrix_DeviceToRobot * _f_virtual_trans;
 	_f_virtual_rot = _Rotation_Matrix_DeviceToRobot * _f_virtual_rot;
@@ -1183,9 +1185,8 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	f_task_trans = _Rotation_Matrix_DeviceToRobot * f_task_trans;
 
 	//// Compute the virtual force guidance in robot frame ////
-	Vector3d _f_virtual_trans;
 	// Evaluate the virtual guidance force with the spring-damping model
-	_f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot);
+	_f_virtual_trans = _force_guidance_position_impedance*(_current_position_robot - _desired_position_robot) - _force_guidance_position_damping * (_current_trans_velocity_device_RobFrame - _current_trans_velocity_robot);
 	//Transfer guidance force from robot to haptic device global frame
 	_f_virtual_trans = _Rotation_Matrix_DeviceToRobot * _f_virtual_trans;
 	
@@ -1483,8 +1484,8 @@ void HapticController::setPosCtrlGains (const double kp_position_ctrl_device, co
 	_kv_orientation_ctrl_device = kv_orientation_ctrl_device;
 }
 
-void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
-										const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
+void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double kv_robot_trans_velocity,
+										const double kp_robot_rot_velocity, const double kv_robot_rot_velocity,
 										const double robot_trans_admittance,
 										const double robot_rot_admittance,
 										const Matrix3d reduction_factor_force_feedback,
@@ -1492,14 +1493,20 @@ void HapticController::setForceFeedbackCtrlGains (const double kp_robot_trans_ve
 {
 	_kp_robot_trans_velocity = kp_robot_trans_velocity;
 	_kp_robot_rot_velocity = kp_robot_rot_velocity;
-	_ki_robot_trans_velocity = ki_robot_trans_velocity;
-	_ki_robot_rot_velocity = ki_robot_rot_velocity;
+	_kv_robot_trans_velocity = kv_robot_trans_velocity;
+	_kv_robot_rot_velocity = kv_robot_rot_velocity;
 	_robot_trans_admittance = robot_trans_admittance;
 	_robot_rot_admittance = robot_rot_admittance;
 	_reduction_factor_force_feedback = reduction_factor_force_feedback;
 	_reduction_factor_torque_feedback = reduction_factor_torque_feedback;
 }
 
+void HapticController::setReductionFactorForceFeedback (const Matrix3d reduction_factor_force_feedback,
+									const Matrix3d reduction_factor_torque_feedback)
+{
+	_reduction_factor_force_feedback = reduction_factor_force_feedback;
+	_reduction_factor_torque_feedback = reduction_factor_torque_feedback;
+}
 
 void HapticController::setVirtualProxyGains (const double proxy_position_impedance, const double proxy_position_damping,
 									const double proxy_orientation_impedance, const double proxy_orientation_damping)
@@ -1516,8 +1523,18 @@ void HapticController::setVirtualGuidanceGains (const double force_guidance_posi
 {
 	_force_guidance_position_impedance = force_guidance_position_impedance;
 	_force_guidance_orientation_impedance = force_guidance_orientation_impedance;
+	_force_guidance_position_damping = 0;
+	_force_guidance_orientation_damping = 0;
 }	
 
+void HapticController::setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
+									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping)
+{
+	_force_guidance_position_impedance = force_guidance_position_impedance;
+	_force_guidance_orientation_impedance = force_guidance_orientation_impedance;
+	_force_guidance_position_damping = force_guidance_position_damping;
+	_force_guidance_orientation_damping = force_guidance_orientation_damping;
+}
 
 void HapticController::setFilterCutOffFreq(const double cutOff_frequency_force, const double cutOff_frequency_moment)
 {

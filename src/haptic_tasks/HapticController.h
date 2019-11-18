@@ -254,19 +254,23 @@ public:
 	 * 
 	 * @param kp_robot_trans_velocity       		Robot impedance term in position for feedback computation
 	 * @param ki_robot_trans_velocity 	  			Robot damping term in position for feedback computation
-	 * @param kp_robot_rot_velocity       	Robot impedance term in orientation for feedback computation
-	 * @param ki_robot_rot_velocity 	  		Robot damping term in orientation for feedback computation
+	 * @param kp_robot_rot_velocity       			Robot impedance term in orientation for feedback computation
+	 * @param ki_robot_rot_velocity 	  			Robot damping term in orientation for feedback computation
 	 * @param robot_trans_admittance 				Robot desired admittance in translation
 	 * @param robot_rot_admittance 					Robot desired admittance in rotation
 	 * @param reduction_factor_torque_feedback 		Matrix of force reduction factors
 	 * @param reduction_factor_force_feedback 		Matrix of torque reduction factors
 	 */
-	void setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double ki_robot_trans_velocity,
-									const double kp_robot_rot_velocity, const double ki_robot_rot_velocity,
+	void setForceFeedbackCtrlGains (const double kp_robot_trans_velocity, const double kv_robot_trans_velocity,
+									const double kp_robot_rot_velocity, const double kv_robot_rot_velocity,
 									const double robot_trans_admittance,
 									const double robot_rot_admittance,
 									const Matrix3d reduction_factor_force_feedback = Matrix3d::Identity(),
 									const Matrix3d reduction_factor_torque_feedback = Matrix3d::Identity());
+
+	void setReductionFactorForceFeedback (const Matrix3d reduction_factor_force_feedback,
+									const Matrix3d reduction_factor_torque_feedback);
+
 
 	/**
 	 * @brief Set the impedance/damping terms for the force feedback evaluation via virtual proxy
@@ -280,13 +284,25 @@ public:
 									const double proxy_orientation_impedance, const double proxy_orientation_damping);
 
 	/**
-	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
+	 * @brief Set the impedance terms for the virtual force guidance computation in unified controller
+	 * and the damping terms to Zero
 	 * 
 	 * @param force_guidance_position_impedance       		Guidance impedance term in position
 	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
 	 */
 	void setVirtualGuidanceGains (const double force_guidance_position_impedance,
 									const double force_guidance_orientation_impedance);	
+
+	/**
+	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
+	 * 
+	 * @param force_guidance_position_impedance       		Guidance impedance term in position
+	 * @param force_guidance_position_damping       		Guidance damping term in position
+	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
+	 * @param force_guidance_orientation_damping         	Guidance damping term in orientation
+	 */
+	void setVirtualGuidanceGains (const double force_guidance_position_impedance, const double force_guidance_position_damping,
+									const double force_guidance_orientation_impedance, const double force_guidance_orientation_damping);
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
@@ -446,9 +462,6 @@ public:
 	// Sensed force and torque from the haptic device
 	Vector3d _sensed_force_device;
 	Vector3d _sensed_torque_device;
-	// Virtual spring force for force control
-	Vector3d _f_virtual_trans;
-	Vector3d _f_virtual_rot;
 
 	// Robot variables
 	//Commanded position and orientation of the robot (in robot frame) from impedance or unified controllers
@@ -477,6 +490,9 @@ public:
 	// Device task force
 	Vector3d _device_force;
 	Vector3d _device_torque;
+	// Virtual spring force for force control
+	Vector3d _f_virtual_trans;
+	Vector3d _f_virtual_rot;
 
 	// Workspace extension parameters
 	bool _first_iteration;
@@ -538,8 +554,8 @@ private:
 	// Force feedback controller parameters
 	double _kp_robot_trans_velocity;
 	double _kp_robot_rot_velocity;
-	double _ki_robot_rot_velocity;
-	double _ki_robot_trans_velocity;
+	double _kv_robot_rot_velocity;
+	double _kv_robot_trans_velocity;
 
 	double _robot_trans_admittance;
 	double _robot_rot_admittance;
@@ -556,6 +572,8 @@ private:
 	// Virtual force guidance parameters
 	double _force_guidance_position_impedance;
 	double _force_guidance_orientation_impedance;
+	double _force_guidance_position_damping;
+	double _force_guidance_orientation_damping;
 
 	// Sensed force filters
 	ButterworthFilter* _force_filter;
