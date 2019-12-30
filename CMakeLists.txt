@@ -66,7 +66,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/OrientationTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
-	${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
+	# ${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	)
 
@@ -74,7 +74,7 @@ SET(TASKS_SOURCE
 SET(PRIMITIVES_SOURCE 
 	${PROJECT_SOURCE_DIR}/src/primitives/RedundantArmMotion.cpp
 	${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
-	${PROJECT_SOURCE_DIR}/src/primitives/DualArmObjectMotion.cpp
+	# ${PROJECT_SOURCE_DIR}/src/primitives/DualArmObjectMotion.cpp
 	)
 
 # add haptic_tasks
