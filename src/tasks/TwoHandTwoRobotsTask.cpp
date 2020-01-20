@@ -8,10 +8,13 @@
 
 #include <stdexcept>
 
+void debug()
+{
+	cout << "debug" << endl;
+}
 
 namespace Sai2Primitives
 {
-
 
 TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 						 Sai2Model::Sai2Model* robot_arm_2, 
@@ -215,18 +218,49 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_robot_arm_2->rotationInWorld(rot_robot2, _link_name_2);
 
 	// compute object frame and grasp matrix
+	// position increment
 	Eigen::Vector3d position_increment_r1 = _contact_locations[0] - _previous_position_r1;
 	Eigen::Vector3d position_increment_r2 = _contact_locations[1] - _previous_position_r2;
 
 	Eigen::Vector3d object_position_increment = (position_increment_r1 + position_increment_r2) / 2.0;
 	_current_object_position += object_position_increment;
 
+	// orientation increment
+	Vector3d previous_axis = _previous_position_r2 - _previous_position_r1;
+	previous_axis.normalize();
+	Vector3d new_axis = _contact_locations[1] - _contact_locations[0];
+	new_axis.normalize();
+
+	Vector3d orth_rotation_increment_representation = previous_axis.cross(new_axis);
+
 	Eigen::Matrix3d orientation_increment_r1 = rot_robot1 * _previous_orientation_r1.transpose();
 	Eigen::Matrix3d orientation_increment_r2 = rot_robot2 * _previous_orientation_r2.transpose();
 
 	Eigen::Matrix3d added_orientation_increment = orientation_increment_r1 * orientation_increment_r2; // small rotations so we assume they commute
-	Eigen::AngleAxisd ori_increment_aa = Eigen::AngleAxisd(added_orientation_increment);
-	Eigen::Matrix3d object_orientation_increment = Eigen::AngleAxisd(ori_increment_aa.angle()/2.0, ori_increment_aa.axis()).toRotationMatrix();
+	Eigen::AngleAxisd added_ori_increment_aa = Eigen::AngleAxisd(added_orientation_increment);
+	Vector3d added_ori_increment_representation = added_ori_increment_aa.angle() * added_ori_increment_aa.axis();
+	Vector3d axial_rotation_increment_representation = previous_axis.dot(added_ori_increment_representation) * added_ori_increment_representation;
+
+	Matrix3d R_orth_increment = Matrix3d::Identity();
+	Matrix3d R_axial_increment = Matrix3d::Identity();
+	if(orth_rotation_increment_representation.norm() > 1e-5)
+	{
+		R_orth_increment = AngleAxisd(orth_rotation_increment_representation.norm(), orth_rotation_increment_representation.normalized());
+	}
+	if(axial_rotation_increment_representation.norm() > 1e-5)
+	{
+		R_axial_increment = AngleAxisd(axial_rotation_increment_representation.norm(), axial_rotation_increment_representation.normalized());
+	}
+
+	Matrix3d object_orientation_increment = R_orth_increment * R_axial_increment;
+
+
+	// Eigen::Matrix3d orientation_increment_r1 = rot_robot1 * _previous_orientation_r1.transpose();
+	// Eigen::Matrix3d orientation_increment_r2 = rot_robot2 * _previous_orientation_r2.transpose();
+
+	// Eigen::Matrix3d added_orientation_increment = orientation_increment_r1 * orientation_increment_r2; // small rotations so we assume they commute
+	// Eigen::AngleAxisd ori_increment_aa = Eigen::AngleAxisd(added_orientation_increment);
+	// Eigen::Matrix3d object_orientation_increment = Eigen::AngleAxisd(ori_increment_aa.angle()/2.0, ori_increment_aa.axis()).toRotationMatrix();
 
 	_current_object_orientation = object_orientation_increment * _current_object_orientation;
 
@@ -442,6 +476,37 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	task_joint_torques_1 = _projected_jacobian_1.transpose()*robot_1_task_force;
 	task_joint_torques_2 = _projected_jacobian_2.transpose()*robot_2_task_force;
 
+	MatrixXd G_inv = _grasp_matrix.inverse();
+
+	// cout << "object task force :\n" << object_task_force.transpose() << endl;
+	// cout << "Lambda tot :\n" << _Lambda_tot << endl;
+	// cout << "position related force :\n" << position_related_force.transpose() << endl;
+	// cout << "orientation related force :\n" << orientation_related_force.transpose() << endl;
+	// cout << "internal task force :\n" << internal_task_force.transpose() << endl;
+	// cout << "object full velocities :\n" << object_full_velocities.transpose() << endl;
+	// cout << "contact velocities :\n" << contact_velocities.transpose() << endl;
+	// cout << "pos error :\n" << (_current_object_position - _step_desired_object_position).transpose() << endl;
+	// cout << "lin vel error :\n" << (_current_object_velocity - _step_desired_object_velocity ).transpose() << endl;
+	cout << "ori error :\n" << _step_object_orientation_error.transpose() << endl;
+	cout << "ang vel error :\n" << (_current_object_angular_velocity - _step_desired_object_angular_velocity).transpose() << endl;
+	// cout << "tension error :\n" << (_current_internal_separation - _desired_internal_separation) << endl;
+	// cout << "tension vel error :\n" << object_full_velocities(6) << endl;
+	cout << "internal angles error :\n" << (_current_internal_angles - _desired_internal_angles).transpose() << endl;
+	cout << "internal angles vel error :\n" << object_full_velocities.tail(5).transpose() << endl;
+	cout << "contact points velocities :\n" << contact_velocities.transpose() << endl;
+	cout << "tension direction :\n" << (_contact_locations[1]-_contact_locations[0]).transpose() << endl;
+	cout << "distance :\n" << (_contact_locations[1]-_contact_locations[0]).norm() << endl;
+	cout << "G :\n" << _grasp_matrix << endl;
+	cout << "Ginv to ori vel :\n" << G_inv.transpose().block<3,12>(3,0) << endl;
+	cout << "Ginv to int ang vel :\n" << G_inv.transpose().block<5,12>(7,0) << endl;
+	cout << endl;
+
+	if(task_joint_torques_1.norm() > 100 || task_joint_torques_2.norm() > 100)
+	{
+		debug();
+	}
+	
+	
 	// update previous time and robot positions and orientations
 	_t_prev = _t_curr;
 
@@ -698,7 +763,7 @@ void TwoHandTwoRobotsTask::updateSensedForcesAndMoments(const Eigen::Vector3d se
 {
 
 	// find forces at the contact points in world frame
-	// first, the transform frem world frame to each arm contact frame
+	// first, the transform from world frame to each arm contact frame
 	Eigen::Affine3d T_world_hand_1;
 	Eigen::Affine3d T_world_hand_2;
 	_robot_arm_1->transformInWorld(T_world_hand_1, _link_name_1);
