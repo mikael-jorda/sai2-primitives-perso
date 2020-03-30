@@ -27,8 +27,8 @@ DualArmObjectMotion::DualArmObjectMotion(Sai2Model::Sai2Model* robot,
 	_contact_frame_1 = contact_frame_1;
 	_contact_frame_2 = contact_frame_2;
 
-	_robot->addManipulationContact(_end_effector_1, _contact_frame_1.translation(), 2, _contact_frame_1.linear());
-	_robot->addManipulationContact(_end_effector_2, _contact_frame_2.translation(), 2, _contact_frame_2.linear());
+	_robot->addManipulationContact(_end_effector_1, _contact_frame_1.translation(), _contact_frame_1.linear(), 2);
+	_robot->addManipulationContact(_end_effector_2, _contact_frame_2.translation(), _contact_frame_2.linear(), 2);
 
 	_robot->updateModel();
 	_robot->manipulationGraspMatrixAtGeometricCenter(_G, _Rg, _object_pos);
