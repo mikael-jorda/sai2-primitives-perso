@@ -110,7 +110,7 @@ public:
 	 * 
 	 * @param task_joint_torques the vector to be filled with the new joint torques to apply for the task
 	 */
-	virtual void computeTorques(Eigen::VectorXd& task_joint_torques_1, Eigen::VectorXd& task_joint_torques_2);
+	// virtual void computeTorques(Eigen::VectorXd& task_joint_torques_1, Eigen::VectorXd& task_joint_torques_2);
 
 	/**
 	 * @brief      reinitializes the desired state to the current robot
@@ -128,48 +128,48 @@ public:
 	 * @param[in]  T_world_com     The position of the object inertial frame in world frame
 	 * @param[in]  object_inertia  The object inertia tensor in its own inertial frame
 	 */
-	void setObjectMassPropertiesAndInitialInertialFrameLocation(double object_mass, 
-			Eigen::Affine3d T_world_com,
-			Eigen::Matrix3d object_inertia);
+	// void setObjectMassPropertiesAndInitialInertialFrameLocation(double object_mass, 
+	// 		Eigen::Affine3d T_world_com,
+	// 		Eigen::Matrix3d object_inertia);
 
-	/**
-	 * @brief      Sets the control frame for the object. It will be placed on the object at the specified location and orientation
-	 * 			   when the function is called, and then it will follow the motion of the object assuming it is rigidly attached to the arms.
-	 * 			   Also sets the desired position and orientation to current ones.
-	 *
-	 * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
-	 */
-	void setControlFrameLocationInitial(Eigen::Affine3d T_world_controlpoint);
+	// /**
+	//  * @brief      Sets the control frame for the object. It will be placed on the object at the specified location and orientation
+	//  * 			   when the function is called, and then it will follow the motion of the object assuming it is rigidly attached to the arms.
+	//  * 			   Also sets the desired position and orientation to current ones.
+	//  *
+	//  * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
+	//  */
+	// void setControlFrameLocationInitial(Eigen::Affine3d T_world_controlpoint);
 
-	//////////////////////////// Object force control related functions /////////////////////////////////////
+	// //////////////////////////// Object force control related functions /////////////////////////////////////
 
-	void setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 
-										const std::string link_name_2, const Eigen::Affine3d sensor_in_link_r2);
+	// void setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 
+	// 									const std::string link_name_2, const Eigen::Affine3d sensor_in_link_r2);
 
-	void updateSensedForcesAndMoments(const Eigen::Vector3d sensed_force_sensor_frame_r1,
-										const Eigen::Vector3d sensed_moment_sensor_frame_r1,
-										const Eigen::Vector3d sensed_force_sensor_frame_r2,
-										const Eigen::Vector3d sensed_moment_sensor_frame_r2);
+	// void updateSensedForcesAndMoments(const Eigen::Vector3d sensed_force_sensor_frame_r1,
+	// 									const Eigen::Vector3d sensed_moment_sensor_frame_r1,
+	// 									const Eigen::Vector3d sensed_force_sensor_frame_r2,
+	// 									const Eigen::Vector3d sensed_moment_sensor_frame_r2);
 
-	void setForceAxis(const Eigen::Vector3d force_axis);
+	// void setForceAxis(const Eigen::Vector3d force_axis);
 
-	void setLinearMotionAxis(const Eigen::Vector3d linear_motion_axis);
+	// void setLinearMotionAxis(const Eigen::Vector3d linear_motion_axis);
 
-	void setMomentAxis(const Eigen::Vector3d moment_axis);
+	// void setMomentAxis(const Eigen::Vector3d moment_axis);
 
-	void setAngularMotionAxis(const Eigen::Vector3d angular_motion_axis);
+	// void setAngularMotionAxis(const Eigen::Vector3d angular_motion_axis);
 
-	void setFullLinearMotionControl();
+	// void setFullLinearMotionControl();
 
-	void setFullForceControl();
+	// void setFullForceControl();
 
-	void setFullAngularMotionControl();
+	// void setFullAngularMotionControl();
 
-	void setFullMomentControl();
+	// void setFullMomentControl();
 
-	void setClosedLoopForceControl();
+	// void setClosedLoopForceControl();
 
-	void setClosedLoopMomentControl();
+	// void setClosedLoopMomentControl();
 
 
 	//------------------------------------------------
@@ -296,6 +296,7 @@ public:
 	std::vector<Eigen::Vector3d> _contact_locations;  // the contact points in world frame
 	std::vector<int> _contact_constrained_rotations;  // only rigid contacts supported for now
 	Eigen::MatrixXd _grasp_matrix;
+	Eigen::MatrixXd _grasp_matrix_inverse;
 	Eigen::Matrix3d _R_grasp_matrix;
 
 	// previous robots positions and orientations
@@ -303,6 +304,7 @@ public:
 	Eigen::Vector3d _previous_position_r2;
 	Eigen::Matrix3d _previous_orientation_r1;
 	Eigen::Matrix3d _previous_orientation_r2;
+	Eigen::Vector3d _previous_R12_axis;
 
 	Eigen::Vector3d _arbitrary_direction_hand1, _arbitrary_direction_hand2;
 	Eigen::Vector3d _x_object_frame, _y_object_frame, _z_object_frame;
@@ -314,6 +316,9 @@ public:
 	Eigen::MatrixXd _robot_2_effective_inertia;
 	Eigen::MatrixXd _Lambda_tot;
 
+	Eigen::MatrixXd _J_res_int;
+	Eigen::MatrixXd _Lambda_complete;
+
 	Eigen::MatrixXd _jacobian_1;
 	Eigen::MatrixXd _projected_jacobian_1;
 	Eigen::MatrixXd _Lambda_1;
@@ -324,6 +329,9 @@ public:
 	Eigen::MatrixXd _Lambda_2;
 	Eigen::MatrixXd _Jbar_2;
 	Eigen::MatrixXd _N_2;
+
+	// Eigen::MatrixXd _Jr, _Ji;
+	// Eigen::MatrixXd _Lambda_r, _Lambda_i;
 
 	Eigen::VectorXd _step_desired_object_position;
 	Eigen::VectorXd _step_desired_object_velocity;
@@ -345,6 +353,10 @@ public:
 	bool _first_iteration;
 
 };
+
+MatrixXd computeGInverseAtGeometricCenterExplicit(const Matrix3d Rg, 
+		const Vector3d contact_location_1,
+		const Vector3d contact_location_2);
 
 
 } /* namespace Sai2Primitives */

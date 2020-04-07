@@ -508,15 +508,23 @@ public:
 
 	bool _passivity_enabled;
 	double _passivity_observer_force;
+	double _passivity_observer_force_forward;
+	double _E_correction_force;
 	double _stored_energy_force;
 	double _Rc_inv_force;
+	double _Rc_mean = 0;
+	double _Rc_eff = 0;
 	// Eigen::VectorXd _PO_buffer = Eigen::Vector3d::Zero();
 	// Eigen::Vector3d _stored_energy_buffer = Eigen::Vector3d::Zero();
 	std::queue<double> _PO_buffer_force;
+	std::queue<double> _PO_buffer_force_forward;
+	std::queue<double> _Rc_buffer;
 	const int _PO_buffer_size_force = 15;
 	// const int _PO_counter_activity_force = 30;
 	// const int _PO_counter_passivity_force = 350;
 	// int _PO_counter = 0;
+	int _PO_counter = 15;
+	const int _PO_max_counter = 15;
 
 	double _passivity_observer_moment;
 	double _stored_energy_moment;
@@ -524,8 +532,16 @@ public:
 	std::queue<double> _PO_buffer_moment;
 	const int _PO_buffer_size_moment = 15;
 
+	Vector3d _F_pc;
+	Vector3d _vc;
+
 	ButterworthFilter* _filter_feedback_force;
 	ButterworthFilter* _filter_feedback_moment;
+
+	ButterworthFilter* _filter_command_force;
+	ButterworthFilter* _filter_command_moment;
+	
+	ButterworthFilter* _filter_R;
 
 	bool _use_isotropic_gains_position;                 // defaults to true
 	bool _use_isotropic_gains_orientation;              // defaults to true
