@@ -218,7 +218,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	Eigen::Affine3d control_frame_in_link = Eigen::Affine3d::Identity();
 	control_frame_in_link.translation() = pos_in_link;
 	Eigen::Affine3d sensor_frame_in_link = Eigen::Affine3d::Identity();
-	sensor_frame_in_link.translation() = pos_in_link;
+	sensor_frame_in_link.translation() = sensor_pos_in_link;
 
 	// Motion arm primitive
 	Sai2Primitives::SurfaceSurfaceAlignment* surf_alignment_primitive = new Sai2Primitives::SurfaceSurfaceAlignment(robot, link_name, control_frame_in_link, sensor_frame_in_link);

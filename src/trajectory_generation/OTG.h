@@ -96,7 +96,7 @@ public:
 	 * @param      next_position  The desired position in the next step
 	 * @param      next_velocity  The desired velocity in the next step
 	 */
-	void computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next_velocity);
+	void computeNextState(Eigen::VectorXd& next_position, Eigen::VectorXd& next_velocity, Eigen::VectorXd& next_acceleration);
 
 	/**
 	 * @brief      Function to know if the goal position and velocity is reached

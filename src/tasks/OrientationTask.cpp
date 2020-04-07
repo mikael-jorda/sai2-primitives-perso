@@ -71,10 +71,12 @@ void OrientationTask::reInitializeTask()
 
 	_robot->rotation(_desired_orientation, _link_name);
 	_desired_angular_velocity.setZero();
+	_desired_angular_acceleration.setZero();
 
 	_step_desired_orientation = _desired_orientation;
 	_step_orientation_error.setZero(3);
 	_step_desired_angular_velocity.setZero(3);
+	_step_desired_angular_acceleration.setZero(3);
 
 	_task_force.setZero();
 	_orientation_error.setZero();
@@ -132,13 +134,14 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_step_desired_orientation = _desired_orientation;
 	_step_orientation_error = _orientation_error;
 	_step_desired_angular_velocity = _desired_angular_velocity;
+	_step_desired_angular_acceleration = _desired_angular_acceleration;
 
 	// compute next state from trajectory generation
 #ifdef USING_OTG
 	if(_use_interpolation_flag)
 	{
 		_otg->setGoalPositionAndVelocity(_desired_orientation, _current_orientation, _desired_angular_velocity);
-		_otg->computeNextState(_step_desired_orientation, _step_desired_angular_velocity);
+		_otg->computeNextState(_step_desired_orientation, _step_desired_angular_velocity, _step_desired_angular_acceleration);
 		Sai2Model::orientationError(_step_orientation_error, _step_desired_orientation, _current_orientation);
 	}
 #endif
@@ -150,18 +153,15 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_angular_velocity = -_kp / _kv * (_step_orientation_error) - _ki/_kv * _integrated_orientation_error;
-		for(int i=0; i<3; i++)
+		if(_step_desired_angular_velocity.norm() > _saturation_velocity)
 		{
-			if(_step_desired_angular_velocity.norm() > _saturation_velocity)
-			{
-				_step_desired_angular_velocity *= _saturation_velocity/_step_desired_angular_velocity.norm();
-			}
+			_step_desired_angular_velocity *= _saturation_velocity/_step_desired_angular_velocity.norm();
 		}
-		_task_force = _Lambda * (-_kv*(_current_angular_velocity - _step_desired_angular_velocity));
+		_task_force = _Lambda * (_step_desired_angular_acceleration -_kv*(_current_angular_velocity - _step_desired_angular_velocity));
 	}
 	else
 	{
-		_task_force = _Lambda*(-_kp * _step_orientation_error - _kv*(_current_angular_velocity - _step_desired_angular_velocity ) - _ki * _integrated_orientation_error);
+		_task_force = _Lambda*(_step_desired_angular_acceleration -_kp * _step_orientation_error - _kv*(_current_angular_velocity - _step_desired_angular_velocity ) - _ki * _integrated_orientation_error);
 	}
 
 	// compute task torques
