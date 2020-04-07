@@ -2,11 +2,9 @@
 #include "tasks/PositionTask.h"
 #include "tasks/OrientationTask.h"
 #include "tasks/PosOriTask.h"
-#include "tasks/SupportAndConstraintsTask.h"
 #include "tasks/TwoHandTwoRobotsTask.h"
 #include "primitives/RedundantArmMotion.h"
 #include "primitives/SurfaceSurfaceAlignment.h"
-#include "primitives/DualArmObjectMotion.h"
 
 #include "haptic_tasks/OpenLoopTeleop.h"
 #include "haptic_tasks/HapticController.h"

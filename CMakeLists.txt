@@ -4,15 +4,20 @@ PROJECT (SAI2-PRIMITIVES)
 SET (PROJECT_VERSION 0.1.0) #major version is zero for now since api will certainly change in future
 
 SET(CMAKE_CXX_FLAGS "-std=c++11 -I/usr/include -I/usr/local/include")
-SET(CMAKE_BUILD_TYPE "Debug")
-# SET(CMAKE_BUILD_TYPE "Release")
+# SET(CMAKE_BUILD_TYPE "Debug")
+SET(CMAKE_BUILD_TYPE "Release")
 
 # option to use OTG 
 option(USE_OTG "use the Reflexxes library for trajectory generation" ON)
 if(USE_OTG)
 	# need to set these two paths manually depending on install path of Reflexxes library
 	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeIV) # need to manually set the path
-	SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeIV.so)
+
+	if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/shared/libReflexxesTypeIV.so)
+	elseif (CMAKE_SYSTEM_NAME MATCHES Linux)
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeIV.so)
+	endif () #NOTE: Windows is currently unsupported
 
 	SET (PROJECT_DEFINITIONS -DUSING_OTG)
 	SET (OTG_INCLUDE_DIRS ${OTG_SOURCE_DIR}/include)
@@ -67,7 +72,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
 	# ${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
-	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	)
 
 # add primitives 
