@@ -110,127 +110,20 @@ public:
 	 * 
 	 * @param task_joint_torques the vector to be filled with the new joint torques to apply for the task
 	 */
-	// virtual void computeTorques(Eigen::VectorXd& task_joint_torques_1, Eigen::VectorXd& task_joint_torques_2);
+	virtual void computeTorques(Eigen::VectorXd& task_joint_torques_1, Eigen::VectorXd& task_joint_torques_2);
 
 	/**
 	 * @brief      reinitializes the desired state to the current robot
-	 *             configuration as well as the integrator terms. 
-	 *             Also reinitialize the control frame to the center of the grasp points, 
-	 *             and the inertial properties to zero, and the object controller to be on motion for all axes.
+	 *             configuration as well as the integrator terms
 	 */
 	void reInitializeTask();
 
-	/**
-	 * @brief      Sets the object mass properties, and compute the transformation between 
-	 *             the frame of the grasp matrix and the object inertial frame
-	 *
-	 * @param[in]  object_mass     The object mass
-	 * @param[in]  T_world_com     The position of the object inertial frame in world frame
-	 * @param[in]  object_inertia  The object inertia tensor in its own inertial frame
-	 */
-	// void setObjectMassPropertiesAndInitialInertialFrameLocation(double object_mass, 
-	// 		Eigen::Affine3d T_world_com,
-	// 		Eigen::Matrix3d object_inertia);
-
-	// /**
-	//  * @brief      Sets the control frame for the object. It will be placed on the object at the specified location and orientation
-	//  * 			   when the function is called, and then it will follow the motion of the object assuming it is rigidly attached to the arms.
-	//  * 			   Also sets the desired position and orientation to current ones.
-	//  *
-	//  * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
-	//  */
-	// void setControlFrameLocationInitial(Eigen::Affine3d T_world_controlpoint);
-
-	// //////////////////////////// Object force control related functions /////////////////////////////////////
-
-	// void setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 
-	// 									const std::string link_name_2, const Eigen::Affine3d sensor_in_link_r2);
-
-	// void updateSensedForcesAndMoments(const Eigen::Vector3d sensed_force_sensor_frame_r1,
-	// 									const Eigen::Vector3d sensed_moment_sensor_frame_r1,
-	// 									const Eigen::Vector3d sensed_force_sensor_frame_r2,
-	// 									const Eigen::Vector3d sensed_moment_sensor_frame_r2);
-
-	// void setForceAxis(const Eigen::Vector3d force_axis);
-
-	// void setLinearMotionAxis(const Eigen::Vector3d linear_motion_axis);
-
-	// void setMomentAxis(const Eigen::Vector3d moment_axis);
-
-	// void setAngularMotionAxis(const Eigen::Vector3d angular_motion_axis);
-
-	// void setFullLinearMotionControl();
-
-	// void setFullForceControl();
-
-	// void setFullAngularMotionControl();
-
-	// void setFullMomentControl();
-
-	// void setClosedLoopForceControl();
-
-	// void setClosedLoopMomentControl();
-
+	void updateObjectMassProperties(double object_mass, Eigen::Matrix3d object_inertia = Eigen::Matrix3d::Identity());
 
 	//------------------------------------------------
-	// Attributes to be modified by user
+	// Attributes
 	//------------------------------------------------
-	Eigen::Vector3d _desired_object_position;      // world frame
-	Eigen::Matrix3d _desired_object_orientation;   // world frame
 
-	Eigen::Vector3d _desired_object_velocity;           // world frame
-	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
-
-	Eigen::Vector3d _desired_object_acceleration;           // world frame
-	Eigen::Vector3d _desired_object_angular_acceleration;   // world frame
-
-	// gains for position control
-	double _kp_pos, _kp_ori;
-	double _kv_pos, _kv_ori;
-	double _ki_pos, _ki_ori;
-
-	Eigen::Vector3d _object_desired_force;        // world frame
-	Eigen::Vector3d _object_desired_moment;       // world frame
-
-	double _desired_internal_tension;
-	Eigen::VectorXd _desired_internal_moments;    // dimension 5
-
-	double _desired_internal_separation;
-	Eigen::VectorXd _desired_internal_angles;
-	double _internal_force_control_flag = false;  // if false, the relative behavior is controlled in motion and the orientation holds while the position can be controlled
-
-	// gains for force control
-	double _kp_force, _kp_moment;
-	double _ki_force, _ki_moment;
-	double _kv_force, _kv_moment;
-
-	// gains for relative behavior control
-	double _kp_internal_separation, _kp_internal_ori;
-	double _kv_internal_separation, _kv_internal_ori;
-
-	// velocity saturation
-	bool _use_velocity_saturation_flag;     // false by default
-	double _linear_saturation_velocity;     // defaults to 0.3
-	double _angular_saturation_velocity;    // defaults to PI/3
-
-	// trajectory interpolation
-#ifdef USING_OTG
-	bool _use_interpolation_pos_flag;   // defaults to true
-	bool _use_interpolation_ori_flag;   // defaults to true
-
-	// default values for the limits :
-	// _otg_pos->setMaxVelocity(0.3);
-	// _otg_pos->setMaxAcceleration(0.6);
-	// _otg_pos->setMaxJerk(1.2);
-
-	// _otg_ori->setMaxVelocity(M_PI/4);
-	// _otg_ori->setMaxAcceleration(M_PI/2);
-	// _otg_ori->setMaxJerk(M_PI);
-#endif
-
-	//------------------------------------------------
-	// Attributes that the user should not touch
-	//------------------------------------------------
 	Sai2Model::Sai2Model* _robot_arm_1;
 	Sai2Model::Sai2Model* _robot_arm_2;
 
@@ -243,68 +136,39 @@ public:
 	Eigen::Affine3d _control_frame_2;   // in link_frame
 
 	double _object_mass;
-	Eigen::Matrix3d _object_inertia_in_control_frame;
-	Eigen::Affine3d _T_com_controlpoint;
+	Eigen::Matrix3d _object_inertia;
 
 	// object control quantities
 	Eigen::Vector3d _current_object_position;      // world frame
+	Eigen::Vector3d _desired_object_position;      // world frame
 	Eigen::Matrix3d _current_object_orientation;   // world frame
+	Eigen::Matrix3d _desired_object_orientation;   // world frame
 
 	Eigen::Vector3d _current_object_velocity;           // world frame
+	Eigen::Vector3d _desired_object_velocity;           // world frame
 	Eigen::Vector3d _current_object_angular_velocity;   // world frame
+	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
 
-	Eigen::VectorXd _object_gravity;
+	double _kp_pos, _kp_ori;
+	double _kv_pos, _kv_ori;
+	double _ki_pos, _ki_ori;
 
 	Eigen::Vector3d _object_orientation_error;               // world frame
 	Eigen::Vector3d _integrated_object_orientation_error;    // world frame
 	Eigen::Vector3d _integrated_object_position_error;       // world frame
 
-	Eigen::Matrix3d _sigma_position;
-	Eigen::Matrix3d _sigma_orientation;
-
-	// object force control quantities
-	Eigen::Affine3d _T_contact_fsensor_r1;
-	Eigen::Affine3d _T_contact_fsensor_r2;
-
-	Eigen::Vector3d _sensed_force_r1;          // world frame
-	Eigen::Vector3d _sensed_force_r2;          // world frame
-	Eigen::Vector3d _sensed_moment_r1;          // world frame
-	Eigen::Vector3d _sensed_moment_r2;          // world frame
-
-	Eigen::Vector3d _object_sensed_force;
-	Eigen::Vector3d _object_sensed_moment;
-
-	Eigen::Vector3d _integrated_object_force_error;    // world frame
-	Eigen::Vector3d _integrated_object_moment_error;   // world frame
-
-	bool _closed_loop_force_control;
-	bool _closed_loop_moment_control;
-
-	Eigen::Matrix3d _sigma_force;
-	Eigen::Matrix3d _sigma_moment;
-
 	// internal forces quantities
-	double _sensed_internal_tension;
-	Eigen::VectorXd _sensed_internal_moments;
-
-	double _current_internal_separation;
-	Eigen::VectorXd _current_internal_angles;
+	double _desired_internal_tension;;
+	Eigen::VectorXd _desired_internal_moments;
 
 	Eigen::VectorXd _task_force;
 
 	// model quantities
 	std::vector<Eigen::Vector3d> _contact_locations;  // the contact points in world frame
-	std::vector<int> _contact_constrained_rotations;  // only rigid contacts supported for now
+	std::vector<Sai2Model::ContactType> _contact_types;  // only rigid contacts supported for now
 	Eigen::MatrixXd _grasp_matrix;
 	Eigen::MatrixXd _grasp_matrix_inverse;
 	Eigen::Matrix3d _R_grasp_matrix;
-
-	// previous robots positions and orientations
-	Eigen::Vector3d _previous_position_r1;
-	Eigen::Vector3d _previous_position_r2;
-	Eigen::Matrix3d _previous_orientation_r1;
-	Eigen::Matrix3d _previous_orientation_r2;
-	Eigen::Vector3d _previous_R12_axis;
 
 	Eigen::Vector3d _arbitrary_direction_hand1, _arbitrary_direction_hand2;
 	Eigen::Vector3d _x_object_frame, _y_object_frame, _z_object_frame;
@@ -315,9 +179,6 @@ public:
 	Eigen::MatrixXd _robot_1_effective_inertia;
 	Eigen::MatrixXd _robot_2_effective_inertia;
 	Eigen::MatrixXd _Lambda_tot;
-
-	Eigen::MatrixXd _J_res_int;
-	Eigen::MatrixXd _Lambda_complete;
 
 	Eigen::MatrixXd _jacobian_1;
 	Eigen::MatrixXd _projected_jacobian_1;
@@ -330,21 +191,23 @@ public:
 	Eigen::MatrixXd _Jbar_2;
 	Eigen::MatrixXd _N_2;
 
-	// Eigen::MatrixXd _Jr, _Ji;
-	// Eigen::MatrixXd _Lambda_r, _Lambda_i;
+	bool _use_velocity_saturation_flag = false;
+	Eigen::Vector3d _linear_saturation_velocity;
+	Eigen::Vector3d _angular_saturation_velocity;
 
 	Eigen::VectorXd _step_desired_object_position;
 	Eigen::VectorXd _step_desired_object_velocity;
-	Eigen::VectorXd _step_desired_object_acceleration;
 	Eigen::Matrix3d _step_desired_object_orientation;
 	Eigen::Vector3d _step_object_orientation_error;
 	Eigen::Vector3d _step_desired_object_angular_velocity;
-	Eigen::Vector3d _step_desired_object_angular_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;
 	OTG* _otg_pos;
 	OTG_ori* _otg_ori;
+
+	bool _use_interpolation_pos_flag = true;
+	bool _use_interpolation_ori_flag = true;
 #endif
 
 	std::chrono::high_resolution_clock::time_point _t_prev;
@@ -353,10 +216,6 @@ public:
 	bool _first_iteration;
 
 };
-
-MatrixXd computeGInverseAtGeometricCenterExplicit(const Matrix3d Rg, 
-		const Vector3d contact_location_1,
-		const Vector3d contact_location_2);
 
 
 } /* namespace Sai2Primitives */

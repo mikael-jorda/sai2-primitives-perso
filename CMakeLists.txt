@@ -8,15 +8,15 @@ SET(CMAKE_CXX_FLAGS "-std=c++11 -I/usr/include -I/usr/local/include")
 SET(CMAKE_BUILD_TYPE "Release")
 
 # option to use OTG 
-option(USE_OTG "use the Reflexxes library for trajectory generation" ON)
+option(USE_OTG "use the Reflexxes library for trajectory generation" OFF)
 if(USE_OTG)
 	# need to set these two paths manually depending on install path of Reflexxes library
-	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeIV) # need to manually set the path
+	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeII) # need to manually set the path
 
 	if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
-		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/shared/libReflexxesTypeIV.so)
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/shared/libReflexxesTypeII.so)
 	elseif (CMAKE_SYSTEM_NAME MATCHES Linux)
-		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeIV.so)
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeII.so)
 	endif () #NOTE: Windows is currently unsupported
 
 	SET (PROJECT_DEFINITIONS -DUSING_OTG)
@@ -71,15 +71,13 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/OrientationTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
-	# ${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
-	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	)
 
 # add primitives 
 SET(PRIMITIVES_SOURCE 
 	${PROJECT_SOURCE_DIR}/src/primitives/RedundantArmMotion.cpp
 	${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
-	# ${PROJECT_SOURCE_DIR}/src/primitives/DualArmObjectMotion.cpp
 	)
 
 # add haptic_tasks
@@ -164,4 +162,4 @@ write_basic_package_version_file(
 )
 
 # add examples
-# ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/examples)
+ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/examples)
