@@ -14,7 +14,7 @@ if(USE_OTG)
 	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeII) # need to manually set the path
 
 	if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
-		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/shared/libReflexxesTypeII.so)
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/libReflexxesTypeII.a)
 	elseif (CMAKE_SYSTEM_NAME MATCHES Linux)
 		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeII.so)
 	endif () #NOTE: Windows is currently unsupported
