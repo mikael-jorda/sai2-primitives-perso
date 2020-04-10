@@ -677,7 +677,7 @@ void control(Simulation::Sai2Simulation* sim)
 			// two_hand_task->_current_object_orientation = object_orientations[0].toRotationMatrix();
 			two_hand_task->computeTorques(posori_task_torques[0], posori_task_torques[1]);
 
-			if(controller_counter == 7000)
+			if(controller_counter == 5000)
 			{
 				two_hand_task->_desired_object_orientation = AngleAxisd(30.0/180.0*M_PI, Vector3d::UnitZ()).toRotationMatrix()*two_hand_task->_desired_object_orientation;
 			}
