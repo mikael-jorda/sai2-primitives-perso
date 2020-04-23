@@ -182,19 +182,19 @@ void OTG_posori::setGoalPositionAndLinearVelocity(const Eigen::Vector3d goal_pos
 
 void OTG_posori::setGoalOrientationAndAngularVelocity(const Eigen::Matrix3d goal_orientation, const Eigen::Matrix3d current_orientation, const Eigen::Vector3d goal_angular_velocity)
 {
-	if((goal_orientation.transpose() * goal_orientation - Eigen::Matrix3d::Identity()).norm() > 1e-6)
+	if((goal_orientation.transpose() * goal_orientation - Eigen::Matrix3d::Identity()).norm() > 1e-3)
 	{
 		throw std::invalid_argument("goal orientation is not a valid rotation matrix OTG_posori::setGoalOrientationAndAngularVelocity\n");
 	}
-	if(abs(goal_orientation.determinant() - 1) > 1e-6)
+	if(abs(goal_orientation.determinant() - 1) > 1e-3)
 	{
 		throw std::invalid_argument("goal orientation is not a valid rotation matrix OTG_posori::setGoalOrientationAndAngularVelocity\n");
 	}
-	if((current_orientation.transpose() * current_orientation - Eigen::Matrix3d::Identity()).norm() > 1e-6)
+	if((current_orientation.transpose() * current_orientation - Eigen::Matrix3d::Identity()).norm() > 1e-3)
 	{
 		throw std::invalid_argument("current orientation is not a valid rotation matrix OTG_posori::setGoalOrientationAndAngularVelocity\n");
 	}
-	if(abs(current_orientation.determinant() - 1) > 1e-6)
+	if(abs(current_orientation.determinant() - 1) > 1e-3)
 	{
 		throw std::invalid_argument("current orientation is not a valid rotation matrix OTG_posori::setGoalOrientationAndAngularVelocity\n");
 	}
