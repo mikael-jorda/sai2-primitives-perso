@@ -129,6 +129,8 @@ public:
 
 	Eigen::Vector3d _integrated_position_error;
 
+	Eigen::Vector3d _unit_mass_control;
+
 	Eigen::MatrixXd _jacobian;
 	Eigen::MatrixXd _projected_jacobian;
 	Eigen::MatrixXd _Lambda;

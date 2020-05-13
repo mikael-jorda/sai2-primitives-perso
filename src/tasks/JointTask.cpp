@@ -231,7 +231,7 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	}
 	else
 	{
-		_task_force = (_step_desired_acceleration -_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
+		_task_force = (_step_desired_acceleration -_kp_mat*(_current_position - _step_desired_position) - _kv_mat * (_current_velocity - _step_desired_velocity) - _ki_mat * _integrated_position_error);
 	}
 
 	_task_force = _M_modified * _task_force;

@@ -83,6 +83,7 @@ void PositionTask::reInitializeTask()
 
 	_integrated_position_error.setZero();
 
+	_unit_mass_control.setZero();
 	_task_force.setZero();
 	_first_iteration = true;
 
@@ -154,14 +155,17 @@ void PositionTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		{
 			_step_desired_velocity *= _saturation_velocity / _step_desired_velocity.norm();
 		}
-		_task_force = _Lambda * (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
+		_unit_mass_control = (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
+		// _task_force = _Lambda * (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		_task_force = _Lambda*(_step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error);
+		_unit_mass_control = _step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error;
+		// _task_force = _Lambda*(_step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error);
 	}
 
 	// compute task torques
+	_task_force = _Lambda * _unit_mass_control;
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;
 
 	// update previous time
