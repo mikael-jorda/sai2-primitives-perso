@@ -30,7 +30,7 @@ SupportAndConstraintsTask::SupportAndConstraintsTask(Sai2Model::Sai2Model* robot
 	_contact_dof = 0;
 	for(int i = 0 ; i < contact_link_names.size() ; i++)
 	{
-		_robot->addEnvironmentalContact(contact_link_names[i], contact_frames[i].translation(), constrained_rotations[i], contact_frames[i].linear());
+		_robot->addEnvironmentalContact(contact_link_names[i], contact_frames[i].translation(), contact_frames[i].linear(), constrained_rotations[i]);
 		_contact_dof += 3;
 		if(constrained_rotations[i] > 0)
 		{
@@ -110,7 +110,7 @@ SupportAndConstraintsTask::SupportAndConstraintsTask(Sai2Model::Sai2Model* robot
 	_contact_dof = 0;
 	for(int i = 0 ; i < contact_link_names.size() ; i++)
 	{
-		_robot->addEnvironmentalContact(contact_link_names[i], contact_frames[i].translation(), constrained_rotations[i], contact_frames[i].linear());
+		_robot->addEnvironmentalContact(contact_link_names[i], contact_frames[i].translation(), contact_frames[i].linear(), constrained_rotations[i]);
 		_contact_dof += 3;
 		if(constrained_rotations[i] > 0)
 		{

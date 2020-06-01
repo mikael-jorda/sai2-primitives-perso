@@ -13,15 +13,15 @@ namespace Sai2Primitives
 {
 
 
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
-			const std::string link_name, 
+PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
+			const std::string link_name,
 			const Eigen::Affine3d control_frame,
 			const double loop_time) :
 	PosOriTask(robot, link_name, control_frame.translation(), control_frame.linear(), loop_time) {}
 
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
-			const std::string link_name, 
-			const Eigen::Vector3d pos_in_link, 
+PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
+			const std::string link_name,
+			const Eigen::Vector3d pos_in_link,
 			const Eigen::Matrix3d rot_in_link,
 			const double loop_time)
 {
@@ -36,7 +36,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 
 	int dof = _robot->_dof;
 
-	_T_control_to_sensor = Eigen::Affine3d::Identity();  
+	_T_control_to_sensor = Eigen::Affine3d::Identity();
 
 	// motion
 	_robot->position(_current_position, _link_name, _control_frame.translation());
@@ -79,7 +79,6 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	// initialize matrices sizes
 	_jacobian.setZero(6,dof);
 	_projected_jacobian.setZero(6,dof);
-	_prev_projected_jacobian.setZero(6,dof);
 	_Lambda.setZero(6,6);
 	_Jbar.setZero(dof,6);
 	_N.setZero(dof,dof);
@@ -88,7 +87,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_first_iteration = true;
 
 #ifdef USING_OTG
-	_use_interpolation_flag = true; 
+	_use_interpolation_flag = true;
 	_loop_time = loop_time;
 	_otg = new OTG_posori(_current_position, _current_orientation, _loop_time);
 
@@ -145,15 +144,10 @@ void PosOriTask::reInitializeTask()
 	_closed_loop_force_control = false;
 	_closed_loop_moment_control = false;
 
-	_passivity_enabled = true;
-	_passivity_observer = 0;
-	_Rc_inv = 1.0;
-
 	_task_force.setZero(6);
-	_unit_mass_force.setZero(6);
-	_first_iteration = true;	
+	_first_iteration = true;
 
-#ifdef USING_OTG 
+#ifdef USING_OTG
 	_otg->reInitialize(_current_position, _current_orientation);
 #endif
 }
@@ -180,29 +174,15 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 {
-	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
-	_projected_jacobian = _jacobian * _N_prec;
-
-	Eigen::MatrixXd dJ = _projected_jacobian - _prev_projected_jacobian;
 
 	// get time since last call for the I term
 	_t_curr = std::chrono::high_resolution_clock::now();
 	if(_first_iteration)
 	{
-		_t_prev = _t_curr;
-		dJ.setZero();
+		_t_prev = std::chrono::high_resolution_clock::now();
 		_first_iteration = false;
 	}
 	_t_diff = _t_curr - _t_prev;
-	
-	if(_t_diff.count() > 0)
-	{
-		dJ = (_projected_jacobian - _prev_projected_jacobian)/_t_diff.count();
-	}
-
-	Eigen::VectorXd mu = Eigen::VectorXd::Zero(6);
-	mu = (-_Lambda * dJ * _robot->_dq);
-
 
 	// update matrix gains
 	if(_use_isotropic_gains)
@@ -250,117 +230,14 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_integrated_force_error += (_sensed_force - _desired_force) * _t_diff.count();
 
 		// compute the feedback term
-		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error; // - _kv_force * _current_velocity;
-
-		// implement passivity observer and controller
-		if(_passivity_enabled)
-		{
-			// if(_PO_buffer(0) + _stored_energy_buffer(0) >= _PO_buffer(1) + _stored_energy_buffer(1) && 
-				// _PO_buffer(1) + _stored_energy_buffer(1) <= _PO_buffer(2) + _stored_energy_buffer(2) && 
-				// _PO_buffer(1) + _stored_energy_buffer(1) >= 0)
-			// {
-				// std::cout << "\n\n\n\n\n\n" << std::endl;
-				// _PO_buffer(0) -= _PO_buffer(1);
-				// _PO_buffer(1) -= _PO_buffer(1);
-				// _PO_buffer(2) -= _PO_buffer(1);
-				// _passivity_observer -= _PO_buffer(1); 
-			// }
-
-			Eigen::Vector3d f_diff = _desired_force - _sensed_force;
-			// _passivity_observer +=  -((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
-			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term) - 
-					// (double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
-			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
-			
-			double power_input_output = ((double)(_desired_force.transpose() * _sigma_force * force_feedback_term) -
-					(double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _Rc_inv) * _t_diff.count();
-
-
-
-			_passivity_observer += power_input_output;
-
-			// _passivity_observer +=  ((double)(_desired_force.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
-
-			_stored_energy = 0.5 * _ki_force * (double) (_integrated_force_error.transpose() * _sigma_force * _integrated_force_error);
-			_stored_energy = 0.0;
-
-			// _PO_buffer(0) = _PO_buffer(1);
-			// _PO_buffer(1) = _PO_buffer(2);
-			// _PO_buffer(2) = _passivity_observer;
-
-			// _stored_energy_buffer(0) = _stored_energy_buffer(1);
-			// _stored_energy_buffer(1) = _stored_energy_buffer(2);
-			// _stored_energy_buffer(2) = _stored_energy;
-
-			_PO_buffer.push(power_input_output);
-
-			if(_passivity_observer + _stored_energy > _PO_buffer.front() && _passivity_observer + _stored_energy > 0 && _PO_buffer.size() > _PO_buffer_size)
-			{
-				if(_PO_buffer.front() > 0)
-				{
-					_passivity_observer -= _PO_buffer.front();
-				}
-				_PO_buffer.pop();
-			}
-
-			// double Rcb_inv = _Rc_inv;
-			// if(_passivity_observer + _stored_energy < 0)
-			// {
-				double Rcb_inv = _Rc_inv + (_passivity_observer + _stored_energy) / ((double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * _t_diff.count());
-				// double Rcb_inv = _Rc_inv + tanh(_passivity_observer + _stored_energy);
-			// 	if(_PO_counter <= 0)
-			// 	{
-			// 		Rcb_inv = _Rc_inv / 2;
-			// 		_PO_counter = _PO_counter_activity;
-			// 	}
-
-			// }
-			// else
-			// {
-			// 	if(_PO_counter <= 0)
-			// 	{
-			// 		Rcb_inv = _Rc_inv + 0.1;
-			// 		_PO_counter = _PO_counter_passivity;
-			// 	}
-			// }
-
-			if(Rcb_inv > 1)
-			{
-				Rcb_inv = 1;
-			}
-			if(Rcb_inv < 0.001)
-			{
-				Rcb_inv = 0.001;
-			}
-				// std::cout << "Rcbis : " << 1.0 / Rcb_inv << std::endl;
-			// }
-			// else
-			// {
-				// _Rc_inv = (_Rc_inv + 1)/2.0;
-			// }
-
-			_passivity_observer += (double) (force_feedback_term.transpose() * _sigma_force * force_feedback_term) * (_Rc_inv - Rcb_inv) * _t_diff.count();
-			_Rc_inv = Rcb_inv;
-			// std::cout << "PO : " << _passivity_observer + _stored_energy << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
-			// std::cout << "Rc inv : " << _Rc_inv << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
-			// std::cout << "Vc squared : " << force_feedback_term.squaredNorm() << std::endl;
-			// std::cout << "PO buffer : " << _PO_buffer.transpose() << std::endl;
-			// std::cout << "f_sensed: " << _sensed_force(2) << std::endl; // "\t" << _sensed_force(2) << "\t" << force_feedback_term(2) << std::endl << std::endl;
-			// _passivity_observer +=  ((double)(f_diff.transpose() * _sigma_force * force_feedback_term)) * _t_diff.count();
-
-			_PO_counter--;
-			if(_PO_counter < 0)
-			{
-				_PO_counter = 0;
-			}
-		}
+		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error - _kv_force * _current_velocity;
 
 		// compute the final contribution
-		force_related_force = _sigma_force * (_desired_force + force_feedback_term * _Rc_inv - _kv_force * _current_velocity);
+		force_related_force = _sigma_force * (_desired_force + force_feedback_term);
 	}
 	else
 	{
-		force_related_force = _sigma_force * (_desired_force - _kv_force * _current_velocity);
+		force_related_force = _sigma_force * _desired_force;
 	}
 
 	// moment related terms
@@ -392,7 +269,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		Sai2Model::orientationError(_step_orientation_error, _step_desired_orientation, _current_orientation);
 	}
 #endif
-	
+
 	// linear motion
 	// update integrated error for I term
 	_integrated_position_error += (_current_position - _step_desired_position) * _t_diff.count();
@@ -401,17 +278,18 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_velocity = -_kp_pos_mat * _kv_pos_mat.inverse() * (_current_position - _step_desired_position) - _ki_pos_mat * _kv_pos_mat.inverse() * _integrated_position_error;
-		if(_step_desired_velocity.norm() > _linear_saturation_velocity)
+		for(int i=0; i<3; i++)
 		{
-			_step_desired_velocity *= _linear_saturation_velocity/_step_desired_velocity.norm();
+			if(_step_desired_velocity.norm() > _linear_saturation_velocity)
+			{
+				_step_desired_velocity(i) *= _linear_saturation_velocity/_step_desired_velocity.norm();
+			}
 		}
 		position_related_force = _sigma_position * (-_kv_pos_mat*(_current_velocity - _step_desired_velocity));
-		// position_related_force = -_kv_pos_mat*(_current_velocity - _step_desired_velocity);
 	}
 	else
 	{
 		position_related_force = _sigma_position*(-_kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error);
-		// position_related_force = -_kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error;
 	}
 
 
@@ -422,10 +300,13 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// final contribution
 	if(_use_velocity_saturation_flag)
 	{
-		_step_desired_angular_velocity = -_kp_ori_mat * _kv_ori_mat.inverse() * _step_orientation_error - _ki_ori_mat * _kv_ori_mat.inverse() * _integrated_orientation_error;
-		if(_step_desired_angular_velocity.norm() > _angular_saturation_velocity)
+		_step_desired_angular_velocity = -_kp_ori_mat * _kv_ori_mat.inverse() * _step_orientation_error - _ki_ori_mat * _kv_ori_mat.inverse() * _integrated_position_error;
+		for(int i=0; i<3; i++)
 		{
-			_step_desired_angular_velocity *= _angular_saturation_velocity/_step_desired_angular_velocity.norm();
+			if(_step_desired_angular_velocity.norm() > _angular_saturation_velocity)
+			{
+				_step_desired_angular_velocity *= _angular_saturation_velocity/_step_desired_angular_velocity.norm();
+			}
 		}
 		orientation_related_force = _sigma_orientation * (-_kv_ori_mat*(_current_angular_velocity - _step_desired_angular_velocity));
 	}
@@ -442,58 +323,15 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
 
-	// Eigen::MatrixXd sigma_motion_tot = Eigen::MatrixXd::Identity(6,6);
-	// sigma_motion_tot.block<3,3>(0,0) = _sigma_position;
-	// sigma_motion_tot.block<3,3>(3,3) = _sigma_orientation;
-
-	_unit_mass_force = position_orientation_contribution;
-
-	// std::cout << "t_diff : " << _t_diff.count() << std::endl;
-	// std::cout << "dJ :\n" << dJ << std::endl;
-	// std::cout << "dq : " << _robot->_dq.transpose() << std::endl;
-	// std::cout << "mu : " << mu.transpose() << std::endl;
-	// std::cout << std::endl;
-
-	_task_force = _Lambda * position_orientation_contribution + force_moment_contribution + mu;
-	// _task_force = _Lambda * position_orientation_contribution + force_moment_contribution;
+	_task_force = _Lambda * position_orientation_contribution + force_moment_contribution;
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;
 
 	// update previous time
-	_prev_projected_jacobian = _projected_jacobian;
 	_t_prev = _t_curr;
 }
 
-bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
-{
-	double position_error = (_desired_position - _current_position).transpose() * (_sigma_position) * (_desired_position - _current_position);
-	position_error = sqrt(position_error);
-	bool goal_reached = position_error < tolerance;
-	if(verbose)
-	{
-		std::cout << "position error in PosOriTask : " << position_error << std::endl;
-		std::cout << "Tolerance : " << tolerance << std::endl;
-		std::cout << "Goal reached : " << goal_reached << std::endl << std::endl;
-	}
-
-	return goal_reached;
-}
-
-bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbose)
-{
-	double orientation_error = _orientation_error.transpose() * _sigma_orientation * _orientation_error;
-	orientation_error = sqrt(orientation_error);
-	bool goal_reached = orientation_error < tolerance;
-	if(verbose)
-	{
-		std::cout << "orientation error in PosOriTask : " << orientation_error << std::endl;
-		std::cout << "Tolerance : " << tolerance << std::endl;
-		std::cout << "Goal reached : " << goal_reached << std::endl << std::endl;
-	}
-
-	return goal_reached;
-}
 
 void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link)
 {
@@ -504,7 +342,7 @@ void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::A
 	_T_control_to_sensor = _control_frame.inverse() * transformation_in_link;
 }
 
-void PosOriTask::updateSensedForceAndMoment(const Eigen::Vector3d sensed_force_sensor_frame, 
+void PosOriTask::updateSensedForceAndMoment(const Eigen::Vector3d sensed_force_sensor_frame,
 							    		    const Eigen::Vector3d sensed_moment_sensor_frame)
 {
 	// find the transform from base frame to control frame
@@ -554,7 +392,7 @@ void PosOriTask::updateLinearMotionAxis(const Eigen::Vector3d motion_axis)
 	Eigen::Vector3d normalized_axis = motion_axis.normalized();
 
 	_sigma_position = normalized_axis*normalized_axis.transpose();
-	_sigma_force = Eigen::Matrix3d::Identity() - _sigma_position;	
+	_sigma_force = Eigen::Matrix3d::Identity() - _sigma_position;
 }
 
 void PosOriTask::setFullForceControl()
@@ -588,7 +426,7 @@ void PosOriTask::updateMomentAxis(const Eigen::Vector3d moment_axis)
 	Eigen::Vector3d normalized_axis = moment_axis.normalized();
 
 	_sigma_moment = normalized_axis*normalized_axis.transpose();
-	_sigma_orientation = Eigen::Matrix3d::Identity() - _sigma_moment;	
+	_sigma_orientation = Eigen::Matrix3d::Identity() - _sigma_moment;
 }
 
 void PosOriTask::setAngularMotionAxis(const Eigen::Vector3d motion_axis)
@@ -653,7 +491,7 @@ void PosOriTask::resetIntegrators()
 	_integrated_position_error.setZero();
 	_integrated_force_error.setZero();
 	_integrated_moment_error.setZero();
-	_first_iteration = true;	
+	_first_iteration = true;
 }
 
 void PosOriTask::resetIntegratorsLinear()
@@ -670,4 +508,3 @@ void PosOriTask::resetIntegratorsAngular()
 
 
 } /* namespace Sai2Primitives */
-

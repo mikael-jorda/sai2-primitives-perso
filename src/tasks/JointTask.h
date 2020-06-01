@@ -81,6 +81,11 @@ public:
 	bool _use_velocity_saturation_flag;    // defaults to false
 	Eigen::VectorXd _saturation_velocity;  // defaults to PI/3 for all axes
 
+	bool _use_isotropic_gains;              // defaults to true
+	Eigen::VectorXd _kp_vec;
+	Eigen::VectorXd _kv_vec;
+	Eigen::VectorXd _ki_vec;
+
 // trajectory generation via interpolation using Reflexxes Library
 #ifdef USING_OTG
 	bool _use_interpolation_flag;    // defaults to true
@@ -99,6 +104,10 @@ public:
 
 	Eigen::VectorXd _step_desired_position;
 	Eigen::VectorXd _step_desired_velocity;
+
+	Eigen::MatrixXd _kp_mat;
+	Eigen::MatrixXd _kv_mat;
+	Eigen::MatrixXd _ki_mat;
 
 #ifdef USING_OTG
 	double _loop_time;
