@@ -43,10 +43,10 @@ public:
 	 * @param Transform_Matrix_DeviceToRobot 	Rotation matrix between from the device to robot frame
 	 *
 	 */
-	HapticController(const Eigen::Vector3d center_position_robot, 
+	HapticController(const Eigen::Vector3d center_position_robot,
 		            const Eigen::Matrix3d center_rotation_robot,
 		            const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
-	
+
 	/**
 	 * @brief Detructor  This destructor deletes the pointers, stop the haptic controller, and close the haptic device.
 	 *
@@ -73,7 +73,7 @@ public:
 	 *				updateSensedForce() before calling this function. If the proxy evaluation is used, the current position,
 	 * 				rotation, and velocity of the proxy are updated with updateVirtualProxyPositionVelocity().
 	 *
-	 *			computeHapticCommandsWorkspaceExtension3-6d augments the classic impedance teleoperation scheme with a 
+	 *			computeHapticCommandsWorkspaceExtension3-6d augments the classic impedance teleoperation scheme with a
 	 *				dynamic workspace extension algorithm.
 	 *
 	 *			computeHapticCommandsAdmittance3-6d implements the admittance bilateral teleoperation scheme. The haptic commands
@@ -92,7 +92,7 @@ public:
 	 *
 	 * 			Guidance plane or line can be added to the haptic controllers (_enable_plane_guidance=true, _enable_line_guidance=true).
 	 *			The plane is defined thanks to the method setPlane and the line thanks to setLine.
-	 * 
+	 *
 	 *			computeHapticCommands...6d(): The 6 DOFs are controlled and feedback.
 	 *			computeHapticCommands...3d(): The haptic commands are evaluated in position only, the 3 translational DOFs
 	 *										 are controlled and rendered to the user.
@@ -101,7 +101,7 @@ public:
 	 *
 	 * @param desired_position_robot    		The desired position of the controlled robot
 	 * @param desired_rotation_robot    		The desired orientation of the controlled robot
-	 * 
+	 *
 	 */
 	void computeHapticCommands6d(Eigen::Vector3d& desired_position_robot,
 								Eigen::Matrix3d& desired_rotation_robot);
@@ -128,7 +128,7 @@ public:
 
 
 ///////////////////////////////////////////////////////////////////////////////////
-// Haptic guidance related methods 
+// Haptic guidance related methods
 ///////////////////////////////////////////////////////////////////////////////////
 	/**
 	*  @brief computes the guidance force for the 3D plane set by the user
@@ -148,7 +148,7 @@ public:
 	 * @brief Update the sensed force from the task interaction
 	 * @details When rendering the sensed force as haptic feedback in the impedance-type bilateral scheme, this function updates the force sensor data. The global variable
 	 * 			'filter_on' enables the filtering of force sensor data. The filter parameters are set thanscaling_factor_trans to setFilterCutOffFreq().
-	 * 
+	 *
 	 * @param sensed_task_force    	Sensed task force from the controlled robot's sensor
 	 */
 	void updateSensedForce(const Eigen::VectorXd sensed_task_force = Eigen::VectorXd::Zero(6));
@@ -156,7 +156,7 @@ public:
 	/**
 	 * @brief Update the current position, orientation, and velocity of the controlled robot
 	 * @details When evaluating the haptic feedback in the admittance-type bilateral scheme, this function updates the current robot position/rotation.
-	 * 
+	 *
 	 * @param current_position_robot    	The current position of the controlled robot
 	 * @param current_rotation_robot    	The current orientation of the controlled robot
 	 * @param current_trans_velocity_robot  The current translational velocity of the controlled robot
@@ -170,7 +170,7 @@ public:
 	/**
 	 * @brief Update the current position, orientation, and velocity of the proxy
 	 * @details When evaluating the haptic feedback via an impedance/damping proxy, this function updates the current proxy position, rotation, and velocity.
-	 * 
+	 *
 	 * @param current_position_proxy    	The current position of the controlled virtual proxy
 	 * @param current_rotation_proxy    	The current orientation of the controlled virtual proxy
 	 * @param current_trans_velocity_proxy  The current translational velocity of the virtual proxy
@@ -183,7 +183,7 @@ public:
 
 	/**
 	 * @brief Update the desired selection matrices to project the haptic feedback in the unified controller
-	 * 
+	 *
 	 * @param _sigma_position			The position selection matrix in robot frame
 	 * @param _sigma_orientation		The orientation selection matrix in robot frame
 	 * @param _sigma_force				The force selection matrix in robot frame
@@ -200,14 +200,14 @@ public:
 	/**
 	 * @brief Set the haptic device in gravity compensation
 	 * @details Send zero force/torque feedback to the haptic device.
-	 * 
+	 *
 	 */
 	void GravityCompTask();
 
 	/**
 	 * @brief Place the haptic device in its home position.
 	 * @details This method creates a position controller for the haptic device to send it to its home position.
-	 * 
+	 *
 	 *	Make sure to update the haptic device data (position, velocity) from the redis keys before calling this function!
 	 *
 	 */
@@ -217,7 +217,7 @@ public:
 	 * @brief Use the gripper of the haptic device as a user switch
 	 *
 	 *    This method sends a force feedback to the gripper and transform the gripper position to a boolean output.
-	 * 
+	 *
 	 *	Make sure to update the gripper device data (position, velocity) from the redis keys before calling this function!
 	 *
 	 */
@@ -230,7 +230,7 @@ public:
 ///////////////////////////////////////////////////////////////////////////////////
 	/**
 	 * @brief Set the scaling factors between the device Workspace and the task environment
-	 * 
+	 *
 	 * @param scaling_factor_trans      Translational scaling factor
 	 * @param scaling_factor_rot       	Rotational scaling factor
 	 */
@@ -239,8 +239,8 @@ public:
 	/**
 	 * @brief Set the position controller gains of the haptic device for the homing task.
 	 * 			The gains are given as a ratio of the device maximum damping and stiffness (between 0 and 1).
-	 * 
-	 * @param kp_position_ctrl_device    	Proportional gain in position  
+	 *
+	 * @param kp_position_ctrl_device    	Proportional gain in position
 	 * @param kv_position_ctrl_device    	Derivative term in position
 	 * @param kp_orientation_ctrl_device    Proportional gain in orientation
 	 * @param kv_orientation_ctrl_device    Derivative term in orientation
@@ -251,7 +251,7 @@ public:
 	/**
 	 * @brief Set the impedance/damping terms for the force feedback evaluation in admittance-type bilateral scheme
 	 * 		  Define the reduction factors between the actual task force and the rendered force
-	 * 
+	 *
 	 * @param kp_robot_trans_velocity       		Robot impedance term in position for feedback computation
 	 * @param ki_robot_trans_velocity 	  			Robot damping term in position for feedback computation
 	 * @param kp_robot_rot_velocity       			Robot impedance term in orientation for feedback computation
@@ -274,7 +274,7 @@ public:
 
 	/**
 	 * @brief Set the impedance/damping terms for the force feedback evaluation via virtual proxy
-	 * 
+	 *
 	 * @param proxy_position_impedance       		Proxy impedance term in position
 	 * @param proxy_position_damping 	  			Proxy damping term in position
 	 * @param proxy_orientation_impedance       	Proxy impedance term in orientation
@@ -286,16 +286,16 @@ public:
 	/**
 	 * @brief Set the impedance terms for the virtual force guidance computation in unified controller
 	 * and the damping terms to Zero
-	 * 
+	 *
 	 * @param force_guidance_position_impedance       		Guidance impedance term in position
 	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
 	 */
 	void setVirtualGuidanceGains (const double force_guidance_position_impedance,
-									const double force_guidance_orientation_impedance);	
+									const double force_guidance_orientation_impedance);
 
 	/**
 	 * @brief Set the impedance/damping terms for the virtual force guidance computation in unified controller
-	 * 
+	 *
 	 * @param force_guidance_position_impedance       		Guidance impedance term in position
 	 * @param force_guidance_position_damping       		Guidance damping term in position
 	 * @param force_guidance_orientation_impedance       	Guidance impedance term in orientation
@@ -306,7 +306,7 @@ public:
 
 	/**
 	 * @brief Set the normalized cut-off frequencies (between 0 and 0.5) to filter the sensed force
-	 * 
+	 *
 	 * @param cutOff_frequency_force        Cut-off frequency of the sensed force
 	 * @param cutOff_frequency_moment       Cut-off frequency of the sensed torque
 	 */
@@ -315,27 +315,27 @@ public:
 	/**
 	 * @brief Set the center of the device Workspace
 	 * @details The haptic device home position and orientation are set through a Vector3d and a Matrix3d
-	 * 
+	 *
 	 * @param home_position_device     The home position of the haptic device in its operational space
 	 * @param home_rotation_device     The home orientation of the haptic device in its operational space
 	 */
-	void setDeviceCenter(const Eigen::Vector3d home_position_device, 
+	void setDeviceCenter(const Eigen::Vector3d home_position_device,
 		            	 const Eigen::Matrix3d home_rotation_device = Eigen::Matrix3d::Identity());
 
 
 	/**
 	 * @brief Set the center of the task Workspace
 	 * @details The robot home position and orientation, with respect to the task, are set through a Vector3d and a Matrix3d
-	 * 
+	 *
 	 * @param center_position_robot     The task home position of the robot in its operational space
 	 * @param center_rotation_robot     The task home orientation of the robot in its operational space
 	 */
-	void setRobotCenter(const Eigen::Vector3d center_position_robot, 
+	void setRobotCenter(const Eigen::Vector3d center_position_robot,
 		            	const Eigen::Matrix3d center_rotation_robot = Eigen::Matrix3d::Identity());
 
 	/**
 	 * @brief Set the rotation matrix between the haptic device global frame to the robot global frame
-	 * 
+	 *
 	 * @param Rotation_Matrix_DeviceToRobot    Rotation matrix between from the device to robot frame
 	 */
 	void setDeviceRobotRotation(const Eigen::Matrix3d Rotation_Matrix_DeviceToRobot = Eigen::Matrix3d::Identity());
@@ -343,7 +343,7 @@ public:
 	/**
 	 * @brief Sets the size of the device Workspace to add virtual limits in the force feedback
 	 * @details The size of the device Workspace is set through the radius of its equivalent sphere and the maximum tilt angles.
-	 * 
+	 *
 	 * @param device_workspace_radius_limit     Radius of the smallest sphere including the haptic device Workspace
 	 * @param device_workspace_angle_limit   	Maximum tilt angle of the haptic device
 	 */
@@ -356,7 +356,7 @@ public:
 	/**
 	 * @brief Sets the size of the device Workspace and the task environment
 	 * @details The size of the device Workspace and the task environment are set through the radius of the smallest sphere including each Workspace and the maximum tilt angles.
-	 * 
+	 *
 	 * @param device_workspace_radius_max       Radius of the smallest sphere including the haptic device Workspace
 	 * @param task_workspace_radius_max        	Radius of the smallest sphere including the task environment
 	 * @param device_workspace_tilt_angle_max   Maximum tilt angle of the haptic device
@@ -369,7 +369,7 @@ public:
 	 * @brief Sets the percentage of drift force and drift velocity accepted by the user as just noticeable difference
 	 * @details The level of drift force is set with respect to the task force feedback and the the level of drift velocity
 	 *          with respect to the device current velocity.
-	 * 
+	 *
 	 * @param drift_force_admissible_ratio     Percentage of drift force with repect to the task force feedback
 	 * @param drift_velocity_admissible_ratio  Percentage of drift velocity with respect to the device velocity
 	 */
@@ -381,18 +381,18 @@ public:
 ///////////////////////////////////////////////////////////////////////////////////
 	/**
 	 * @brief Sets the stiffness and damping parameters for the haptic guidance (plane and line)
-	 * 
+	 *
 	 * @param guidance_stiffness 	Stiffness of the virtual guidance
 	 * @param guidance_damping 		Damping of the virtual guidance
-	 */	
+	 */
 	void setHapticGuidanceGains(const double guidance_stiffness, const double guidance_damping);
 
 	/**
 	 * @brief Defines an artibtrary 3D plane using a point and a normal vector
-	 * 
+	 *
 	 * @param plane_point_origin coordinate vector of the origin point
 	 * @param plane_normal_vec normal vector for the plane
-	 */	
+	 */
 	void setPlane(const Eigen::Vector3d plane_origin_point, const Eigen::Vector3d plane_normal_vec);
 
 	/**
@@ -401,7 +401,7 @@ public:
 	* @param _second_point vector to second point from world origin
 	*/
 	void setLine(const Eigen::Vector3d line_first_point, const Eigen::Vector3d line_second_point);
-	
+
 
 
 
@@ -411,7 +411,7 @@ public:
 ///////////////////////////////////////////////////////////////////////////////////
 // Attributes
 ///////////////////////////////////////////////////////////////////////////////////
-	
+
 //// Inputs to be define by the users ////
 
 	bool _haptic_feedback_from_proxy; // If set to true, the force feedback is computed from a stiffness/damping proxy.
@@ -440,7 +440,6 @@ public:
 	double _device_workspace_radius_limit;
 	double _device_workspace_angle_limit;
 	// Device status
-	bool device_started;
 	bool device_homed;
 	// Gripper status if used as a switch
 	bool gripper_state;
@@ -450,7 +449,7 @@ public:
 	Vector3d _commanded_torque_device;
 	double _commanded_gripper_force_device;
 	// Haptic device position and rotation
-	Vector3d _current_position_device; 
+	Vector3d _current_position_device;
 	Matrix3d _current_rotation_device;
 	double _current_position_gripper_device;
 	// Haptic device velocity
@@ -485,7 +484,7 @@ public:
 	Matrix3d _current_rotation_proxy;
 	Vector3d _current_trans_velocity_proxy;
 	Vector3d _current_rot_velocity_proxy;
-	// Sensed task force 
+	// Sensed task force
 	VectorXd _sensed_task_force;
 	// Device task force
 	Vector3d _device_force;
@@ -531,7 +530,7 @@ public:
 
 	//Transformation matrix from the device frame to the robot frame
 	Matrix3d _Rotation_Matrix_DeviceToRobot;
-	
+
 
 //// Controllers parameters, set through setting methods ////
 private:
@@ -588,8 +587,8 @@ private:
 	// Admissible drift force and velocity ratio
 	double _drift_force_admissible_ratio; // As a percentage of task force
 	double _drift_velocity_admissible_ratio; // As a percentage of device velocity
-	
-	// Time parameters 
+
+	// Time parameters
 	chrono::high_resolution_clock::time_point _t_prev;
 	chrono::high_resolution_clock::time_point _t_curr;
 	chrono::duration<double> _t_diff;
