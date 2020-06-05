@@ -165,8 +165,9 @@ public:
 
 	// model quantities
 	std::vector<Eigen::Vector3d> _contact_locations;  // the contact points in world frame
-	std::vector<int> _contact_constrained_rotations;  // only rigid contacts supported for now
+	std::vector<Sai2Model::ContactType> _contact_types;  // only rigid contacts supported for now
 	Eigen::MatrixXd _grasp_matrix;
+	Eigen::MatrixXd _grasp_matrix_inverse;
 	Eigen::Matrix3d _R_grasp_matrix;
 
 	Eigen::Vector3d _arbitrary_direction_hand1, _arbitrary_direction_hand2;

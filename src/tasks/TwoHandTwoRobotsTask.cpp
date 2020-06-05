@@ -62,6 +62,7 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 	}
 
 	_grasp_matrix.setZero(12,12);
+	_grasp_matrix_inverse.setZero(12,12);
 	_R_grasp_matrix.setIdentity();
 
 	Eigen::Vector3d robot_1_contact = Eigen::Vector3d::Zero();
@@ -71,8 +72,8 @@ TwoHandTwoRobotsTask::TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
 
 	_contact_locations.push_back(robot_1_contact);
 	_contact_locations.push_back(robot_2_contact);
-	_contact_constrained_rotations.push_back(3);
-	_contact_constrained_rotations.push_back(3);
+	_contact_types.push_back(Sai2Model::ContactType::SurfaceContact);
+	_contact_types.push_back(Sai2Model::ContactType::SurfaceContact);
 
 	_current_object_position.setZero();
 	_current_object_orientation.setIdentity();
@@ -185,8 +186,8 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_robot_arm_2->rotationInWorld(rot_robot2, _link_name_2);
 
 	// compute grasp matrix and object frame
-	Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _R_grasp_matrix, _current_object_position,
-				_contact_locations, _contact_constrained_rotations);
+	Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _grasp_matrix_inverse, _R_grasp_matrix, _current_object_position,
+				_contact_locations, _contact_types);
 
 	_x_object_frame = _contact_locations[0] - _contact_locations[1];
 	_x_object_frame.normalize();
@@ -226,7 +227,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	Eigen::VectorXd r2_velocity = _projected_jacobian_2 * _robot_arm_2->_dq;
 	Eigen::VectorXd contact_velocities = Eigen::VectorXd::Zero(12);
 	contact_velocities << r1_velocity.head(3), r2_velocity.head(3), r1_velocity.tail(3), r2_velocity.tail(3);
-	Eigen::VectorXd object_full_velocities = _grasp_matrix.transpose().colPivHouseholderQr().solve(contact_velocities);
+	Eigen::VectorXd object_full_velocities = _grasp_matrix_inverse.transpose()*contact_velocities;
 	_current_object_velocity = object_full_velocities.segment<3>(0);
 	_current_object_angular_velocity = object_full_velocities.segment<3>(3);
 
@@ -243,8 +244,9 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 #ifdef USING_OTG
 	if(_use_interpolation_pos_flag)
 	{
+		VectorXd dummy_acceleration;
 		_otg_pos->setGoalPositionAndVelocity(_desired_object_position, _desired_object_velocity);
-		_otg_pos->computeNextState(_step_desired_object_position, _step_desired_object_velocity);
+		_otg_pos->computeNextState(_step_desired_object_position, _step_desired_object_velocity, dummy_acceleration);
 	}
 #endif
 	
@@ -280,8 +282,9 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 #ifdef USING_OTG
 	if(_use_interpolation_ori_flag)
 	{
+		Vector3d dummy_acceleration;
 		_otg_ori->setGoalPositionAndVelocity(_desired_object_orientation, _current_object_orientation, _desired_object_angular_velocity);
-		_otg_ori->computeNextState(_step_desired_object_orientation, _step_desired_object_angular_velocity);
+		_otg_ori->computeNextState(_step_desired_object_orientation, _step_desired_object_angular_velocity, dummy_acceleration);
 		Sai2Model::orientationError(_step_object_orientation_error, _step_desired_object_orientation, _current_object_orientation);
 	}
 #endif
@@ -333,7 +336,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_task_force << object_task_force, internal_task_force;
 
 	// compute task torques
-	Eigen::VectorXd robots_task_forces = _grasp_matrix.colPivHouseholderQr().solve(_task_force);
+	Eigen::VectorXd robots_task_forces = _grasp_matrix_inverse*_task_force;
 	Eigen::VectorXd robot_1_task_force = Eigen::VectorXd::Zero(6);
 	Eigen::VectorXd robot_2_task_force = Eigen::VectorXd::Zero(6);
 	robot_1_task_force << robots_task_forces.segment<3>(0), robots_task_forces.segment<3>(6);
@@ -368,8 +371,8 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 	_robot_arm_2->transformInWorld(T_world_hand2, _link_name_2);
 
 	// grasp matrix and object position
-	Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _R_grasp_matrix, _current_object_position,
-				_contact_locations, _contact_constrained_rotations);
+	Sai2Model::graspMatrixAtGeometricCenter(_grasp_matrix, _grasp_matrix_inverse, _R_grasp_matrix, _current_object_position,
+				_contact_locations, _contact_types);
 	_desired_object_position = _current_object_position;
 
 	// object orientation
@@ -489,4 +492,3 @@ void TwoHandTwoRobotsTask::updateObjectMassProperties(double object_mass, Eigen:
 
 
 } /* namespace Sai2Primitives */
-

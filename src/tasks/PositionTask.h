@@ -101,6 +101,7 @@ public:
 	// inputs to be defined by the user
 	Eigen::Vector3d _desired_position;   // defaults to the current position when the task is created
 	Eigen::Vector3d _desired_velocity;   // defaults to Zero
+	Eigen::Vector3d _desired_acceleration;   // defaults to Zero
 
 	double _kp;                          // defaults to 50.0 
 	double _kv;                          // defaults to 14.0
@@ -136,6 +137,7 @@ public:
 
 	Eigen::VectorXd _step_desired_position;
 	Eigen::VectorXd _step_desired_velocity;
+	Eigen::VectorXd _step_desired_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;
