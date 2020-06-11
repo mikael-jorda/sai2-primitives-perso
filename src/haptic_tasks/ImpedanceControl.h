@@ -15,7 +15,6 @@
  #include "Sai2Model.h"
  #include "filters/ButterworthFilter.h"
  #include <Eigen/Dense>
- //#include <string>
 
  using namespace std;
  using namespace Eigen;
@@ -201,7 +200,7 @@
                                           const double reduction_factor_gripper_force = 1.0);
 
     /**
-  	 * @brief Setting methods to add a virtual line or plane as haptic guidance
+  	 * @brief Setting methods to add a virtual line or plane as haptic guidance (in haptic frame)
      * @details:
      *    setHapticGuidanceGains - sets the stiffness and damping parameters for the haptic guidance
      *    setGuidancePlane - define a 3D plane using a point and a normal vector to apply guidance
@@ -231,8 +230,8 @@
    	 * @param cutOff_frequency_moment           Cut-off frequency of the sensed torque (default value : 0.05)
      * @param cutOff_frequency_gripper_force    Cut-off frequency of the sensed gripper force (default value : 0.05)
    	 */
-     void setFilterOn(bool filter_OnOff = false, const double cutOff_frequency_force = 0.05,
-                      const double cutOff_frequency_moment = 0.05, const double cutOff_frequency_gripper_force = 0.05);
+     void setFilterOn(bool filter_OnOff = false, const double cutOff_frequency_force = 0.06,
+                      const double cutOff_frequency_moment = 0.06, const double cutOff_frequency_gripper_force = 0.06);
 
       /**
     	 * @brief Add virtual limits to render the device workspace boundary through the force feedback
@@ -255,6 +254,8 @@
     	 */
       void useGripperAsSwitch(bool& gripper_state, double& commanded_gripper_force_device);
 
+private:
+
      /**
       * @brief Compute guidance force for set virtual fixtures
       * @details:
@@ -265,29 +266,21 @@
      	void ComputeLineGuidanceForce();
 
 
+      ///////////////////////////////////////////////////////////////////////////////////
+      // Controller parameters an data, specifiec through setting methods
+      ///////////////////////////////////////////////////////////////////////////////////
+      //// Controller status and operational modes ////
+    	bool _send_haptic_feedback; // If set to false, send 0 forces and torques to the haptic device
+      bool _filter_on; // Filter force sensor data
+      bool _add_workspace_virtual_limit; // add a virtual sphere delimiting the haptic device workspace
 
+    	bool _enable_plane_guidance; // add guidance along a user-defined plane
+    	bool _enable_line_guidance; // add guidance along a user-defined plane
 
+      bool gripper_init; // Gripper initialization status
 
-
-                      ///////////////////////////////////////////////////////////////////////////////////
-                      // Attributes
-                      ///////////////////////////////////////////////////////////////////////////////////
-
-                      //// Inputs to be define by the users ////
-      	bool _send_haptic_feedback;       // If set to false, send 0 forces and torques to the haptic device
-
-        bool _filter_on; //Enable filtering force sensor data. To be use only if updateSensedForce() is called cyclically.
-
-      	bool _enable_plane_guidance; // add guidance along a user-defined plane
-
-      	bool _enable_line_guidance; // add guidance along a user-defined plane
-
-        bool _add_workspace_virtual_limit; // add a virtual sphere delimiting the haptic device workspace
-
-
-    //// Status and robot/device's infos ////
-
-    	//Device specifications
+      //// Haptic device variables ////
+    	// Haptic device specifications
     	double _max_linear_stiffness_device, _max_angular_stiffness_device;
     	double _max_linear_damping_device, _max_angular_damping_device;
     	double _max_force_device, _max_torque_device, _max_gripper_force_device;
@@ -295,37 +288,57 @@
     	double _device_workspace_radius_limit;
     	double _device_workspace_angle_limit;
 
-    	// Gripper initialization status
-    	bool gripper_init;
-
-      // Set force and torque feedback of the haptic device
+      // Desired haptic feedback
     	Vector3d _commanded_force_device;
     	Vector3d _commanded_torque_device;
     	double _commanded_gripper_force_device;
 
-    	// Haptic device position and rotation
+      // Workspace scaling factors in translation and rotation (applied to force and motion)
+      double _scaling_factor_trans, _scaling_factor_rot, _scaling_factor_gripper;
+      // Additional force feedback factors
+      double _reduction_factor_force_feedback, _reduction_factor_torque_feedback, _reduction_factor_gripper_force;
+
+    	// Haptic device position
     	Vector3d _current_position_device;
     	Matrix3d _current_rotation_device;
     	double _current_position_gripper_device;
 
-      // Haptic device translational and rotationa velocities
+      // Haptic device velocity
       Vector3d _current_trans_velocity_device;
       Vector3d _current_rot_velocity_device;
       double _current_gripper_velocity_device;
 
-    	// Robot variables
-    	//Commanded position and orientation of the robot (in robot frame)
+      // Haptic device center position and orientation
+      Vector3d _home_position_device;
+      Matrix3d _home_rotation_device;
+
+    	//// Robot variables ////
+    	//Desired robot position
     	Vector3d _desired_position_robot;
     	Matrix3d _desired_rotation_robot;
       double _desired_gripper_position_robot;
 
+      // Workspace center for the task in robot frame
+      Vector3d _center_position_robot;
+      Matrix3d _center_rotation_robot;
+
+      //Transformation matrix from the device frame to the robot frame
+      Matrix3d _Rotation_Matrix_DeviceToRobot;
 
     	// Sensed task force
     	Vector3d _sensed_task_force;
       Vector3d _sensed_task_torque;
       double _sensed_task_gripper_force;
 
+      // Sensed force filters
+      ButterworthFilter* _force_filter;
+      ButterworthFilter* _moment_filter;
+      ButterworthFilter* _gripper_force_filter;
+      double _cutOff_frequency_force;
+      double _cutOff_frequency_moment;
+      double _cutOff_frequency_gripper_force;
 
+      //// Haptic guidance variables ////
     	// Haptic guidance gains
     	double _guidance_stiffness;
     	double _guidance_damping;
@@ -338,37 +351,6 @@
     	Vector3d _line_first_point;
     	Vector3d _line_second_point;
     	Vector3d _guidance_force_line;
-
-      	// Haptic device center position and orientation
-      	Vector3d _home_position_device;
-      	Matrix3d _home_rotation_device;
-
-      	// Workspace center for the task in robot frame
-      	Vector3d _center_position_robot;
-      	Matrix3d _center_rotation_robot;
-
-      	//Transformation matrix from the device frame to the robot frame
-      	Matrix3d _Rotation_Matrix_DeviceToRobot;
-
-
-        //// Controllers parameters, set through setting methods ////
-        private:
-
-      	// Workspace scaling factors in translation and rotation (applied to force and motion)
-      	double _scaling_factor_trans, _scaling_factor_rot, _scaling_factor_gripper;
-        // Additional force feedback factors
-      	double _reduction_factor_force_feedback, _reduction_factor_torque_feedback, _reduction_factor_gripper_force;
-
-
-      	// Sensed force filters
-      	ButterworthFilter* _force_filter;
-      	ButterworthFilter* _moment_filter;
-        ButterworthFilter* _gripper_force_filter;
-      	double _cutOff_frequency_force;
-      	double _cutOff_frequency_moment;
-        double _cutOff_frequency_gripper_force;
-
-
 
 };
 }  /* namespace Sai2Primitives */

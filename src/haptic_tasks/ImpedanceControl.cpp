@@ -69,13 +69,13 @@
    // Create Butterworth filters for sensed forces
  	_force_filter = new ButterworthFilter(3);
  	_moment_filter = new ButterworthFilter(3);
-  _gripper_force_filter = new ButterworthFilter(1);
+  _gripper_force_filter = new ButterworthFilter(3);
 
   // Gripper is not initialized to be used as switch
 	gripper_init = false;
 
   //Initialize haptic guidance parameters
-  setHapticGuidanceGains(0.7 * _max_linear_stiffness_device, 0.8 * _max_linear_damping_device);
+  setHapticGuidanceGains(0.6 * _max_linear_stiffness_device, 0.8 * _max_linear_damping_device);
   setGuidancePlane(false);
   setGuidanceLine(false);
 }
@@ -160,11 +160,11 @@
     }
 
     // Saturate to Force and Torque limits of the haptic device
-    if (_commanded_force_device.norm() >= _max_force_device)
+    if (_commanded_force_device.norm() > _max_force_device)
     {
       _commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
     }
-    if (_commanded_torque_device.norm() >= _max_torque_device)
+    if (_commanded_torque_device.norm() > _max_torque_device)
     {
       _commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
     }
@@ -206,11 +206,11 @@
    _commanded_gripper_force_device = _commanded_gripper_force_device / _scaling_factor_gripper;
 
    // Saturate to max gripper force of the haptic device
-   if (_commanded_gripper_force_device >= _max_gripper_force_device)
+   if (_commanded_gripper_force_device > _max_gripper_force_device)
    {
      _commanded_gripper_force_device = _max_gripper_force_device;
    }
-   else if (_commanded_gripper_force_device <= -_max_gripper_force_device)
+   else if (_commanded_gripper_force_device < -_max_gripper_force_device)
    {
      _commanded_gripper_force_device = -_max_gripper_force_device;
    }
@@ -250,9 +250,9 @@
   {
     _sensed_task_force = _force_filter->update(sensed_task_force);
     _sensed_task_torque = _moment_filter->update(sensed_task_torque);
-    VectorXd task_gripper_force;
-    VectorXd filtered_task_gripper_force;
-    task_gripper_force << sensed_task_gripper_force;
+    Vector3d task_gripper_force;
+    Vector3d filtered_task_gripper_force;
+    task_gripper_force << sensed_task_gripper_force, 0.0, 0.0;
     filtered_task_gripper_force = _gripper_force_filter->update(task_gripper_force);
     _sensed_task_gripper_force = filtered_task_gripper_force[0];
   }

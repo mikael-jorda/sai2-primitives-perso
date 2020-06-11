@@ -82,6 +82,7 @@ SET(HAPTIC_TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/ImpedanceControl.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/PositionControl.cpp
 	)
 
 # add header files
@@ -159,4 +160,4 @@ write_basic_package_version_file(
 )
 
 # add examples
-#ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/examples)
+ADD_SUBDIRECTORY(${PROJECT_SOURCE_DIR}/examples)

@@ -346,11 +346,11 @@ void HapticController::computeHapticCommands6d(Eigen::Vector3d& desired_position
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= _max_torque_device)
+	if (_commanded_torque_device.norm() > _max_torque_device)
 	{
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
@@ -463,7 +463,7 @@ void HapticController::computeHapticCommands3d(Eigen::Vector3d& desired_position
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
@@ -554,11 +554,11 @@ void HapticController::computeHapticCommandsAdmittance6d(Eigen::Vector3d& desire
 	_commanded_torque_device = scaling_factor_rot * _commanded_torque_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= _max_torque_device)
+	if (_commanded_torque_device.norm() > _max_torque_device)
 	{
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
@@ -624,7 +624,7 @@ void HapticController::computeHapticCommandsAdmittance3d(Eigen::Vector3d& desire
 	_commanded_force_device = scaling_factor_trans * _commanded_force_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
@@ -789,11 +789,11 @@ void HapticController::computeHapticCommandsWorkspaceExtension6d(Eigen::Vector3d
 	_commanded_torque_device += torque_virtual;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= _max_torque_device)
+	if (_commanded_torque_device.norm() > _max_torque_device)
 	{
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
@@ -958,7 +958,7 @@ void HapticController::computeHapticCommandsWorkspaceExtension3d(Eigen::Vector3d
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
@@ -1110,11 +1110,11 @@ void HapticController::computeHapticCommandsUnifiedControl6d(Eigen::Vector3d& de
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= _max_torque_device)
+	if (_commanded_torque_device.norm() > _max_torque_device)
 	{
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
@@ -1231,7 +1231,7 @@ void HapticController::computeHapticCommandsUnifiedControl3d(Eigen::Vector3d& de
 	}
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
@@ -1398,11 +1398,11 @@ void HapticController::HomingTask()
 	_commanded_torque_device = -kp_orientation_ctrl_device*orientation_error - kv_orientation_ctrl_device * _current_rot_velocity_device;
 
 	// Saturate to Force and Torque limits of the haptic device
-	if (_commanded_force_device.norm() >= _max_force_device)
+	if (_commanded_force_device.norm() > _max_force_device)
 	{
 		_commanded_force_device = _max_force_device*_commanded_force_device/(_commanded_force_device.norm());
 	}
-	if (_commanded_torque_device.norm() >= _max_torque_device)
+	if (_commanded_torque_device.norm() > _max_torque_device)
 	{
 		_commanded_torque_device = _max_torque_device*_commanded_torque_device/(_commanded_torque_device.norm());
 	}
