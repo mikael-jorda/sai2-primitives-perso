@@ -21,6 +21,9 @@
 	#include "trajectory_generation/OTG.h"
 #endif
 
+using namespace Eigen;
+using namespace std;
+
 namespace Sai2Primitives
 {
 
@@ -41,8 +44,8 @@ public:
 	 * @param[in]  loop_time      time taken by a control loop. Used only in trajectory generation
 	 */
 	PositionTask(Sai2Model::Sai2Model* robot, 
-		         const std::string link_name, 
-		         const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity(),
+		         const string link_name, 
+		         const Affine3d control_frame = Affine3d::Identity(),
 		         const double loop_time = 0.001);
 
 	/**
@@ -61,9 +64,9 @@ public:
 	 * @param[in]  loop_time    time taken by a control loop. Used only in trajectory generation
 	 */
 	PositionTask(Sai2Model::Sai2Model* robot, 
-		         const std::string link_name, 
-				 const Eigen::Vector3d pos_in_link = Eigen::Vector3d::Zero(), 
-				 const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity(),
+		         const string link_name, 
+				 const Vector3d pos_in_link = Vector3d::Zero(), 
+				 const Matrix3d rot_in_link = Matrix3d::Identity(),
 				 const double loop_time = 0.001);
 
 	/**
@@ -77,7 +80,7 @@ public:
 	 * 
 	 * @param N_prec The nullspace matrix of all the higher priority tasks. If this is the highest priority task, use identity of size n*n where n in the number of DoF of the robot.
 	 */
-	virtual void updateTaskModel(const Eigen::MatrixXd N_prec);
+	virtual void updateTaskModel(const MatrixXd N_prec);
 
 	/**
 	 * @brief Computes the torques associated with this task.
@@ -86,7 +89,7 @@ public:
 	 * 
 	 * @param task_joint_torques the vector to be filled with the new joint torques to apply for the task
 	 */
-	virtual void computeTorques(Eigen::VectorXd& task_joint_torques);
+	virtual void computeTorques(VectorXd& task_joint_torques);
 
 	/**
 	 * @brief      reinitializes the desired state to the current robot
@@ -94,14 +97,25 @@ public:
 	 */
 	void reInitializeTask();
 
+
+	void setMotionAxis(const Vector3d motion_axis);
+	void setForceAxis(const Vector3d force_axis);
+	void setFullMotionControl();
+	void setFullForceControl();
+
+
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
 
 	// inputs to be defined by the user
-	Eigen::Vector3d _desired_position;   // defaults to the current position when the task is created
-	Eigen::Vector3d _desired_velocity;   // defaults to Zero
-	Eigen::Vector3d _desired_acceleration;   // defaults to Zero
+	Vector3d _desired_position;   // defaults to the current position when the task is created
+	Vector3d _desired_velocity;   // defaults to Zero
+	Vector3d _desired_acceleration;   // defaults to Zero
+
+	Vector3d _desired_force;
+
+	double _kv_force;
 
 	double _kp;                          // defaults to 50.0 
 	double _kv;                          // defaults to 14.0
@@ -121,25 +135,29 @@ public:
 #endif
 
 	// internal variables, not to be touched by the user
-	std::string _link_name;
-	Eigen::Affine3d _control_frame;
+	string _link_name;
+	Affine3d _control_frame;
 
-	Eigen::Vector3d _current_position;
-	Eigen::Vector3d _current_velocity;
+	Vector3d _current_position;
+	Vector3d _current_velocity;
 
-	Eigen::Vector3d _integrated_position_error;
+	Vector3d _integrated_position_error;
 
-	Eigen::Vector3d _unit_mass_control;
+	Vector3d _motion_control;
+	Vector3d _force_control;
 
-	Eigen::MatrixXd _jacobian;
-	Eigen::MatrixXd _projected_jacobian;
-	Eigen::MatrixXd _Lambda;
-	Eigen::MatrixXd _Jbar;
-	Eigen::MatrixXd _N;
+	Matrix3d _sigma_motion;
+	MatrixXd _sigma_force;
 
-	Eigen::VectorXd _step_desired_position;
-	Eigen::VectorXd _step_desired_velocity;
-	Eigen::VectorXd _step_desired_acceleration;
+	MatrixXd _jacobian;
+	MatrixXd _projected_jacobian;
+	MatrixXd _Lambda;
+	MatrixXd _Jbar;
+	MatrixXd _N;
+
+	VectorXd _step_desired_position;
+	VectorXd _step_desired_velocity;
+	VectorXd _step_desired_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;

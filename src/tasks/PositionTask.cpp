@@ -46,6 +46,8 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 	_kv = 14.0;
 	_ki = 0.0;
 
+	_kv_force = 10.0;
+
 	// initialize matrices sizes
 	_jacobian.setZero(3,dof);
 	_projected_jacobian.setZero(3,dof);
@@ -53,6 +55,9 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 	_Jbar.setZero(dof,3);
 	_N.setZero(dof,dof);
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
+
+	_sigma_motion = Matrix3d::Identity();
+	_sigma_force = Matrix3d::Zero();
 
 #ifdef USING_OTG 
 	_use_interpolation_flag = true;
@@ -77,13 +82,16 @@ void PositionTask::reInitializeTask()
 	_desired_velocity.setZero();
 	_desired_acceleration.setZero();
 
+	_desired_force.setZero();
+
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
 	_step_desired_acceleration = _desired_acceleration;
 
 	_integrated_position_error.setZero();
 
-	_unit_mass_control.setZero();
+	_motion_control.setZero();
+	_force_control.setZero();
 	_task_force.setZero();
 	_first_iteration = true;
 
@@ -155,22 +163,54 @@ void PositionTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		{
 			_step_desired_velocity *= _saturation_velocity / _step_desired_velocity.norm();
 		}
-		_unit_mass_control = (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
+		_motion_control = _sigma_motion * (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
 		// _task_force = _Lambda * (_step_desired_acceleration -_kv*(_current_velocity - _step_desired_velocity));
 	}
 	else
 	{
-		_unit_mass_control = _step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error;
+		_motion_control = _sigma_motion * (_step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error);
 		// _task_force = _Lambda*(_step_desired_acceleration -_kp*(_current_position - _step_desired_position) - _kv*(_current_velocity - _step_desired_velocity ) - _ki * _integrated_position_error);
 	}
 
+	_force_control = _sigma_force * (_desired_force - _kv_force * _current_velocity);
+
 	// compute task torques
-	_task_force = _Lambda * _unit_mass_control;
+	_task_force = _Lambda * _motion_control + _force_control;
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;
 
 	// update previous time
 	_t_prev = _t_curr;
 }
+
+
+void PositionTask::setMotionAxis(const Vector3d motion_axis)
+{
+	Vector3d normalized_axis = motion_axis.normalized();
+
+	_sigma_motion = normalized_axis * normalized_axis.transpose();
+	_sigma_force = Matrix3d::Identity() - _sigma_motion;
+}
+
+void PositionTask::setForceAxis(const Vector3d force_axis)
+{
+	Vector3d normalized_axis = force_axis.normalized();
+
+	_sigma_force = normalized_axis * normalized_axis.transpose();
+	_sigma_motion = Matrix3d::Identity() - _sigma_force;
+}
+
+void PositionTask::setFullMotionControl()
+{
+	_sigma_motion = Matrix3d::Identity();
+	_sigma_force = Matrix3d::Zero();
+}
+
+void PositionTask::setFullForceControl()
+{
+	_sigma_force = Matrix3d::Identity();
+	_sigma_motion = Matrix3d::Zero();
+}
+
 
 } /* namespace Sai2Primitives */
 
