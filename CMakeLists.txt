@@ -67,7 +67,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
 	# ${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
-	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	)
 
 # add primitives 
@@ -82,6 +82,8 @@ SET(HAPTIC_TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/ImpedanceControl.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/PositionControl.cpp
 	)
 
 # add header files

@@ -81,7 +81,6 @@ void PositionTask::reInitializeTask()
 	_robot->position(_desired_position, _link_name, _control_frame.translation());
 	_desired_velocity.setZero();
 	_desired_acceleration.setZero();
-
 	_desired_force.setZero();
 
 	_step_desired_position = _desired_position;

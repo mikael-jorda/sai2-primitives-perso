@@ -474,6 +474,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 #ifdef USING_OTG
 	if(_use_interpolation_pos_flag)
 	{
+		VectorXd dummy_acceleration;
 		_otg_pos->setGoalPositionAndVelocity(_desired_object_position, _desired_object_velocity);
 		_otg_pos->computeNextState(_step_desired_object_position, _step_desired_object_velocity, _step_desired_object_acceleration);
 	}
@@ -504,6 +505,7 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 #ifdef USING_OTG
 	if(_use_interpolation_ori_flag)
 	{
+		Vector3d dummy_acceleration;
 		_otg_ori->setGoalPositionAndVelocity(_desired_object_orientation, _current_object_orientation, _desired_object_angular_velocity);
 		_otg_ori->computeNextState(_step_desired_object_orientation, _step_desired_object_angular_velocity, _step_desired_object_angular_acceleration);
 		Sai2Model::orientationError(_step_object_orientation_error, _step_desired_object_orientation, _current_object_orientation);
@@ -647,7 +649,6 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 				_contact_locations, _contact_types);
 	_grasp_matrix_inverse = computeGInverseAtGeometricCenterExplicit(_R_grasp_matrix, _contact_locations[0], _contact_locations[1]);
 	
-
 	Eigen::Matrix3d rot_robot1 = Eigen::Matrix3d::Identity();
 	Eigen::Matrix3d rot_robot2 = Eigen::Matrix3d::Identity();
 	_robot_arm_1->rotationInWorld(rot_robot1, _link_name_1);
@@ -1055,4 +1056,3 @@ MatrixXd computeGInverseAtGeometricCenterExplicit(const Matrix3d Rg,
 }
 
 } /* namespace Sai2Primitives */
-
