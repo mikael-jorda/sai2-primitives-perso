@@ -649,6 +649,9 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	force_moment_contribution.head(3) = force_related_force;
 	force_moment_contribution.tail(3) = moment_related_force;
 
+	_linear_force_control = force_related_force;
+	_linear_motion_control = position_related_force;
+
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
 

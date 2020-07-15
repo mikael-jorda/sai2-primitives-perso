@@ -543,6 +543,9 @@ public:
 	
 	ButterworthFilter* _filter_R;
 
+	Vector3d _linear_motion_control;
+	Vector3d _linear_force_control;
+
 	bool _use_isotropic_gains_position;                 // defaults to true
 	bool _use_isotropic_gains_orientation;              // defaults to true
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
