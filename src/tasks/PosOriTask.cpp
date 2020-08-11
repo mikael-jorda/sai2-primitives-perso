@@ -344,7 +344,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		Eigen::Vector3d force_feedback_term = force_feedback_term_raw;
 
 		// implement passivity observer and controller
-		// if(_passivity_enabled)
+		if(_passivity_enabled)
 		{
 
 			_E_correction_force += (1 - _Rc_inv_force) * (double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count();
@@ -649,9 +649,6 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	force_moment_contribution.head(3) = force_related_force;
 	force_moment_contribution.tail(3) = moment_related_force;
 
-	_linear_force_control = force_related_force;
-	_linear_motion_control = position_related_force;
-
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
 
@@ -665,6 +662,9 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	{
 		feedforward_force_moment *= 0.99;
 	}
+
+	_linear_force_control = force_related_force + feedforward_force_moment.head(3);
+	_linear_motion_control = position_related_force;
 
 	_task_force = _Lambda_modified * (position_orientation_contribution) + force_moment_contribution + feedforward_force_moment + mu;
 	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
