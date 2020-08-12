@@ -147,7 +147,7 @@ public:
 	Vector3d _force_control;
 
 	Matrix3d _sigma_motion;
-	MatrixXd _sigma_force;
+	Matrix3d _sigma_force;
 
 	MatrixXd _jacobian;
 	MatrixXd _projected_jacobian;
