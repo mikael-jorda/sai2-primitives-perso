@@ -669,6 +669,11 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_task_force = _Lambda_modified * (position_orientation_contribution) + force_moment_contribution + feedforward_force_moment + mu;
 	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
 
+	if(_task_force.head(3).norm() > 15.0)
+	{
+		_task_force *= 15.0 / _task_force.head(3).norm();
+	}
+
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;
 
@@ -832,6 +837,7 @@ void PosOriTask::setForceAxis(const Eigen::Vector3d force_axis)
 	_sigma_position = Eigen::Matrix3d::Identity() - _sigma_force;
 
 	resetIntegratorsLinear();
+	_otg->reInitialize(_current_position, _current_orientation);
 }
 
 void PosOriTask::updateForceAxis(const Eigen::Vector3d force_axis)
@@ -850,6 +856,7 @@ void PosOriTask::setLinearMotionAxis(const Eigen::Vector3d motion_axis)
 	_sigma_force = Eigen::Matrix3d::Identity() - _sigma_position;
 
 	resetIntegratorsLinear();
+	_otg->reInitialize(_current_position, _current_orientation);
 }
 
 void PosOriTask::updateLinearMotionAxis(const Eigen::Vector3d motion_axis)
@@ -866,6 +873,7 @@ void PosOriTask::setFullForceControl()
 	_sigma_position.setZero();
 
 	resetIntegratorsLinear();
+	_otg->reInitialize(_current_position, _current_orientation);
 }
 
 void PosOriTask::setFullLinearMotionControl()
@@ -874,6 +882,7 @@ void PosOriTask::setFullLinearMotionControl()
 	_sigma_force.setZero();
 
 	resetIntegratorsLinear();
+	_otg->reInitialize(_current_position, _current_orientation);
 }
 
 void PosOriTask::setMomentAxis(const Eigen::Vector3d moment_axis)
