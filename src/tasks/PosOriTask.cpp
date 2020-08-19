@@ -559,8 +559,8 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 			// force modifying PC
 			// force_related_force_raw = _sigma_force * ( force_feedback_term - _kv_force * _current_velocity);
 		}
-		force_related_force = _filter_command_force->update(force_related_force_raw);
-		// force_related_force = (force_related_force_raw);
+		// force_related_force = _filter_command_force->update(force_related_force_raw);
+		force_related_force = (force_related_force_raw);
 	}
 	else
 	{
@@ -669,10 +669,10 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_task_force = _Lambda_modified * (position_orientation_contribution) + force_moment_contribution + feedforward_force_moment + mu;
 	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
 
-	if(_task_force.head(3).norm() > 15.0)
-	{
-		_task_force *= 15.0 / _task_force.head(3).norm();
-	}
+	// if(_task_force.head(3).norm() > 20.0)
+	// {
+	// 	_task_force *= 20.0 / _task_force.head(3).norm();
+	// }
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose()*_task_force;
