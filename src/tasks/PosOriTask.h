@@ -519,12 +519,13 @@ public:
 	std::queue<double> _PO_buffer_force;
 	std::queue<double> _PO_buffer_force_forward;
 	std::queue<double> _Rc_buffer;
-	const int _PO_buffer_size_force = 15;
+	const int _PO_buffer_size_force = 250;
 	// const int _PO_counter_activity_force = 30;
 	// const int _PO_counter_passivity_force = 350;
 	// int _PO_counter = 0;
-	int _PO_counter = 15;
-	const int _PO_max_counter = 15;
+	int _PO_counter = 50;
+	const int _PO_max_counter = 50;
+	double _vc_squared_sum = 0;
 
 	double _passivity_observer_moment;
 	double _stored_energy_moment;
@@ -534,6 +535,9 @@ public:
 
 	Vector3d _F_pc;
 	Vector3d _vc;
+	double _Rc;
+	double _k_ff;
+	Vector3d _prev_force_diff = Vector3d::Zero();
 
 	ButterworthFilter* _filter_feedback_force;
 	ButterworthFilter* _filter_feedback_moment;
