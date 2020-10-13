@@ -81,7 +81,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_vc.setZero();
 	_F_pc.setZero();
 	_Rc = 1.0;
-	_k_ff = 0.9;
+	_k_ff = 1.0;
 
 	// initialize matrices sizes
 	_jacobian.setZero(6,dof);
