@@ -566,6 +566,11 @@ public:
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
+	MatrixXd _URange_pos;
+	MatrixXd _URange_ori;
+	MatrixXd _URange;
+	int _pos_dof, _ori_dof;
+
 	bool _first_iteration;
 
 	Eigen::VectorXd _unit_mass_force;

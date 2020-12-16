@@ -93,6 +93,13 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_N.setZero(dof,dof);
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
 
+	_URange_pos = MatrixXd::Identity(3,3);
+	_URange_ori = MatrixXd::Identity(3,3);
+	_URange = MatrixXd::Identity(6,6);
+
+	_pos_dof = 3;
+	_ori_dof = 3;
+
 	_first_iteration = true;
 
 #ifdef USING_OTG
@@ -197,7 +204,18 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
-	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _projected_jacobian, _N_prec);
+
+	_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
+	_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec);
+
+	_pos_dof = _URange_pos.cols();
+	_ori_dof = _URange_ori.cols();
+
+	_URange.setZero(6, _pos_dof + _ori_dof);
+	_URange.block(0,0,3,_pos_dof) = _URange_pos;
+	_URange.block(3,_pos_dof,3,_ori_dof) = _URange_ori;
+
+	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
 
 	switch(_dynamic_decoupling_type)
 	{
@@ -210,15 +228,15 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 		case PARTIAL_DYNAMIC_DECOUPLING :
 		{
 			_Lambda_modified = _Lambda;
-			_Lambda_modified.block<3,3>(3,3) = Eigen::Matrix3d::Identity();
-			_Lambda_modified.block<3,3>(0,3) = Eigen::Matrix3d::Zero();
-			_Lambda_modified.block<3,3>(3,0) = Eigen::Matrix3d::Zero();
+			_Lambda_modified.block(_pos_dof,_pos_dof, _ori_dof, _ori_dof) = Eigen::MatrixXd::Identity(_ori_dof, _ori_dof);
+			_Lambda_modified.block(0,_pos_dof, _pos_dof, _ori_dof) = Eigen::MatrixXd::Zero(_pos_dof, _ori_dof);
+			_Lambda_modified.block(_pos_dof,0, _ori_dof, _pos_dof) = Eigen::MatrixXd::Zero(_ori_dof, _pos_dof);
 			break;
 		}
 
 		case IMPEDANCE :
 		{
-			_Lambda_modified = Eigen::MatrixXd::Identity(6,6);
+			_Lambda_modified = Eigen::MatrixXd::Identity(_pos_dof+_ori_dof,_pos_dof+_ori_dof);
 			break;
 		}
 
@@ -233,7 +251,7 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 				}
 			}
 			Eigen::MatrixXd M_inv_modif = M_modif.inverse();
-			Eigen::MatrixXd Lambda_inv_modif = _projected_jacobian * (M_inv_modif * _projected_jacobian.transpose());
+			Eigen::MatrixXd Lambda_inv_modif = _URange.transpose() * _projected_jacobian * (M_inv_modif * _projected_jacobian.transpose()) * _URange;
 			_Lambda_modified = Lambda_inv_modif.inverse();
 			break;
 		}
@@ -252,25 +270,25 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
-	Eigen::MatrixXd dJ = _projected_jacobian - _prev_projected_jacobian;
+	// Eigen::MatrixXd dJ = _URange.transpose() * (_projected_jacobian - _prev_projected_jacobian);
 
-	// get time since last call for the I term
-	_t_curr = std::chrono::high_resolution_clock::now();
-	if(_first_iteration)
-	{
-		_t_prev = _t_curr;
-		dJ.setZero();
-		_first_iteration = false;
-	}
-	_t_diff = _t_curr - _t_prev;
+	// // get time since last call for the I term
+	// _t_curr = std::chrono::high_resolution_clock::now();
+	// if(_first_iteration)
+	// {
+	// 	_t_prev = _t_curr;
+	// 	dJ.setZero();
+	// 	_first_iteration = false;
+	// }
+	// _t_diff = _t_curr - _t_prev;
 	
-	if(_t_diff.count() > 0)
-	{
-		dJ = (_projected_jacobian - _prev_projected_jacobian)/_t_diff.count();
-	}
+	// if(_t_diff.count() > 0)
+	// {
+	// 	dJ = _URange.transpose() * (_projected_jacobian - _prev_projected_jacobian)/_t_diff.count();
+	// }
 
 	Eigen::VectorXd mu = Eigen::VectorXd::Zero(6);
-	mu = (-_Lambda * dJ * _robot->_dq);
+	// mu = (-_Lambda * dJ * _robot->_dq);
 
 
 	// update matrix gains
@@ -414,10 +432,10 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 					// _Rc = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (_vc_squared_sum); // * _t_diff.count());
 					// _Rc = (2*_Rc + 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (vc_squared * _t_diff.count()))/3.0;
 
-					cout << "PO :\n" << (_passivity_observer_force + _stored_energy_force + _E_correction_force) << endl;
-					cout << "vc squared :\n" << vc_squared << endl;
-					cout << "vc squared sum :\n" << _vc_squared_sum << endl;
-					cout << "t diff :\n" << _t_diff.count() << endl;
+					// cout << "PO :\n" << (_passivity_observer_force + _stored_energy_force + _E_correction_force) << endl;
+					// cout << "vc squared :\n" << vc_squared << endl;
+					// cout << "vc squared sum :\n" << _vc_squared_sum << endl;
+					// cout << "t diff :\n" << _t_diff.count() << endl;
 
 					// _Rc = 1 + tanh(_passivity_observer_force + _E_correction_force + _stored_energy_force);
 
@@ -468,206 +486,6 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 
 
-		// if(_passivity_enabled)
-		// {
-
-		// 	_E_correction_force += (1 - _Rc_inv_force) * (double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count();
-		// 	// _E_correction_force = 0;
-
-
-		// 	Eigen::Vector3d f_diff = _desired_force - _sensed_force;
-		// 	_vc = force_feedback_term;
-		// 	// _vc = _filter_command_force->update(force_feedback_term);
-			
-		// 	// double power_input_output = ((double)(f_diff.transpose() * _sigma_force * _vc) -
-		// 			// (double) (_vc.transpose() * _sigma_force * _vc) * _Rc_inv_force) * _t_diff.count();
-
-		// 	// double power_input_output = ((double)(f_diff.transpose() * _sigma_force * _vc))* _t_diff.count();
-		// 	double power_1 = _Rc_inv_force * ((double)(_desired_force.transpose() * _sigma_force * _vc))* _t_diff.count();
-		// 	// power_1 += (double) (_vc.transpose() * _sigma_force * _vc) * (1 - _Rc_inv_force) * _t_diff.count();
-		// 	// Vector3d F_cmd = _desired_force + _vc - _kv_force * _current_velocity;
-		// 	Vector3d F_cmd = _desired_force + _vc;
-		// 	double power_5 = ((double)(F_cmd.transpose() * _sigma_force * _current_velocity))* _t_diff.count();
-		// 	// power_5 = 0;
-
-		// 	double vc_square = (double) (_vc.transpose() * _sigma_force * _vc);
-		// 	Vector3d tanh_vc = Vector3d::Zero();
-		// 	tanh_vc << tanh(_vc(0)), tanh(_vc(1)), tanh(_vc(2));
-		// 	double vc_tanhvc = (double) (tanh_vc.transpose() * _sigma_force * _vc);
-
-		// 	// double power_input_output = power_1 - power_5;
-		// 	double power_input_output = 0;
-
-
-		// 	if(power_1 < 0)
-		// 	{
-		// 		power_input_output += power_1;
-		// 		// cout << "power 1 : " << power_1 << endl;
-		// 	}
-		// 	else
-		// 	{
-		// 		_passivity_observer_force_forward += power_1;
-		// 		_PO_buffer_force_forward.push(power_1);
-		// 	}
-		// 	if(power_5 < 0)
-		// 	{
-		// 		power_input_output -= power_5;
-		// 		// cout << "power 5 : " << power_5 << endl;
-		// 	}
-		// 	else
-		// 	{
-		// 		_passivity_observer_force_forward -= power_5;
-		// 		_PO_buffer_force_forward.push(-power_5);
-		// 	}
-
-		// 	// power_input_output += (double) (_vc.transpose() * _sigma_force * _vc) * (1 - _Rc_inv_force) * _t_diff.count();
-
-		// 	// _stored_energy_force = 0.5 * _ki_force * (double) (_integrated_force_error.transpose() * _sigma_force * _integrated_force_error);
-		// 	_stored_energy_force = 0.0;
-
-		// 	_passivity_observer_force += power_input_output;
-		// 	_PO_buffer_force.push(power_input_output);
-
-		// 	if(_passivity_observer_force + _stored_energy_force + _E_correction_force > 0)
-		// 	{
-		// 		while(_PO_buffer_force.size() > _PO_buffer_size_force)
-		// 		{
-		// 			if(_passivity_observer_force + _E_correction_force + _stored_energy_force > _PO_buffer_force.front())
-		// 			{
-		// 				if(_PO_buffer_force.front() > 0)
-		// 				{
-		// 					_passivity_observer_force -= _PO_buffer_force.front();
-		// 				}
-		// 				_PO_buffer_force.pop();
-		// 			}
-		// 			else
-		// 			{
-		// 				break;
-		// 			}
-		// 		}
-		// 	}
-
-		// 	if(_passivity_observer_force_forward > 0)
-		// 	{
-		// 		while(_PO_buffer_force_forward.size() > _PO_buffer_size_force)
-		// 		{
-		// 			if(_passivity_observer_force_forward + _E_correction_force + _stored_energy_force > _PO_buffer_force_forward.front())
-		// 			{
-		// 				if(_PO_buffer_force_forward.front() > 0)
-		// 				{
-		// 					_passivity_observer_force_forward -= _PO_buffer_force_forward.front();
-		// 				}
-		// 				_PO_buffer_force_forward.pop();
-		// 			}
-		// 			else
-		// 			{
-		// 				break;
-		// 			}
-		// 		}
-		// 	}
-
-		// 	// gain rescaling PC
-
-		// 	// double Rcb_inv = _Rc_inv_force + (_passivity_observer_force + _stored_energy_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 	// double Rcb_inv = 1 + (_passivity_observer_force + _stored_energy_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 	// double Rcb_inv = 1 + tanh(_passivity_observer_force + _stored_energy_force);
-			
-		// 	double Rcb_inv = _Rc_inv_force;
-		// 	// if(_PO_counter == 0)
-		// 	{
-
-		// 		// double R_star = 1 / (1+_Rc_inv_force);
-		// 		// Rcb_inv = - (_passivity_observer_force + _stored_energy_force) / (_vc.transpose() * _sigma_force * _vc) / (R_star * R_star); 
-
-		// 		// Rcb_inv = 1;
-
-		// 		// if(_passivity_observer_force + _stored_energy_force + _E_correction_force < 0)
-		// 		// {
-		// 			// Rcb_inv = -((double) (_vc.transpose() * _sigma_force * _vc)) / (_passivity_observer_force + _stored_energy_force) * _t_diff.count();
-		// 			// Rcb_inv = _Rc_inv_force + (_passivity_observer_force + _stored_energy_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 			// Rcb_inv = _Rc_inv_force + tanh(_passivity_observer_force + _E_correction_force + _stored_energy_force);
-		// 			// Rcb_inv = 1 + tanh(_passivity_observer_force + _E_correction_force + _stored_energy_force);
-		// 			// Rcb_inv = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 			// Rcb_inv = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count()) - vc_tanhvc/(vc_square * _t_diff.count());
-		// 			// Rcb_inv = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 			Rcb_inv = _Rc_inv_force + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 			// Rcb_inv = _Rc_inv_force + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 		// }
-				
-		// 		// Eigen::VectorXd R_vec_raw = Rcb_inv * Eigen::VectorXd::Ones(1);
-		// 		// Eigen::VectorXd R_vec = _filter_R->update(R_vec_raw);
-		// 		// Rcb_inv = R_vec(0);
-
-		// 		if(Rcb_inv > 1)
-		// 		{
-		// 			Rcb_inv = 1;
-		// 		}
-		// 		if(Rcb_inv < 0)
-		// 		{
-		// 			Rcb_inv = 0;
-		// 		}
-		// 		_PO_counter = _PO_max_counter;
-		// 	}
-
-		// 	_PO_counter--;
-		// 	// _passivity_observer_force += (double) (_vc.transpose() * _sigma_force * _vc) * (_Rc_inv_force - Rcb_inv) * _t_diff.count();
-		// 	// _passivity_observer_force += (double) (_vc.transpose() * _sigma_force * _vc) * R_star * R_star * Rcb_inv * _t_diff.count();
-		// 	// _PO_buffer_force.back() += (double) (_vc.transpose() * _sigma_force * _vc) * R_star * R_star * Rcb_inv * _t_diff.count();
-		// 	// _PO_buffer_force.back() += (double) (_vc.transpose() * _sigma_force * _vc) * (1 - Rcb_inv) * _t_diff.count();
-			
-		// 	// if(power_5 < 0)
-		// 	// {
-		// 	// 	_passivity_observer_force += (1 - Rcb_inv) * (double) (_vc.transpose() * _sigma_force * _current_velocity) * _t_diff.count();
-		// 	// 	_PO_buffer_force.back() += (1 - Rcb_inv) * (double) (_vc.transpose() * _sigma_force * _current_velocity) * _t_diff.count();
-		// 	// }
-		// 	// else
-		// 	// {
-		// 	// 	_passivity_observer_force_forward += (1 - Rcb_inv) * (double) (_vc.transpose() * _sigma_force * _current_velocity) * _t_diff.count();
-		// 	// 	_PO_buffer_force_forward.back() += (1 - Rcb_inv) * (double) (_vc.transpose() * _sigma_force * _current_velocity) * _t_diff.count();
-		// 	// }
-
-		// 	// _E_correction_force += (_Rc_inv_force - Rcb_inv) * (double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count();
-
-
-		// 	_Rc_inv_force = Rcb_inv;
-
-		// 	// if(_Rc_buffer.size() < _PO_buffer_size_force)
-		// 	// {
-		// 	// 	_Rc_buffer.push(_Rc_inv_force);
-		// 	// 	_Rc_mean += _Rc_inv_force/_PO_buffer_size_force;
-		// 	// }
-		// 	// else
-		// 	// {
-		// 	// 	_Rc_buffer.push(_Rc_inv_force);
-		// 	// 	_Rc_mean += (_Rc_inv_force - _Rc_buffer.front())/_PO_buffer_size_force;
-		// 	// 	_Rc_buffer.pop();
-		// 	// }
-
-
-		// 	// // sensed force modifying PC
-		// 	// _F_pc.setZero();
-		// 	// _Rc_inv_force = 0;
-		// 	// if(_passivity_observer_force + _stored_energy_force < 0)
-		// 	// {
-		// 	// 	_Rc_inv_force = -(_passivity_observer_force + _stored_energy_force) / ((double) (_vc.transpose() * _sigma_force * _vc) * _t_diff.count());
-		// 	// 	if(_Rc_inv_force > 10.0)
-		// 	// 	{
-		// 	// 		_Rc_inv_force = 10.0;
-		// 	// 	}
-		// 	// 	_F_pc = _vc * _Rc_inv_force;
-			
-		// 	// 	_integrated_force_error += (_sensed_force - _desired_force) * _t_diff.count();
-		// 	// 	_integrated_force_error -= _F_pc * _t_diff.count();
-
-		// 	// 	force_feedback_term = - _kp_force * (_sensed_force - _desired_force - _F_pc) - _ki_force * _integrated_force_error; // - _kv_force * _current_velocity;
-
-		// 	// 	_passivity_observer_force += (double) (_F_pc.transpose() * _sigma_force * _vc) * _t_diff.count();
-		// 	// 	_PO_buffer_force.back() += (double) (_F_pc.transpose() * _sigma_force * _vc) * _t_diff.count();
-
-
-		// 	// }
-
-		// }
 
 		// compute the final contribution
 		// force_related_force = _sigma_force * (_desired_force + force_feedback_term * _Rc_inv_force - _kv_force * _current_velocity);
@@ -791,7 +609,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_linear_force_control = force_related_force + feedforward_force_moment.head(3);
 	_linear_motion_control = position_related_force;
 
-	_task_force = _Lambda_modified * (position_orientation_contribution) + force_moment_contribution + feedforward_force_moment + mu;
+	_task_force = _Lambda_modified * _URange.transpose() * (position_orientation_contribution) + _URange.transpose() * (force_moment_contribution + feedforward_force_moment);
 	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
 
 	// if(_task_force.head(3).norm() > 20.0)
@@ -800,7 +618,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// }
 
 	// compute task torques
-	task_joint_torques = _projected_jacobian.transpose()*_task_force;
+	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;
 
 	// update previous time
 	_prev_projected_jacobian = _projected_jacobian;
@@ -809,7 +627,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
 {
-	double position_error = (_desired_position - _current_position).transpose() * (_sigma_position) * (_desired_position - _current_position);
+	double position_error = (_desired_position - _current_position).transpose() * ( _URange_pos * _sigma_position * _URange_pos.transpose()) * (_desired_position - _current_position);
 	position_error = sqrt(position_error);
 	bool goal_reached = position_error < tolerance;
 	if(verbose)
@@ -824,7 +642,7 @@ bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
 
 bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbose)
 {
-	double orientation_error = _orientation_error.transpose() * _sigma_orientation * _orientation_error;
+	double orientation_error = _orientation_error.transpose() * _URange_ori * _sigma_orientation * _URange_ori.transpose() * _orientation_error;
 	orientation_error = sqrt(orientation_error);
 	bool goal_reached = orientation_error < tolerance;
 	if(verbose)
