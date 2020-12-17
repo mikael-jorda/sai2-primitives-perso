@@ -10,6 +10,8 @@
 #include "haptic_tasks/HapticController.h"
 #include "haptic_tasks/BilateralPassivityController.h"
 
+#include "perception/ForceSpaceParticleFilter.h"
+
 #ifdef USING_OTG
 #include "trajectory_generation/OTG.h"
 #include "trajectory_generation/OTG_ori.h"

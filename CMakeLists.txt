@@ -8,15 +8,15 @@ SET(CMAKE_CXX_FLAGS "-std=c++11 -I/usr/include -I/usr/local/include")
 SET(CMAKE_BUILD_TYPE "Release")
 
 # option to use OTG 
-option(USE_OTG "use the Reflexxes library for trajectory generation" OFF)
+option(USE_OTG "use the Reflexxes library for trajectory generation" ON)
 if(USE_OTG)
 	# need to set these two paths manually depending on install path of Reflexxes library
-	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeII) # need to manually set the path
+	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../ReflexxesTypeIV) # need to manually set the path
 
 	if (CMAKE_SYSTEM_NAME MATCHES Darwin) 
-		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/libReflexxesTypeII.a)
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/MacOS/x64/release/lib/libReflexxesTypeIV.a)
 	elseif (CMAKE_SYSTEM_NAME MATCHES Linux)
-		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeII.so)
+		SET (OTG_LIBRARY ${OTG_SOURCE_DIR}/Linux/x64/release/lib/shared/libReflexxesTypeIV.so)
 	endif () #NOTE: Windows is currently unsupported
 
 	SET (PROJECT_DEFINITIONS -DUSING_OTG)
@@ -80,6 +80,12 @@ SET(PRIMITIVES_SOURCE
 	${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
 	)
 
+# add primitives 
+SET(PERCEPTION_SOURCE 
+	${PROJECT_SOURCE_DIR}/src/perception/ForceSpaceParticleFilter.cpp
+	)
+
+
 # add haptic_tasks
 SET(HAPTIC_TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
@@ -103,12 +109,14 @@ if(USE_OTG)
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PRIMITIVES_SOURCE}
+		${PERCEPTION_SOURCE}
 		${HAPTIC_TASKS_SOURCE}
 		${OTG_SOURCE}
 		)
 else()
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
+		${PERCEPTION_SOURCE}
 		${PRIMITIVES_SOURCE}
 		${HAPTIC_TASKS_SOURCE}
 		)
