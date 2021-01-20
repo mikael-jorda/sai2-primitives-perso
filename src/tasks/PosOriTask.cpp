@@ -70,16 +70,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_linear_saturation_velocity = 0.3;
 	_angular_saturation_velocity = M_PI/3;
 
-	_filter_feedback_force = new ButterworthFilter(3, 0.015);
-	_filter_feedback_moment = new ButterworthFilter(3, 0.015);
-
-	_filter_command_force = new ButterworthFilter(3, 0.45);
-	_filter_command_moment = new ButterworthFilter(3, 0.015);
-	
-	_filter_R = new ButterworthFilter(1, 0.05);
-
 	_vc.setZero();
-	_F_pc.setZero();
 	_Rc = 1.0;
 	_k_ff = 1.0;
 
@@ -158,14 +149,6 @@ void PosOriTask::reInitializeTask()
 	_integrated_force_error.setZero();
 	_integrated_moment_error.setZero();
 
-	_filter_feedback_force->initializeFilter(Eigen::Vector3d::Zero());
-	_filter_feedback_moment->initializeFilter(Eigen::Vector3d::Zero());
-
-	_filter_command_force->initializeFilter(Eigen::Vector3d::Zero());
-	_filter_command_moment->initializeFilter(Eigen::Vector3d::Zero());
-
-	_filter_R->initializeFilter(Eigen::VectorXd::Ones(1));
-
 	_sigma_force.setZero();
 	_sigma_moment.setZero();
 
@@ -173,12 +156,8 @@ void PosOriTask::reInitializeTask()
 	_closed_loop_moment_control = false;
 
 	_passivity_enabled = true;
-	_passivity_observer_force = 0;
-	_passivity_observer_force_forward = 0;
-	_E_correction_force = 0;
-	_Rc_inv_force = 1.0;
-	_passivity_observer_moment = 0;
-	_Rc_inv_moment = 1.0;
+	_passivity_observer = 0;
+	_E_correction = 0;
 
 	_task_force.setZero(6);
 	_unit_mass_force.setZero(6);
@@ -270,27 +249,15 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
-	// Eigen::MatrixXd dJ = _URange.transpose() * (_projected_jacobian - _prev_projected_jacobian);
-
-	// // get time since last call for the I term
-	// _t_curr = std::chrono::high_resolution_clock::now();
-	// if(_first_iteration)
-	// {
-	// 	_t_prev = _t_curr;
-	// 	dJ.setZero();
-	// 	_first_iteration = false;
-	// }
-	// _t_diff = _t_curr - _t_prev;
+	// get time since last call for the I term
+	_t_curr = std::chrono::high_resolution_clock::now();
+	if(_first_iteration)
+	{
+		_t_prev = _t_curr;
+		_first_iteration = false;
+	}
+	_t_diff = _t_curr - _t_prev;
 	
-	// if(_t_diff.count() > 0)
-	// {
-	// 	dJ = _URange.transpose() * (_projected_jacobian - _prev_projected_jacobian)/_t_diff.count();
-	// }
-
-	Eigen::VectorXd mu = Eigen::VectorXd::Zero(6);
-	// mu = (-_Lambda * dJ * _robot->_dq);
-
-
 	// update matrix gains
 	if(_use_isotropic_gains_position)
 	{
@@ -305,9 +272,9 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_ki_ori_mat = _ki_ori * Eigen::Matrix3d::Identity();
 	}
 
-	Eigen::Vector3d force_related_force = Eigen::Vector3d::Zero();
+	Eigen::Vector3d force_feedback_related_force = Eigen::Vector3d::Zero();
 	Eigen::Vector3d position_related_force = Eigen::Vector3d::Zero();
-	Eigen::Vector3d moment_related_force = Eigen::Vector3d::Zero();
+	Eigen::Vector3d moment_feedback_related_force = Eigen::Vector3d::Zero();
 	Eigen::Vector3d orientation_related_force = Eigen::Vector3d::Zero();
 
 	// update controller state
@@ -329,47 +296,14 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// force related terms
 	if(_closed_loop_force_control)
 	{
-		// double force_factor_corrction = 1;
-		// if(_desired_force.norm() > 0.001)
-		// {
-		// 	force_factor_corrction *= 1 - (double) (_current_velocity.transpose() * _sigma_force * _desired_force)/(_desired_force.norm() * 0.05);
-		// }
-		// if(force_factor_corrction > 1)
-		// {
-		// 	force_factor_corrction = 1;
-		// }
-		// if(force_factor_corrction < 0.001)
-		// {
-		// 	force_factor_corrction = 0.001;
-		// }
-		// _desired_force *= force_factor_corrction;
-
 		// update the integrated error
 		_integrated_force_error += (_sensed_force - _desired_force) * _t_diff.count();
-		// if((_sensed_force - _desired_force).norm() < 1e-2)
-		// {
-		// 	_integrated_force_error.setZero();
-		// }
-		// Vector3d force_diff = (_sensed_force - _desired_force);
-		// if(_prev_force_diff.dot(force_diff) < 0)
-		// {
-			// _integrated_force_error.setZero();
-		// }
-		// _prev_force_diff = force_diff;
-		// if(_Rc_inv_force < 1)
-		// {
-		// 	_integrated_force_error.setZero();
-		// }
-		// if(_integrated_force_error.norm() > 10.0)
-		// {
-		// 	_integrated_force_error *= 10.0 / _integrated_force_error.norm();
-		// }
 
 		// compute the feedback term
-		Eigen::Vector3d force_feedback_term_raw = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error; // - _kv_force * _current_velocity;
-		Eigen::Vector3d force_feedback_term = force_feedback_term_raw;
+		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error;
 		_vc = force_feedback_term;
 
+		// saturate the feedback term
 		if(_vc.norm() > 20.0)
 		{
 			_vc *= 20.0 / _vc.norm();
@@ -385,30 +319,26 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 			Vector3d f_diff = _sensed_force - _desired_force;
 
 			// compute power input and output
-			// double power_input_output = (_desired_force.dot(vc_force_space) - F_cmd.dot(vr_force_space)) * _t_diff.count();
 			double power_input_output = (f_diff.dot(vc_force_space) - F_cmd.dot(vr_force_space)) * _t_diff.count();
 
-			// compute stored energy
-			// _stored_energy_force = 0.5 * _ki_force * (double) (_integrated_force_error.transpose() * _sigma_force * _integrated_force_error);
-			// _E_correction_force += (1 - _Rc) * vc_squared * _t_diff.count();
-
+			// compute stored energy (intentionally diabled)
+			// _stored_energy_PO = 0.5 * _ki_force * (double) (_integrated_force_error.transpose() * _sigma_force * _integrated_force_error);
 
 			// windowed PO
-			_passivity_observer_force += power_input_output; // + (1 - _Rc) * vc_squared * _t_diff.count();
-			_PO_buffer_force.push(power_input_output); // + (1 - _Rc) * vc_squared * _t_diff.count());
+			_passivity_observer += power_input_output;
+			_PO_buffer_window.push(power_input_output);
 
-
-			if(_passivity_observer_force + _stored_energy_force + _E_correction_force > 0)
+			if(_passivity_observer + _stored_energy_PO + _E_correction > 0)
 			{
-				while(_PO_buffer_force.size() > _PO_buffer_size_force)
+				while(_PO_buffer_window.size() > _PO_window_size)
 				{
-					if(_passivity_observer_force + _E_correction_force + _stored_energy_force > _PO_buffer_force.front())
+					if(_passivity_observer + _E_correction + _stored_energy_PO > _PO_buffer_window.front())
 					{
-						if(_PO_buffer_force.front() > 0)
+						if(_PO_buffer_window.front() > 0)
 						{
-							_passivity_observer_force -= _PO_buffer_force.front();
+							_passivity_observer -= _PO_buffer_window.front();
 						}
-						_PO_buffer_force.pop();
+						_PO_buffer_window.pop();
 					}
 					else
 					{
@@ -424,91 +354,37 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 				_PO_counter = _PO_max_counter;
 
 				double old_Rc = _Rc;
-				if(_passivity_observer_force + _stored_energy_force + _E_correction_force < 0)
-				// if(vc_squared > 1)
+				if(_passivity_observer + _stored_energy_PO + _E_correction < 0)   // activity detected
 				{
-					// _Rc += (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (vc_squared * _t_diff.count());
-					_Rc = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (_vc_squared_sum * _t_diff.count());
-					// _Rc = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (_vc_squared_sum); // * _t_diff.count());
-					// _Rc = (2*_Rc + 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (vc_squared * _t_diff.count()))/3.0;
-
-					// cout << "PO :\n" << (_passivity_observer_force + _stored_energy_force + _E_correction_force) << endl;
-					// cout << "vc squared :\n" << vc_squared << endl;
-					// cout << "vc squared sum :\n" << _vc_squared_sum << endl;
-					// cout << "t diff :\n" << _t_diff.count() << endl;
-
-					// _Rc = 1 + tanh(_passivity_observer_force + _E_correction_force + _stored_energy_force);
+					_Rc = 1 + (_passivity_observer + _stored_energy_PO + _E_correction) / (_vc_squared_sum * _t_diff.count());
 
 					if(_Rc > 1){_Rc = 1;}
 					if(_Rc < 0){_Rc = 0;}
 
-					// new_Rc = 1 + (_passivity_observer_force + _stored_energy_force + _E_correction_force) / (vc_squared * _t_diff.count());
-
-					// if(new_Rc > 1){new_Rc = 1;}
-					// if(new_Rc < 0){new_Rc = 0;}
 				}
-				else
+				else    // no activity detected
 				{
-					// new_Rc = 1;
-					// _Rc = 1;
-					// _Rc = (1 + (_PO_max_counter-1)*_Rc)/(double)_PO_max_counter;
 					_Rc = (1 + (0.1*_PO_max_counter-1)*_Rc)/(double)(0.1*_PO_max_counter);
-					// _Rc = (1 + _Rc)/2.0;
 				}
-				// _E_correction_force += (1 - _Rc) * _vc_squared_sum * _t_diff.count();
-				_E_correction_force += (1 - old_Rc) * _vc_squared_sum * _t_diff.count();
-				// _E_correction_force += (1 - old_Rc) * _vc_squared_sum; // * _t_diff.count();
 
-				// _passivity_observer_force += (1 - _Rc) * _vc_squared_sum * _t_diff.count();
-				// _PO_buffer_force.back() += (1 - _Rc) * _vc_squared_sum * _t_diff.count();
-
+				_E_correction += (1 - old_Rc) * _vc_squared_sum * _t_diff.count();
 				_vc_squared_sum = 0;
 			}
 
-
-			// else
-			// {
 			_PO_counter--;
 			_vc_squared_sum += vc_squared;
-			// }
-
-			// compute energy correction
-			// _E_correction_force += 0.5*(1 - _Rc) * vc_squared * _t_diff.count();
-			// _E_correction_force += (1 - _Rc) * vc_squared * _t_diff.count();
-
-
 		}
-		else
+		else  // no passivity enabled
 		{
 			_Rc = 1;
 		}
 
-
-
-
-
 		// compute the final contribution
-		// force_related_force = _sigma_force * (_desired_force + force_feedback_term * _Rc_inv_force - _kv_force * _current_velocity);
-		// Eigen::Vector3d force_related_force_raw = _sigma_force * ( force_feedback_term - _kv_force * _current_velocity);
-		// if(_passivity_enabled)
-		// {
-			// gains rescaling PC
-			// double feedback_scaling = _Rc_inv_force/((1+_Rc_inv_force)*(1+_Rc_inv_force));
-			// force_related_force_raw = _sigma_force * ( force_feedback_term * feedback_scaling - _kv_force * _current_velocity);
-			// force_related_force_raw = _sigma_force * ( force_feedback_term * (_Rc_inv_force) - _kv_force * _current_velocity);
-		Eigen::Vector3d	force_related_force_raw = _sigma_force * ( _Rc * _vc - _kv_force * _current_velocity);
-			// force_related_force_raw = _sigma_force * ( _vc * (_Rc_inv_force) - _kv_force * _current_velocity);
-
-			// force modifying PC
-			// force_related_force_raw = _sigma_force * ( force_feedback_term - _kv_force * _current_velocity);
-		// }
-		// force_related_force = _filter_command_force->update(force_related_force_raw);
-		force_related_force = (force_related_force_raw);
+		force_feedback_related_force = _sigma_force * ( _Rc * _vc - _kv_force * _current_velocity);
 	}
-	else
+	else // open loop force control
 	{
-		// force_related_force = _sigma_force * (_desired_force - _kv_force * _current_velocity);
-		force_related_force = _sigma_force * (- _kv_force * _current_velocity);
+		force_feedback_related_force = _sigma_force * (- _kv_force * _current_velocity);
 	}
 
 	// moment related terms
@@ -518,19 +394,20 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_integrated_moment_error += (_sensed_moment - _desired_moment) * _t_diff.count();
 
 		// compute the feedback term
-		Eigen::Vector3d moment_feedback_term_raw = - _kp_moment * (_sensed_moment - _desired_moment) - _ki_moment * _integrated_moment_error;// - _kv_moment * _current_angular_velocity;
-		Eigen::Vector3d moment_feedback_term = _filter_feedback_moment->update(moment_feedback_term_raw);
-		// Eigen::Vector3d moment_feedback_term = moment_feedback_term_raw;
+		Eigen::Vector3d moment_feedback_term = - _kp_moment * (_sensed_moment - _desired_moment) - _ki_moment * _integrated_moment_error;
+
+		// saturate the feedback term
+		if(moment_feedback_term.norm() > 10.0)
+		{
+			moment_feedback_term *= 10.0 / moment_feedback_term.norm();
+		}
 
 		// compute the final contribution
-		// moment_related_force = _sigma_moment * (_desired_moment + moment_feedback_term - _kv_moment * _current_angular_velocity);
-		// moment_related_force = _sigma_moment * (moment_feedback_term * _Rc_inv_moment - _kv_moment * _current_angular_velocity);
-		moment_related_force = _sigma_moment * (moment_feedback_term - _kv_moment * _current_angular_velocity);
+		moment_feedback_related_force = _sigma_moment * (moment_feedback_term - _kv_moment * _current_angular_velocity);
 	}
-	else
+	else  // open loop moment control
 	{
-		// moment_related_force = _sigma_moment * (_desired_moment - _kv_moment * _current_angular_velocity);
-		moment_related_force = _sigma_moment * (- _kv_moment * _current_angular_velocity);
+		moment_feedback_related_force = _sigma_moment * (- _kv_moment * _current_angular_velocity);
 	}
 
 	// motion related terms
@@ -559,12 +436,10 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 			_step_desired_velocity *= _linear_saturation_velocity/_step_desired_velocity.norm();
 		}
 		position_related_force = _sigma_position * (_step_desired_acceleration -_kv_pos_mat*(_current_velocity - _step_desired_velocity));
-		// position_related_force = -_kv_pos_mat*(_current_velocity - _step_desired_velocity);
 	}
 	else
 	{
 		position_related_force = _sigma_position*( _step_desired_acceleration - _kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error);
-		// position_related_force = -_kp_pos_mat*(_current_position - _step_desired_position) - _kv_pos_mat*(_current_velocity - _step_desired_velocity ) - _ki_pos_mat * _integrated_position_error;
 	}
 
 
@@ -589,8 +464,8 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 	// compute task force
 	Eigen::VectorXd force_moment_contribution(6), position_orientation_contribution(6);
-	force_moment_contribution.head(3) = force_related_force;
-	force_moment_contribution.tail(3) = moment_related_force;
+	force_moment_contribution.head(3) = force_feedback_related_force;
+	force_moment_contribution.tail(3) = moment_feedback_related_force;
 
 	position_orientation_contribution.head(3) = position_related_force;
 	position_orientation_contribution.tail(3) = orientation_related_force;
@@ -603,14 +478,13 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 	if(_closed_loop_force_control)
 	{
-		feedforward_force_moment.head(3) *= _k_ff;
+		feedforward_force_moment *= _k_ff;
 	}
 
-	_linear_force_control = force_related_force + feedforward_force_moment.head(3);
+	_linear_force_control = force_feedback_related_force + feedforward_force_moment.head(3);
 	_linear_motion_control = position_related_force;
 
 	_task_force = _Lambda_modified * _URange.transpose() * (position_orientation_contribution) + _URange.transpose() * (force_moment_contribution + feedforward_force_moment);
-	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment;
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;

@@ -477,7 +477,7 @@ public:
 	std::string _link_name;
 	Eigen::Affine3d _control_frame;   // in link_frame
 
-	// movement quantities
+	// motion quantities
 	Eigen::Vector3d _current_position;      // robot frame
 	Eigen::Matrix3d _current_orientation;   // robot frame
 
@@ -506,50 +506,27 @@ public:
 	bool _closed_loop_force_control;
 	bool _closed_loop_moment_control;
 
+	// passivity related variables
 	bool _passivity_enabled;
-	double _passivity_observer_force;
-	double _passivity_observer_force_forward;
-	double _E_correction_force;
-	double _stored_energy_force;
-	double _Rc_inv_force;
-	double _Rc_mean = 0;
-	double _Rc_eff = 0;
-	// Eigen::VectorXd _PO_buffer = Eigen::Vector3d::Zero();
-	// Eigen::Vector3d _stored_energy_buffer = Eigen::Vector3d::Zero();
-	std::queue<double> _PO_buffer_force;
-	std::queue<double> _PO_buffer_force_forward;
-	std::queue<double> _Rc_buffer;
-	const int _PO_buffer_size_force = 250;
-	// const int _PO_counter_activity_force = 30;
-	// const int _PO_counter_passivity_force = 350;
-	// int _PO_counter = 0;
-	int _PO_counter = 50;
+	double _passivity_observer;
+	double _E_correction;
+	double _stored_energy_PO;
+	std::queue<double> _PO_buffer_window;
+	const int _PO_window_size = 250;
+
 	const int _PO_max_counter = 50;
+	int _PO_counter = _PO_max_counter;
 	double _vc_squared_sum = 0;
 
-	double _passivity_observer_moment;
-	double _stored_energy_moment;
-	double _Rc_inv_moment;
-	std::queue<double> _PO_buffer_moment;
-	const int _PO_buffer_size_moment = 15;
-
-	Vector3d _F_pc;
 	Vector3d _vc;
 	double _Rc;
 	double _k_ff;
-	Vector3d _prev_force_diff = Vector3d::Zero();
 
-	ButterworthFilter* _filter_feedback_force;
-	ButterworthFilter* _filter_feedback_moment;
-
-	ButterworthFilter* _filter_command_force;
-	ButterworthFilter* _filter_command_moment;
-	
-	ButterworthFilter* _filter_R;
-
+	// linear control inputs
 	Vector3d _linear_motion_control;
 	Vector3d _linear_force_control;
 
+	// control parameters
 	bool _use_isotropic_gains_position;                 // defaults to true
 	bool _use_isotropic_gains_orientation;              // defaults to true
 	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
