@@ -67,7 +67,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
 	# ${PROJECT_SOURCE_DIR}/src/tasks/SupportAndConstraintsTask.cpp
-	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	)
 
 # add primitives 
@@ -80,6 +80,7 @@ SET(PRIMITIVES_SOURCE
 # add perception 
 SET(PERCEPTION_SOURCE 
 	${PROJECT_SOURCE_DIR}/src/perception/ForceSpaceParticleFilter.cpp
+	${PROJECT_SOURCE_DIR}/src/perception/MomentumObserver.cpp
 	)
 
 # add haptic_tasks

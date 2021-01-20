@@ -2,7 +2,7 @@
 #include "tasks/PositionTask.h"
 #include "tasks/OrientationTask.h"
 #include "tasks/PosOriTask.h"
-//#include "tasks/TwoHandTwoRobotsTask.h"
+#include "tasks/TwoHandTwoRobotsTask.h"
 #include "primitives/RedundantArmMotion.h"
 #include "primitives/SurfaceSurfaceAlignment.h"
 
