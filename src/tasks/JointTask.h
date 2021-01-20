@@ -28,9 +28,9 @@ class JointTask : public TemplateTask
 
 enum DynamicDecouplingType
 {
-	FULL_DYNAMIC_DECOUPLING,   // use the real Mass matrix
-	INERTIA_SATURATION,        // use a Mass matrix computed from saturating the minimal values of the Mass Matrix
-	IMPEDANCE,                 // use Identity for the Mass matrix
+	FULL_DYNAMIC_DECOUPLING,          // use the real Mass matrix
+	BOUNDED_INERTIA_ESTIMATES,        // use a Mass matrix computed from saturating the minimal values of the Mass Matrix
+	IMPEDANCE,                        // use Identity for the Mass matrix
 };
 
 public:
@@ -75,7 +75,7 @@ public:
 
 	// ---------- set dynamic decoupling type for the controller  ----------------
 	void setDynamicDecouplingFull();
-	void setDynamicDecouplingInertiaSaturation();
+	void setDynamicDecouplingBIE();
 	void setDynamicDecouplingNone();
 
 	void setNonIsotropicGains(const Eigen::VectorXd& kp, const Eigen::VectorXd& kv, const Eigen::VectorXd& ki);
@@ -129,7 +129,7 @@ public:
 	Eigen::MatrixXd _ki_mat;
 
 	Eigen::MatrixXd _M_modified;
-	int _dynamic_decoupling_type = INERTIA_SATURATION;
+	int _dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 
 #ifdef USING_OTG
 	double _loop_time;

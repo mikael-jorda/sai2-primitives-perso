@@ -36,7 +36,7 @@ enum DynamicDecouplingType
 	FULL_DYNAMIC_DECOUPLING,            // use the real Lambda matrix
 	PARTIAL_DYNAMIC_DECOUPLING,         // Use Lambda for position part, Identity for orientation and Zero for cross coupling
 	IMPEDANCE,                          // use Identity for the mass matrix
-	JOINT_INERTIA_SATURATION,           // Use a Lambda computed from a saturated joint space mass matrix
+	BOUNDED_INERTIA_ESTIMATES,           // Use a Lambda computed from a saturated joint space mass matrix
 };
 
 public:
@@ -159,7 +159,7 @@ public:
 	void setDynamicDecouplingFull();
 	void setDynamicDecouplingPartial();
 	void setDynamicDecouplingNone();
-	void setDynamicDecouplingInertiaSaturation();
+	void setDynamicDecouplingBIE();
 
 	void setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
 		const Eigen::Vector3d& kv, const Eigen::Vector3d& ki);
@@ -556,7 +556,7 @@ public:
 	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
 	Eigen::Matrix3d _ki_pos_mat, _ki_ori_mat;
 
-	int _dynamic_decoupling_type = JOINT_INERTIA_SATURATION;
+	int _dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 
 	// model quantities
 	Eigen::MatrixXd _jacobian;

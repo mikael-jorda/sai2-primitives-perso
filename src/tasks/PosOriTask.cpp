@@ -240,19 +240,19 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 			break;
 		}
 
-		case JOINT_INERTIA_SATURATION :
+		case BOUNDED_INERTIA_ESTIMATES :
 		{
-			Eigen::MatrixXd M_modif = _robot->_M;
+			Eigen::MatrixXd M_BIE = _robot->_M;
 			for(int i=0 ; i<_robot->dof() ; i++)
 			{
-				if(M_modif(i,i) < 0.1)
+				if(M_BIE(i,i) < 0.1)
 				{
-					M_modif(i,i) = 0.1;
+					M_BIE(i,i) = 0.1;
 				}
 			}
-			Eigen::MatrixXd M_inv_modif = M_modif.inverse();
-			Eigen::MatrixXd Lambda_inv_modif = _URange.transpose() * _projected_jacobian * (M_inv_modif * _projected_jacobian.transpose()) * _URange;
-			_Lambda_modified = Lambda_inv_modif.inverse();
+			Eigen::MatrixXd M_inv_BIE = M_BIE.inverse();
+			Eigen::MatrixXd Lambda_inv_BIE = _URange.transpose() * _projected_jacobian * (M_inv_BIE * _projected_jacobian.transpose()) * _URange;
+			_Lambda_modified = Lambda_inv_BIE.inverse();
 			break;
 		}
 
@@ -610,12 +610,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_linear_motion_control = position_related_force;
 
 	_task_force = _Lambda_modified * _URange.transpose() * (position_orientation_contribution) + _URange.transpose() * (force_moment_contribution + feedforward_force_moment);
-	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment + mu;
-
-	// if(_task_force.head(3).norm() > 20.0)
-	// {
-	// 	_task_force *= 20.0 / _task_force.head(3).norm();
-	// }
+	// _task_force = _Lambda_modified * (position_orientation_contribution + force_moment_contribution) + feedforward_force_moment;
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;
@@ -670,9 +665,9 @@ void PosOriTask::setDynamicDecouplingNone()
 	_dynamic_decoupling_type = IMPEDANCE;
 }
 
-void PosOriTask::setDynamicDecouplingInertiaSaturation()
+void PosOriTask::setDynamicDecouplingBIE()
 {
-	_dynamic_decoupling_type = JOINT_INERTIA_SATURATION;
+	_dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 }
 
 void PosOriTask::setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
