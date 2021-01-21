@@ -3,6 +3,7 @@
 #include "tasks/OrientationTask.h"
 #include "tasks/PosOriTask.h"
 #include "tasks/TwoHandTwoRobotsTask.h"
+
 #include "primitives/RedundantArmMotion.h"
 #include "primitives/SurfaceSurfaceAlignment.h"
 
@@ -13,6 +14,10 @@
 #include "haptic_tasks/PositionControl.h"
 
 #include "perception/ForceSpaceParticleFilter.h"
+#include "perception/MomentumObserver.h"
+
+#include "humanoid/FloatingBaseContactModel.h"
+#include "humanoid/InternalForceSelectionBarrierMethod.h"
 
 #ifdef USING_OTG
 #include "trajectory_generation/OTG.h"

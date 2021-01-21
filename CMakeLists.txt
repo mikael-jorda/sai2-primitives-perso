@@ -83,6 +83,13 @@ SET(PERCEPTION_SOURCE
 	${PROJECT_SOURCE_DIR}/src/perception/MomentumObserver.cpp
 	)
 
+# add humanoid 
+SET(HUMANOID_SOURCE 
+	${PROJECT_SOURCE_DIR}/src/humanoid/FloatingBaseContactModel.cpp
+	${PROJECT_SOURCE_DIR}/src/humanoid/InternalForceSelectionBarrierMethod.cpp
+	)
+
+
 # add haptic_tasks
 SET(HAPTIC_TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
@@ -108,6 +115,7 @@ if(USE_OTG)
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PERCEPTION_SOURCE}
+		${HUMANOID_SOURCE}
 		# ${PRIMITIVES_SOURCE}
 		${HAPTIC_TASKS_SOURCE}
 		${OTG_SOURCE}
@@ -116,6 +124,7 @@ else()
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
 		${PERCEPTION_SOURCE}
+		${HUMANOID_SOURCE}
 		# ${PRIMITIVES_SOURCE}
 		${HAPTIC_TASKS_SOURCE}
 		)
