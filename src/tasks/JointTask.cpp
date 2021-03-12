@@ -76,9 +76,9 @@ void JointTask::setDynamicDecouplingFull()
 	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
 }
 
-void JointTask::setDynamicDecouplingInertiaSaturation()
+void JointTask::setDynamicDecouplingBIE()
 {
-	_dynamic_decoupling_type = INERTIA_SATURATION;
+	_dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 }
 
 void JointTask::setDynamicDecouplingNone()
@@ -140,7 +140,7 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 			break;
 		}
 
-		case INERTIA_SATURATION :
+		case BOUNDED_INERTIA_ESTIMATES :
 		{
 			_M_modified = _robot->_M;
 			for(int i=0 ; i<_robot->dof() ; i++)
@@ -231,7 +231,7 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	}
 	else
 	{
-		_task_force = (_step_desired_acceleration -_kp_mat*(_current_position - _step_desired_position) - _kv_mat * _current_velocity - _ki_mat * _integrated_position_error);
+		_task_force = (_step_desired_acceleration -_kp_mat*(_current_position - _step_desired_position) - _kv_mat * (_current_velocity - _step_desired_velocity) - _ki_mat * _integrated_position_error);
 	}
 
 	_task_force = _M_modified * _task_force;

@@ -80,11 +80,26 @@ SET(PRIMITIVES_SOURCE
 	${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
 	)
 
+# add perception 
+SET(PERCEPTION_SOURCE 
+	${PROJECT_SOURCE_DIR}/src/perception/ForceSpaceParticleFilter.cpp
+	${PROJECT_SOURCE_DIR}/src/perception/MomentumObserver.cpp
+	)
+
+# add humanoid 
+SET(HUMANOID_SOURCE 
+	${PROJECT_SOURCE_DIR}/src/humanoid/FloatingBaseContactModel.cpp
+	${PROJECT_SOURCE_DIR}/src/humanoid/InternalForceSelectionBarrierMethod.cpp
+	)
+
+
 # add haptic_tasks
 SET(HAPTIC_TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/ImpedanceControl.cpp
+	${PROJECT_SOURCE_DIR}/src/haptic_tasks/PositionControl.cpp
 	)
 
 # add header files
@@ -102,14 +117,18 @@ INCLUDE_DIRECTORIES (
 if(USE_OTG)
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
-		${PRIMITIVES_SOURCE}
+		${PERCEPTION_SOURCE}
+		${HUMANOID_SOURCE}
+		# ${PRIMITIVES_SOURCE}
 		${HAPTIC_TASKS_SOURCE}
 		${OTG_SOURCE}
 		)
 else()
 	ADD_LIBRARY (sai2-primitives STATIC
 		${TASKS_SOURCE}
-		${PRIMITIVES_SOURCE}
+		${PERCEPTION_SOURCE}
+		${HUMANOID_SOURCE}
+		# ${PRIMITIVES_SOURCE}
 		${HAPTIC_TASKS_SOURCE}
 		)
 endif()

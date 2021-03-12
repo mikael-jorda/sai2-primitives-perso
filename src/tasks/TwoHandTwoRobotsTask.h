@@ -118,7 +118,56 @@ public:
 	 */
 	void reInitializeTask();
 
-	void updateObjectMassProperties(double object_mass, Eigen::Matrix3d object_inertia = Eigen::Matrix3d::Identity());
+	/**
+	 * @brief      Sets the object mass properties, and compute the transformation between 
+	 *             the frame of the grasp matrix and the object inertial frame
+	 *
+	 * @param[in]  object_mass     The object mass
+	 * @param[in]  T_world_com     The position of the object inertial frame in world frame
+	 * @param[in]  object_inertia  The object inertia tensor in its own inertial frame
+	 */
+	void setObjectMassPropertiesAndInitialInertialFrameLocation(double object_mass, 
+			Eigen::Affine3d T_world_com,
+			Eigen::Matrix3d object_inertia);
+
+	// /**
+	//  * @brief      Sets the control frame for the object. It will be placed on the object at the specified location and orientation
+	//  * 			   when the function is called, and then it will follow the motion of the object assuming it is rigidly attached to the arms.
+	//  * 			   Also sets the desired position and orientation to current ones.
+	//  *
+	//  * @param[in]  T_world_controlpoint  Location of the control frame in world frame.
+	//  */
+	void setControlFrameLocationInitial(Eigen::Affine3d T_world_controlpoint);
+
+	// //////////////////////////// Object force control related functions /////////////////////////////////////
+
+	void setForceSensorFrames(const std::string link_name_1, const Eigen::Affine3d sensor_in_link_r1, 
+										const std::string link_name_2, const Eigen::Affine3d sensor_in_link_r2);
+
+	void updateSensedForcesAndMoments(const Eigen::Vector3d sensed_force_sensor_frame_r1,
+										const Eigen::Vector3d sensed_moment_sensor_frame_r1,
+										const Eigen::Vector3d sensed_force_sensor_frame_r2,
+										const Eigen::Vector3d sensed_moment_sensor_frame_r2);
+
+	void setForceAxis(const Eigen::Vector3d force_axis);
+
+	void setLinearMotionAxis(const Eigen::Vector3d linear_motion_axis);
+
+	void setMomentAxis(const Eigen::Vector3d moment_axis);
+
+	void setAngularMotionAxis(const Eigen::Vector3d angular_motion_axis);
+
+	void setFullLinearMotionControl();
+
+	void setFullForceControl();
+
+	void setFullAngularMotionControl();
+
+	void setFullMomentControl();
+
+	void setClosedLoopForceControl();
+
+	void setClosedLoopMomentControl();
 
 	//------------------------------------------------
 	// Attributes

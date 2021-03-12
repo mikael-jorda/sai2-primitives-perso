@@ -47,9 +47,9 @@ set(SAI2-PRIMITIVES_EXAMPLES_COMMON_LIBRARIES
 	${GLFW_LIBRARY}
 	)
 
-
-ADD_SUBDIRECTORY(01-puma_control_pos_and_ori_tasks)
-ADD_SUBDIRECTORY(02-puma_control_posori_tasks)
-ADD_SUBDIRECTORY(03-kuka_arm_motion_primitive)
-ADD_SUBDIRECTORY(04-kuka_surface_surface_alignment)
-# ADD_SUBDIRECTORY(05-two_hand_two_robots_object_movement)
+ADD_SUBDIRECTORY(01-joint_control)
+ADD_SUBDIRECTORY(02-task_space_control)
+ADD_SUBDIRECTORY(03-task_and_redundancy)
+ADD_SUBDIRECTORY(04-surface_surface_contact)
+ADD_SUBDIRECTORY(05-two_hand_two_robots_manipulation)
+ADD_SUBDIRECTORY(10-haptic_impedance_control)
