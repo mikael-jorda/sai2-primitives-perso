@@ -1,48 +1,60 @@
 /*
- * Example of a controller for a Kuka arm made with the motion arm primitive for redundant arms
+ * Example of joint space control on a simulated PUMA robot
+ * Will move the elbow joint back and forth, and enable the joint interpolation after 5 seconds.
+ * Assumes the robot is performing its own gravity compensation so the controller ignores gravity
  *
  */
 
+// some standard library includes
 #include <iostream>
 #include <string>
 #include <thread>
 #include <math.h>
+#include <mutex>
 
+// sai2 main libraries includes
 #include "Sai2Model.h"
 #include "Sai2Graphics.h"
 #include "Sai2Simulation.h"
-#include <dynamics3d.h>
 
-#include "primitives/RedundantArmMotion.h"
+// sai2 utilities from sai2-common
 #include "timer/LoopTimer.h"
 
-#include <GLFW/glfw3.h> //must be loaded after loading opengl/glew as part of graphicsinterface
+// control tasks from sai2-primitives
+#include "tasks/JointTask.h"
 
+// include last
+#include <GLFW/glfw3.h> //must be loaded after loading Sai2Graphics (which loads opengl/glew)
+
+// for handling ctrl+c and interruptions properly
 #include <signal.h>
 bool fSimulationRunning = false;
 void sighandler(int){fSimulationRunning = false;}
 
+// namespaces for compactness of code
 using namespace std;
+using namespace Eigen;
 
+// mutex for safe threading
+mutex m;
+
+// config file names and object names
 const string world_file = "resources/world.urdf";
-const string robot_file = "resources/kuka_iiwa.urdf";
-const string robot_name = "Kuka-IIWA";
-
+const string robot_file = "resources/puma.urdf";
+const string robot_name = "PUMA";   // name in the world file
 const string camera_name = "camera";
 
-// simulation and control loop
+// simulation and control loop thread functions
 void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim);
 void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim);
 
+/*--------------- Functions and variables for graphic display handling ----------------*/
 // initialize window manager
 GLFWwindow* glfwInitialize();
-
 // callback to print glfw errors
 void glfwError(int error, const char* description);
-
 // callback when a key is pressed
 void keySelect(GLFWwindow* window, int key, int scancode, int action, int mods);
-
 // callback when a mouse button is pressed
 void mouseClick(GLFWwindow* window, int button, int action, int mods);
 
@@ -55,6 +67,12 @@ bool fTransZp = false;
 bool fTransZn = false;
 bool fRotPanTilt = false;
 
+/* 
+ * Main function 
+ * initializes everything, 
+ * handles the visualization thread 
+ * and starts the control and simulation threads 
+ */
 int main (int argc, char** argv) {
 	cout << "Loading URDF world model file: " << world_file << endl;
 
@@ -72,33 +90,27 @@ int main (int argc, char** argv) {
 	auto sim = new Simulation::Sai2Simulation(world_file, false);
 
 	// load robots
-	Eigen::Vector3d world_gravity = sim->_world->getGravity().eigen();
-	auto robot = new Sai2Model::Sai2Model(robot_file, false, sim->getRobotBaseTransform(robot_name), world_gravity);
-
+	auto robot = new Sai2Model::Sai2Model(robot_file, false);
+	// update robot model from simulation configuration
 	sim->getJointPositions(robot_name, robot->_q);
 	robot->updateModel();
 
 	// initialize GLFW window
 	GLFWwindow* window = glfwInitialize();
-
 	double last_cursorx, last_cursory;
-
-    // set callbacks
+	
+    // set callbacks for interaction with graphics window
 	glfwSetKeyCallback(window, keySelect);
 	glfwSetMouseButtonCallback(window, mouseClick);
 
 	// start the simulation thread first
 	fSimulationRunning = true;
 	thread sim_thread(simulation, robot, sim);
-
 	// next start the control thread
 	thread ctrl_thread(control, robot, sim);
 	
     // while window is open:
-    while (!glfwWindowShouldClose(window)) {
-		// update kinematic models
-		// robot->updateModel();
-
+    while (!glfwWindowShouldClose(window) && fSimulationRunning) {
 		// update graphics. this automatically waits for the correct amount of time
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
@@ -166,7 +178,7 @@ int main (int argc, char** argv) {
 	    glfwGetCursorPos(window, &last_cursorx, &last_cursory);
 	}
 
-	// stop simulation
+	// stop simulation and control
 	fSimulationRunning = false;
 	sim_thread.join();
 	ctrl_thread.join();
@@ -180,35 +192,32 @@ int main (int argc, char** argv) {
 	return 0;
 }
 
-//------------------------------------------------------------------------------
+//------------------ Controller main function
 void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	
+	// update robot model and initialize control vectors
 	robot->updateModel();
 	int dof = robot->dof();
-	Eigen::VectorXd command_torques = Eigen::VectorXd::Zero(dof);
-	Eigen::MatrixXd N_prec = Eigen::MatrixXd::Identity(dof,dof);
+	MatrixXd N_prec = MatrixXd::Identity(dof,dof);
+	VectorXd command_torques = VectorXd::Zero(dof);
 
-	string link_name = "link6";
-	Eigen::Vector3d pos_in_link = Eigen::Vector3d(0.0,0.0,0.0);
+	// prepare joint task
+	Sai2Primitives::JointTask* joint_task = new Sai2Primitives::JointTask(robot);
+	VectorXd joint_task_torques = VectorXd::Zero(dof);
+	// set the gains to get a PD controller with critical damping
+	joint_task->_kp = 100.0;
+	joint_task->_kv = 20.0;
+	joint_task->_ki = 0.0;
 
-	// Motion arm primitive
-	Sai2Primitives::RedundantArmMotion* motion_primitive = new Sai2Primitives::RedundantArmMotion(robot, link_name, pos_in_link);
-	Eigen::VectorXd motion_primitive_torques;
-	motion_primitive->enableGravComp();
-#ifdef USING_OTG
-	motion_primitive->_posori_task->_use_interpolation_flag = false;
-	motion_primitive->_joint_task->_use_interpolation_flag = false;
-#endif
-
-	Eigen::Matrix3d initial_orientation;
-	Eigen::Vector3d initial_position;
-	robot->rotation(initial_orientation, motion_primitive->_link_name);
-	robot->position(initial_position, motion_primitive->_link_name, motion_primitive->_control_frame.translation());
+	#ifdef USING_OTG
+		// disable the interpolation for the first phase
+		joint_task->_use_interpolation_flag = false;
+	#endif
 
 	// create a loop timer
-	double control_freq = 1000;
+	double control_freq = 1000;   // 1 KHz
 	LoopTimer timer;
-	timer.setLoopFrequency(control_freq);   // 1 KHz
+	timer.setLoopFrequency(control_freq);
 	double last_time = timer.elapsedTime(); //secs
 	bool fTimerDidSleep = true;
 	timer.initializeTimer(1000000); // 1 ms pause before starting loop
@@ -222,58 +231,60 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		double curr_time = timer.elapsedTime();
 		double loop_dt = curr_time - last_time;
 
-		// read joint positions, velocities, update model
-		sim->getJointPositions(robot_name, robot->_q);
-		sim->getJointVelocities(robot_name, robot->_dq);
+		// read joint positions, velocities from simulation and update robot model
+		{
+			lock_guard<mutex> lck(m);
+			sim->getJointPositions(robot_name, robot->_q);
+			sim->getJointVelocities(robot_name, robot->_dq);
+		}
 		robot->updateModel();
 
-		// update tasks model
-		N_prec = Eigen::MatrixXd::Identity(dof,dof);
-		motion_primitive->updatePrimitiveModel(N_prec);
+		// update task model
+		N_prec.setIdentity(dof,dof);
+		joint_task->updateTaskModel(N_prec);
 
-		// -------------------------------------------
-		////////////////////////////// Compute joint torques
-		double time = controller_counter/control_freq;
-
-		// orientation part
-		if(controller_counter < 3000)
-		{
-			motion_primitive->_desired_orientation = initial_orientation;
+		// -------- set task goals and compute control torques
+		// set the desired position (step every second)
+		if(controller_counter % 3000 == 500) {
+			joint_task->_desired_position(2) += 0.4;
 		}
-		else if(controller_counter <= 4000)
-		{
-			Eigen::Matrix3d R;
-			double theta = M_PI/2.0/1000.0 * (controller_counter-3000);
-			R << cos(theta) , 0 , sin(theta),
-			          0     , 1 ,     0     ,
-			    -sin(theta) , 0 , cos(theta);
-
-			motion_primitive->_desired_orientation = R*initial_orientation;
+		if(controller_counter % 3000 == 2000) {
+			joint_task->_desired_position(2) -= 0.4;
 		}
-		motion_primitive->_desired_angular_velocity = Eigen::Vector3d::Zero();
-
-		// position part
-		double circle_radius = 0.05;
-		double circle_freq = 0.33;
-		motion_primitive->_desired_position = initial_position + circle_radius * Eigen::Vector3d(0.0, sin(2*M_PI*circle_freq*time), 1-cos(2*M_PI*circle_freq*time));
-		motion_primitive->_desired_velocity = 2*M_PI*circle_freq*0.001*Eigen::Vector3d(0.0, cos(2*M_PI*circle_freq*time), sin(2*M_PI*circle_freq*time));
-
-		// torques
-		motion_primitive->computeTorques(motion_primitive_torques);
+		// enable interpolation after 6 seconds and set interpolation limits
+		#ifdef USING_OTG
+			if(controller_counter == 6500) {
+				joint_task->_use_interpolation_flag = true;
+				joint_task->_otg->setMaxVelocity(M_PI/6);
+				joint_task->_otg->setMaxAcceleration(M_PI);
+				joint_task->_otg->setMaxJerk(4*M_PI);
+			}
+		#endif
+		// compute task torques
+		joint_task->computeTorques(joint_task_torques);
 
 		//------ Final torques
-		command_torques = motion_primitive_torques;
+		command_torques = joint_task_torques;
 		// command_torques.setZero();
 
 		// -------------------------------------------
-		sim->setJointTorques(robot_name, command_torques);
-		
+		// set command torques to simultaiton
+		{
+			lock_guard<mutex> lck(m);
+			sim->setJointTorques(robot_name, command_torques);
+		}
+
+		// cout << robot->_M << endl << endl << endl;
 
 		// -------------------------------------------
+		// display robot state every half second
 		if(controller_counter % 500 == 0)
 		{
-			// cout << time << endl;
-			// cout << endl;
+			cout << time << endl;
+			cout << "desired position : " << joint_task->_desired_position.transpose() << endl;
+			cout << "current position : " << joint_task->_current_position.transpose() << endl;
+			cout << "position error : " << (joint_task->_desired_position - joint_task->_current_position).norm() << endl;
+			cout << endl;
 		}
 
 		controller_counter++;
@@ -283,6 +294,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		last_time = curr_time;
 	}
 
+	// display controller run frequency at the end
 	double end_time = timer.elapsedTime();
     std::cout << "\n";
     std::cout << "Control Loop run time  : " << end_time << " seconds\n";
@@ -296,9 +308,10 @@ void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	fSimulationRunning = true;
 
 	// create a timer
+	double sim_freq = 2000;   // 2 kHz
 	LoopTimer timer;
 	timer.initializeTimer();
-	timer.setLoopFrequency(2000); 
+	timer.setLoopFrequency(sim_freq); 
 	double last_time = timer.elapsedTime(); //secs
 	bool fTimerDidSleep = true;
 
@@ -306,10 +319,14 @@ void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		fTimerDidSleep = timer.waitForNextLoop();
 
 		// integrate forward
-		sim->integrate(0.0005);
+		{
+			lock_guard<mutex> lck(m);
+			sim->integrate(1.0 / sim_freq);
+		}
 
 	}
 
+	// display simulation run frequency at the end
 	double end_time = timer.elapsedTime();
     std::cout << "\n";
     std::cout << "Simulation Loop run time  : " << end_time << " seconds\n";
@@ -319,6 +336,7 @@ void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 
 
 //------------------------------------------------------------------------------
+// graphics utility functions
 GLFWwindow* glfwInitialize() {
 		/*------- Set up visualization -------*/
     // set up error callback

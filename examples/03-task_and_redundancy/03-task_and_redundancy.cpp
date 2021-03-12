@@ -1,24 +1,24 @@
 /*
- * Example of a controller for a Puma arm made with an orientation task and a position task in the nullspace of the orientation
- * Here, the position task will not affect the orientation task, but the orientation task will affect the position one.
- * The puma follows a circular trajectory in the Y-Z plane while maintaining an upwards orientation and then change the orientation to sideways, 
- * then the orientation turne around the Z axis
- *
+ * Example of a controller for a Panda arm (7DoF robot) using a 6DoF
+ * position plus orientation task and a joint task in its nullspace 
+ * to control the redundancy. The joint task activates after a few seconds.
+ * Interpolation is not used. Instead, the trajectory is directly sent 
+ * to the robot.
  */
 
+// Initialization is the same as examples 1 and 2
 #include <iostream>
 #include <string>
 #include <thread>
 #include <math.h>
+#include <mutex>
 
 #include "Sai2Model.h"
 #include "Sai2Graphics.h"
 #include "Sai2Simulation.h"
-#include <dynamics3d.h>
-
+#include "tasks/PosOriTask.h"
+#include "tasks/JointTask.h"
 #include "timer/LoopTimer.h"
-#include "tasks/PositionTask.h"
-#include "tasks/OrientationTask.h"
 
 #include <GLFW/glfw3.h> //must be loaded after loading opengl/glew as part of graphicsinterface
 
@@ -27,30 +27,26 @@ bool fSimulationRunning = false;
 void sighandler(int){fSimulationRunning = false;}
 
 using namespace std;
+using namespace Eigen;
 
 const string world_file = "resources/world.urdf";
-const string robot_file = "resources/puma.urdf";
-const string robot_name = "PUMA";
+const string robot_file = "resources/panda_arm.urdf";
+const string robot_name = "PANDA";
 
 const string camera_name = "camera";
+
+mutex m;
 
 // simulation and control loop
 void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim);
 void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim);
 
-// initialize window manager
+/*--------------- Functions and variables for graphic display handling ----------------*/
 GLFWwindow* glfwInitialize();
-
-// callback to print glfw errors
 void glfwError(int error, const char* description);
-
-// callback when a key is pressed
 void keySelect(GLFWwindow* window, int key, int scancode, int action, int mods);
-
-// callback when a mouse button is pressed
 void mouseClick(GLFWwindow* window, int button, int action, int mods);
 
-// flags for scene camera movement
 bool fTransXp = false;
 bool fTransXn = false;
 bool fTransYp = false;
@@ -59,6 +55,7 @@ bool fTransZp = false;
 bool fTransZn = false;
 bool fRotPanTilt = false;
 
+//------------ main function
 int main (int argc, char** argv) {
 	cout << "Loading URDF world model file: " << world_file << endl;
 
@@ -69,22 +66,19 @@ int main (int argc, char** argv) {
 
 	// load graphics scene
 	auto graphics = new Sai2Graphics::Sai2Graphics(world_file, false);
-	Eigen::Vector3d camera_pos, camera_lookat, camera_vertical;
+	Vector3d camera_pos, camera_lookat, camera_vertical;
 	graphics->getCameraPose(camera_name, camera_pos, camera_vertical, camera_lookat);
 
 	// load simulation world
 	auto sim = new Simulation::Sai2Simulation(world_file, false);
 
 	// load robots
-	Eigen::Vector3d world_gravity = sim->_world->getGravity().eigen();
-	auto robot = new Sai2Model::Sai2Model(robot_file, false, sim->getRobotBaseTransform(robot_name), world_gravity);
-
+	auto robot = new Sai2Model::Sai2Model(robot_file, false);
 	sim->getJointPositions(robot_name, robot->_q);
 	robot->updateModel();
 
 	// initialize GLFW window
 	GLFWwindow* window = glfwInitialize();
-
 	double last_cursorx, last_cursory;
 
     // set callbacks
@@ -100,9 +94,6 @@ int main (int argc, char** argv) {
 	
     // while window is open:
     while (!glfwWindowShouldClose(window)) {
-		// update kinematic models
-		// robot->updateModel();
-
 		// update graphics. this automatically waits for the correct amount of time
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
@@ -116,16 +107,16 @@ int main (int argc, char** argv) {
 
 		// move scene camera as required
     	// graphics->getCameraPose(camera_name, camera_pos, camera_vertical, camera_lookat);
-    	Eigen::Vector3d cam_depth_axis;
+    	Vector3d cam_depth_axis;
     	cam_depth_axis = camera_lookat - camera_pos;
     	cam_depth_axis.normalize();
-    	Eigen::Vector3d cam_up_axis;
+    	Vector3d cam_up_axis;
     	// cam_up_axis = camera_vertical;
     	// cam_up_axis.normalize();
     	cam_up_axis << 0.0, 0.0, 1.0; //TODO: there might be a better way to do this
-	    Eigen::Vector3d cam_roll_axis = (camera_lookat - camera_pos).cross(cam_up_axis);
+	    Vector3d cam_roll_axis = (camera_lookat - camera_pos).cross(cam_up_axis);
     	cam_roll_axis.normalize();
-    	Eigen::Vector3d cam_lookat_axis = camera_lookat;
+    	Vector3d cam_lookat_axis = camera_lookat;
     	cam_lookat_axis.normalize();
     	if (fTransXp) {
 	    	camera_pos = camera_pos + 0.05*cam_roll_axis;
@@ -161,9 +152,9 @@ int main (int argc, char** argv) {
 			double compass = 0.006*(cursorx - last_cursorx);
 			double azimuth = 0.006*(cursory - last_cursory);
 			double radius = (camera_pos - camera_lookat).norm();
-			Eigen::Matrix3d m_tilt; m_tilt = Eigen::AngleAxisd(azimuth, -cam_roll_axis);
+			Matrix3d m_tilt; m_tilt = AngleAxisd(azimuth, -cam_roll_axis);
 			camera_pos = camera_lookat + m_tilt*(camera_pos - camera_lookat);
-			Eigen::Matrix3d m_pan; m_pan = Eigen::AngleAxisd(compass, -cam_up_axis);
+			Matrix3d m_pan; m_pan = AngleAxisd(compass, -cam_up_axis);
 			camera_pos = camera_lookat + m_pan*(camera_pos - camera_lookat);
 	    }
 	    graphics->setCameraPose(camera_name, camera_pos, cam_up_axis, camera_lookat);
@@ -187,36 +178,34 @@ int main (int argc, char** argv) {
 //------------------------------------------------------------------------------
 void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	
+	// update robot model and initialize control vectors
 	robot->updateModel();
 	int dof = robot->dof();
-	Eigen::VectorXd command_torques = Eigen::VectorXd::Zero(dof);
-	Eigen::MatrixXd N_prec = Eigen::MatrixXd::Identity(dof,dof);
+	VectorXd command_torques = VectorXd::Zero(dof);
+	MatrixXd N_prec = MatrixXd::Identity(dof,dof);
 
+	// Position plus orientation task
 	string link_name = "end-effector";
-	Eigen::Vector3d pos_in_link = Eigen::Vector3d(0.07,0.0,0.0);
-
-	// Orientation task
-	Sai2Primitives::OrientationTask* ori_task = new Sai2Primitives::OrientationTask(robot, link_name, pos_in_link);
-	Eigen::VectorXd ori_task_torques = Eigen::VectorXd::Zero(dof);
-	ori_task->_kp = 100.0;
-	ori_task->_kv = 20.0;
-	ori_task->_ki = 2.0;
-	Eigen::Matrix3d initial_orientation;
-	robot->rotation(initial_orientation, ori_task->_link_name);
-
-	// Position task
-	Sai2Primitives::PositionTask* pos_task = new Sai2Primitives::PositionTask(robot, link_name, pos_in_link);
-	Eigen::VectorXd pos_task_torques = Eigen::VectorXd::Zero(dof);
-	pos_task->_kp = 100.0;
-	pos_task->_kv = 20.0;
-	pos_task->_ki = 2.0;
-	Eigen::Vector3d initial_position;
-	robot->position(initial_position, pos_task->_link_name, pos_task->_control_frame.translation());
+	Vector3d pos_in_link = Vector3d(0.0,0.0,0.0);
+	Sai2Primitives::PosOriTask* posori_task = new Sai2Primitives::PosOriTask(robot, link_name, pos_in_link); // no orientation parameter, default is identity
+	VectorXd posori_task_torques = VectorXd::Zero(dof);
 
 #ifdef USING_OTG
-	pos_task->_use_interpolation_flag = false;
-	ori_task->_use_interpolation_flag = false;
+	// disable the interpolation because trajectory is sent directly
+	posori_task->_use_interpolation_flag = false;
 #endif
+	// no gains setting here, using the default task values
+	Matrix3d initial_orientation;
+	Vector3d initial_position;
+	robot->rotation(initial_orientation, posori_task->_link_name);
+	robot->position(initial_position, posori_task->_link_name, posori_task->_control_frame.translation());
+
+	// joint task to control the redundancy
+	// using default gains and interpolation settings
+	Sai2Primitives::JointTask* joint_task = new Sai2Primitives::JointTask(robot);
+	VectorXd joint_task_torques = VectorXd::Zero(dof);
+
+	VectorXd initial_q = robot->_q;
 
 	// create a loop timer
 	double control_freq = 1000;
@@ -236,73 +225,75 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		double loop_dt = curr_time - last_time;
 
 		// read joint positions, velocities, update model
-		sim->getJointPositions(robot_name, robot->_q);
-		sim->getJointVelocities(robot_name, robot->_dq);
+		{
+			lock_guard<mutex> lock(m);
+			sim->getJointPositions(robot_name, robot->_q);
+			sim->getJointVelocities(robot_name, robot->_dq);
+		}
 		robot->updateModel();
 
-		// update tasks model
-		N_prec = Eigen::MatrixXd::Identity(dof,dof);
+		// update tasks model. Order is important to define the hierarchy
+		N_prec = MatrixXd::Identity(dof,dof);
 
-		ori_task->updateTaskModel(N_prec);
-		N_prec = ori_task->_N;
+		posori_task->updateTaskModel(N_prec);
+		N_prec = posori_task->_N;    
+		// after each task, need to update the nullspace 
+		// of the previous tasks in order to garantee 
+		// the dyamic consistency
 
-		pos_task->updateTaskModel(N_prec);
-		N_prec = pos_task->_N;
+		joint_task->updateTaskModel(N_prec);
 
-		// -------------------------------------------
-		////////////////////////////// Compute joint torques
-		double time = controller_counter/control_freq;
+		// -------- set task goals and compute control torques
+		// first the posori task.
+		// orientation:
+		double w_ori_traj = 2*M_PI*0.2;
+		double amp_ori_traj = M_PI/8;
+		double angle_ori_traj = amp_ori_traj * sin(w_ori_traj * curr_time);
+		double ang_vel_traj = amp_ori_traj * w_ori_traj * cos(w_ori_traj * curr_time);
+		double ang_accel_traj = amp_ori_traj * w_ori_traj * w_ori_traj * -sin(w_ori_traj * curr_time);
 
-		// orientation task
-		if(controller_counter < 3000)
-		{
-			ori_task->_desired_orientation = initial_orientation;
+		Matrix3d R = AngleAxisd(angle_ori_traj, Vector3d::UnitY()).toRotationMatrix();
+
+		posori_task->_desired_orientation = R.transpose()*initial_orientation;
+		posori_task->_desired_angular_velocity = ang_vel_traj * Vector3d::UnitY();
+		posori_task->_desired_angular_acceleration = ang_accel_traj * Vector3d::UnitY();
+
+		// position:
+		double radius_circle_pos = 0.05;
+		double w_circle_pos = 2*M_PI*0.33;
+		posori_task->_desired_position = initial_position + radius_circle_pos * Vector3d(0.0, sin(w_circle_pos*curr_time), 1-cos(w_circle_pos*curr_time));
+		posori_task->_desired_velocity = radius_circle_pos * w_circle_pos * Vector3d(0.0, cos(w_circle_pos*curr_time), sin(w_circle_pos*curr_time));
+		posori_task->_desired_acceleration = radius_circle_pos * w_circle_pos * w_circle_pos * Vector3d(0.0, -sin(w_circle_pos*curr_time), cos(w_circle_pos*curr_time));
+
+		// compute torques for the different tasks
+		posori_task->computeTorques(posori_task_torques);
+		joint_task->computeTorques(joint_task_torques);
+
+		// activate joint task only after 5 seconds and try to rotate the first joint
+		if(controller_counter < 5000) {
+			joint_task_torques.setZero();
 		}
-		else if(controller_counter <= 4000)
-		{
-			Eigen::Matrix3d R;
-			double theta = M_PI/2.0/1000.0 * (controller_counter-3000);
-			R << cos(theta) , 0 , sin(theta),
-			          0     , 1 ,     0     ,
-			    -sin(theta) , 0 , cos(theta);
-
-			ori_task->_desired_orientation = R.transpose()*initial_orientation;
+		if(controller_counter == 5000) {
+			joint_task->reInitializeTask();
+			joint_task->_desired_position = initial_q;
+			joint_task->_desired_position(0) += 1.0;
 		}
-		else if(controller_counter > 8500)
+
+		//------ compute the final torques
+		command_torques = posori_task_torques + joint_task_torques;
+
+		// send to simulation
 		{
-			Eigen::Matrix3d R;
-			double theta = M_PI/2.0/1000.0;
-			R << cos(theta) , -sin(theta),  0,
-			     sin(theta) ,  cos(theta),  0,
-			          0     ,       0    ,  1;
-
-			ori_task->_desired_orientation = R.transpose()*ori_task->_desired_orientation;
+			lock_guard<mutex> lock(m);
+			sim->setJointTorques(robot_name, command_torques);
 		}
-		ori_task->_desired_angular_velocity = Eigen::Vector3d::Zero();
-		ori_task->computeTorques(ori_task_torques);
-
-		// position task
-		double circle_radius = 0.03;
-		double circle_freq = 0.25;
-		pos_task->_desired_position = initial_position + circle_radius * Eigen::Vector3d(0.0, sin(2*M_PI*circle_freq*time), 1-cos(2*M_PI*circle_freq*time));
-		pos_task->_desired_velocity = 2*M_PI*circle_freq*0.001*Eigen::Vector3d(0.0, cos(2*M_PI*circle_freq*time), sin(2*M_PI*circle_freq*time));
-		pos_task->computeTorques(pos_task_torques);
-
-		//------ Final torques
-		command_torques = ori_task_torques + pos_task_torques;
-		// command_torques.setZero();
-
-		// -------------------------------------------
-		sim->setJointTorques(robot_name, command_torques);
 		
 
 		// -------------------------------------------
 		if(controller_counter % 500 == 0)
 		{
-			cout << time << endl;
-			cout << "desired position : " << pos_task->_desired_position.transpose() << endl;
-			cout << "current position : " << pos_task->_current_position.transpose() << endl;
-			cout << "position error : " << (pos_task->_desired_position - pos_task->_current_position).norm() << endl;
+			cout << curr_time << endl;
+			cout << "position error : " << (posori_task->_desired_position - posori_task->_current_position).norm() << endl;
 			cout << endl;
 		}
 
@@ -326,9 +317,10 @@ void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	fSimulationRunning = true;
 
 	// create a timer
+	double sim_freq = 2000;
 	LoopTimer timer;
 	timer.initializeTimer();
-	timer.setLoopFrequency(2000); 
+	timer.setLoopFrequency(sim_freq); 
 	double last_time = timer.elapsedTime(); //secs
 	bool fTimerDidSleep = true;
 
@@ -336,7 +328,10 @@ void simulation(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 		fTimerDidSleep = timer.waitForNextLoop();
 
 		// integrate forward
-		sim->integrate(0.0005);
+		{
+			lock_guard<mutex> lock(m);
+			sim->integrate(1.0/sim_freq);
+		}
 
 	}
 

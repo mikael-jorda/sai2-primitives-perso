@@ -19,11 +19,13 @@
 #include <string>
 #include <chrono>
 #include <queue> 
-#include "filters/ButterworthFilter.h"
 
 #ifdef USING_OTG
 	#include "trajectory_generation/OTG_posori.h"
 #endif
+
+using namespace Eigen;
+using namespace std;
 
 namespace Sai2Primitives
 {
@@ -60,8 +62,8 @@ public:
 	 *                            trajectory generation
 	 */
 	PosOriTask(Sai2Model::Sai2Model* robot, 
-		            const std::string link_name, 
-		            const Eigen::Affine3d control_frame = Eigen::Affine3d::Identity(),
+		            const string link_name, 
+		            const Affine3d control_frame = Affine3d::Identity(),
 		            const double loop_time = 0.001);
 
 	/**
@@ -81,9 +83,9 @@ public:
 	 *                          trajectory generation
 	 */
 	PosOriTask(Sai2Model::Sai2Model* robot, 
-		            const std::string link_name, 
-		            const Eigen::Vector3d pos_in_link, 
-		            const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity(),
+		            const string link_name, 
+		            const Vector3d pos_in_link, 
+		            const Matrix3d rot_in_link = Matrix3d::Identity(),
 		            const double loop_time = 0.001);
 
 
@@ -114,7 +116,7 @@ public:
 	 *                     identity of size n*n where n in the number of DoF of
 	 *                     the robot.
 	 */
-	virtual void updateTaskModel(const Eigen::MatrixXd N_prec);
+	virtual void updateTaskModel(const MatrixXd N_prec);
 
 	/**
 	 * @brief      Computes the torques associated with this task.
@@ -126,7 +128,7 @@ public:
 	 * @param      task_joint_torques  the vector to be filled with the new
 	 *                                 joint torques to apply for the task
 	 */
-	virtual void computeTorques(Eigen::VectorXd& task_joint_torques);
+	virtual void computeTorques(VectorXd& task_joint_torques);
 
 	/**
 	 * @brief      reinitializes the desired state to the current robot
@@ -161,10 +163,10 @@ public:
 	void setDynamicDecouplingNone();
 	void setDynamicDecouplingBIE();
 
-	void setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
-		const Eigen::Vector3d& kv, const Eigen::Vector3d& ki);
-	void setNonIsotropicGainsOrientation(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
-		const Eigen::Vector3d& kv, const Eigen::Vector3d& ki);
+	void setNonIsotropicGainsPosition(const Matrix3d& frame, const Vector3d& kp, 
+		const Vector3d& kv, const Vector3d& ki);
+	void setNonIsotropicGainsOrientation(const Matrix3d& frame, const Vector3d& kp, 
+		const Vector3d& kv, const Vector3d& ki);
 
 	void setIsotropicGainsPosition(const double kp, const double kv, const double ki);
 	void setIsotropicGainsOrientation(const double kp, const double kv, const double ki);
@@ -177,7 +179,7 @@ public:
 	 * @param[in]  link_name               The link name on which the sensor is attached
 	 * @param[in]  transformation_in_link  The transformation in link of the sensor
 	 */
-	void setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link);
+	void setForceSensorFrame(const string link_name, const Affine3d transformation_in_link);
 
 	/**
 	 * @brief      Updates the velues of the sensed force and sensed moment from
@@ -197,8 +199,8 @@ public:
 	 *                                         that the sensor applies to the
 	 *                                         environment in sensor frame
 	 */
-	void updateSensedForceAndMoment(const Eigen::Vector3d sensed_force_sensor_frame, 
-								    const Eigen::Vector3d sensed_moment_sensor_frame);
+	void updateSensedForceAndMoment(const Vector3d sensed_force_sensor_frame, 
+								    const Vector3d sensed_moment_sensor_frame);
 
 	/**
 	 * @brief      Sets the force controlled axis for a hybrid position force
@@ -212,7 +214,7 @@ public:
 	 * @param      force_axis  The axis in robot frame coordinates along which
 	 *                         the controller behaves as a force controller.
 	 */
-	void setForceAxis(const Eigen::Vector3d force_axis);
+	void setForceAxis(const Vector3d force_axis);
 
 	/**
 	 * @brief      Updates the force controlled axis for a hybrid position force
@@ -225,7 +227,7 @@ public:
 	 * @param      force_axis  The axis in robot frame coordinates along which
 	 *                         the controller behaves as a force controller.
 	 */
-	void updateForceAxis(const Eigen::Vector3d force_axis);
+	void updateForceAxis(const Vector3d force_axis);
 
 	/**
 	 * @brief      Sets the motion controlled axis for a hybrid position force
@@ -241,7 +243,7 @@ public:
 	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a motion controller.
 	 */
-	void setLinearMotionAxis(const Eigen::Vector3d motion_axis);
+	void setLinearMotionAxis(const Vector3d motion_axis);
 
 	/**
 	 * @brief      Sets the motion controlled axis for a hybrid position force
@@ -255,7 +257,7 @@ public:
 	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a motion controller.
 	 */
-	void updateLinearMotionAxis(const Eigen::Vector3d motion_axis);
+	void updateLinearMotionAxis(const Vector3d motion_axis);
 
 	/**
 	 * @brief      Sets the linear part of the task as a full 3DoF force
@@ -293,7 +295,7 @@ public:
 	 *                          which the controller behaves as a moment
 	 *                          controller.
 	 */
-	void setMomentAxis(const Eigen::Vector3d moment_axis);
+	void setMomentAxis(const Vector3d moment_axis);
 
 	/**
 	 * @brief      Sets the moment controlled axis for a hybrid orientation
@@ -308,7 +310,7 @@ public:
 	 *                          which the controller behaves as a moment
 	 *                          controller.
 	 */
-	void updateMomentAxis(const Eigen::Vector3d moment_axis);
+	void updateMomentAxis(const Vector3d moment_axis);
 
 	/**
 	 * @brief      Sets the angular movement controlled axis for a hybrid
@@ -327,7 +329,7 @@ public:
 	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a rotational motion controller.
 	 */
-	void setAngularMotionAxis(const Eigen::Vector3d motion_axis);
+	void setAngularMotionAxis(const Vector3d motion_axis);
 
 	/**
 	 * @brief      Sets the angular movement controlled axis for a hybrid
@@ -344,7 +346,7 @@ public:
 	 * @param      force_axis  The axis in robot frame coordinates along which the
 	 *                         controller behaves as a rotational motion controller.
 	 */
-	void updateAngularMotionAxis(const Eigen::Vector3d motion_axis);
+	void updateAngularMotionAxis(const Vector3d motion_axis);
 
 	/**
 	 * @brief      Sets the angular part of the task as a full 3DoF moment
@@ -368,32 +370,21 @@ public:
 	void setFullAngularMotionControl();
 
 	/**
-	 * @brief      Changes the behavior to closed loop force control for the
-	 *             force controlled directions in the linear part of the
+	 * @brief      Changes the behavior to closed loop force/moment control for the
+	 *             force controlled directions in the linear/angular parts of the
 	 *             controller
 	 */
 	void setClosedLoopForceControl();
-
-	/**
-	 * @brief      Changes the behavior to open loop force control for the force
-	 *             controlled directions in the linear part of the controller
-	 *             (default behavior)
-	 */
 	void setOpenLoopForceControl();
-
-	/**
-	 * @brief      Changes the behavior to closed loop moment control for the
-	 *             moment controlled directions in the angular part of the
-	 *             controller
-	 */
 	void setClosedLoopMomentControl();
+	void setOpenLoopMomentControl();
 
 	/**
-	 * @brief      Changes the behavior to open loop moment control for the
-	 *             moment controlled directions in the angular part of the
-	 *             controller
+	 * @brief      Enables or disables the passivity based stability for the closed loop
+	 *             force control (enabled by default)
 	 */
-	void setOpenLoopMomentControl();
+	void enablePassivity();
+	void disablePassivity();
 
 	// ------- helper methods -------
 
@@ -423,12 +414,12 @@ public:
 	// inputs to be defined by the user
 
 	// desired pose defaults to the configuration when the task is created
-	Eigen::Vector3d _desired_position;           // in robot frame
-	Eigen::Matrix3d _desired_orientation;        // in robot frame
-	Eigen::Vector3d _desired_velocity;           // in robot frame
-	Eigen::Vector3d _desired_angular_velocity;   // in robot frame
-	Eigen::Vector3d _desired_acceleration;
-	Eigen::Vector3d _desired_angular_acceleration;
+	Vector3d _desired_position;           // in robot frame
+	Matrix3d _desired_orientation;        // in robot frame
+	Vector3d _desired_velocity;           // in robot frame
+	Vector3d _desired_angular_velocity;   // in robot frame
+	Vector3d _desired_acceleration;
+	Vector3d _desired_angular_acceleration;
 
 	// gains for motion controller
 	// defaults to 50 for p gains, 14 for d gains and 0 fir i gains
@@ -447,17 +438,17 @@ public:
 	
 	// desired force and moment for the force part of the controller
 	// defaults to Zero
-	Eigen::Vector3d _desired_force;   // robot frame
-	Eigen::Vector3d _desired_moment;  // robot frame
+	Vector3d _desired_force;   // robot frame
+	Vector3d _desired_moment;  // robot frame
 
 	// velocity saturation is off by default
 	bool _use_velocity_saturation_flag;
 	double _linear_saturation_velocity;   // defaults to 0.3 m/s
 	double _angular_saturation_velocity;  // defaults to PI/3 Rad/s
 
-	// Eigen::Vector3d _kp_pos_vec, _kp_ori_vec;
-	// Eigen::Vector3d _kv_pos_vec, _kv_ori_vec;
-	// Eigen::Vector3d _ki_pos_vec, _ki_ori_vec;
+	// Vector3d _kp_pos_vec, _kp_ori_vec;
+	// Vector3d _kv_pos_vec, _kv_ori_vec;
+	// Vector3d _ki_pos_vec, _ki_ori_vec;
 
 // trajectory generation via interpolation using Reflexxes Library
 // on by defalut
@@ -474,34 +465,34 @@ public:
 #endif
 
 	// internal variables, not to be touched by the user
-	std::string _link_name;
-	Eigen::Affine3d _control_frame;   // in link_frame
+	string _link_name;
+	Affine3d _control_frame;   // in link_frame
 
 	// motion quantities
-	Eigen::Vector3d _current_position;      // robot frame
-	Eigen::Matrix3d _current_orientation;   // robot frame
+	Vector3d _current_position;      // robot frame
+	Matrix3d _current_orientation;   // robot frame
 
-	Eigen::Vector3d _current_velocity;           // robot frame
-	Eigen::Vector3d _current_angular_velocity;   // robot frame
+	Vector3d _current_velocity;           // robot frame
+	Vector3d _current_angular_velocity;   // robot frame
 
-	Eigen::Vector3d _orientation_error;               // robot frame
-	Eigen::Vector3d _integrated_orientation_error;    // robot frame
-	Eigen::Vector3d _integrated_position_error;       // robot frame
+	Vector3d _orientation_error;               // robot frame
+	Vector3d _integrated_orientation_error;    // robot frame
+	Vector3d _integrated_position_error;       // robot frame
 	
-	Eigen::Matrix3d _sigma_position;        // robot frame
-	Eigen::Matrix3d _sigma_orientation;     // robot frame
+	Matrix3d _sigma_position;        // robot frame
+	Matrix3d _sigma_orientation;     // robot frame
 
 	// force quantities
-	Eigen::Affine3d _T_control_to_sensor;  
+	Affine3d _T_control_to_sensor;  
 
-	Eigen::Vector3d _sensed_force;    // robot frame
-	Eigen::Vector3d _sensed_moment;   // robot frame
+	Vector3d _sensed_force;    // robot frame
+	Vector3d _sensed_moment;   // robot frame
 
-	Eigen::Vector3d _integrated_force_error;    // robot frame
-	Eigen::Vector3d _integrated_moment_error;   // robot frame
+	Vector3d _integrated_force_error;    // robot frame
+	Vector3d _integrated_moment_error;   // robot frame
 
-	Eigen::Matrix3d _sigma_force;     // robot frame
-	Eigen::Matrix3d _sigma_moment;    // robot frame
+	Matrix3d _sigma_force;     // robot frame
+	Matrix3d _sigma_moment;    // robot frame
 
 	bool _closed_loop_force_control;
 	bool _closed_loop_moment_control;
@@ -511,7 +502,7 @@ public:
 	double _passivity_observer;
 	double _E_correction;
 	double _stored_energy_PO;
-	std::queue<double> _PO_buffer_window;
+	queue<double> _PO_buffer_window;
 	const int _PO_window_size = 250;
 
 	const int _PO_max_counter = 50;
@@ -529,19 +520,19 @@ public:
 	// control parameters
 	bool _use_isotropic_gains_position;                 // defaults to true
 	bool _use_isotropic_gains_orientation;              // defaults to true
-	Eigen::Matrix3d _kp_pos_mat, _kp_ori_mat;
-	Eigen::Matrix3d _kv_pos_mat, _kv_ori_mat;
-	Eigen::Matrix3d _ki_pos_mat, _ki_ori_mat;
+	Matrix3d _kp_pos_mat, _kp_ori_mat;
+	Matrix3d _kv_pos_mat, _kv_ori_mat;
+	Matrix3d _ki_pos_mat, _ki_ori_mat;
 
 	int _dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 
 	// model quantities
-	Eigen::MatrixXd _jacobian;
-	Eigen::MatrixXd _projected_jacobian;
-	Eigen::MatrixXd _prev_projected_jacobian;
-	Eigen::MatrixXd _Lambda, _Lambda_modified;
-	Eigen::MatrixXd _Jbar;
-	Eigen::MatrixXd _N;
+	MatrixXd _jacobian;
+	MatrixXd _projected_jacobian;
+	MatrixXd _prev_projected_jacobian;
+	MatrixXd _Lambda, _Lambda_modified;
+	MatrixXd _Jbar;
+	MatrixXd _N;
 
 	MatrixXd _URange_pos;
 	MatrixXd _URange_ori;
@@ -550,15 +541,15 @@ public:
 
 	bool _first_iteration;
 
-	Eigen::VectorXd _unit_mass_force;
+	VectorXd _unit_mass_force;
 
-	Eigen::Vector3d _step_desired_position;
-	Eigen::Vector3d _step_desired_velocity;
-	Eigen::Matrix3d _step_desired_orientation;
-	Eigen::Vector3d _step_orientation_error;
-	Eigen::Vector3d _step_desired_angular_velocity;
-	Eigen::Vector3d _step_desired_acceleration;
-	Eigen::Vector3d _step_desired_angular_acceleration;
+	Vector3d _step_desired_position;
+	Vector3d _step_desired_velocity;
+	Matrix3d _step_desired_orientation;
+	Vector3d _step_orientation_error;
+	Vector3d _step_desired_angular_velocity;
+	Vector3d _step_desired_acceleration;
+	Vector3d _step_desired_angular_acceleration;
 
 #ifdef USING_OTG
 	double _loop_time;

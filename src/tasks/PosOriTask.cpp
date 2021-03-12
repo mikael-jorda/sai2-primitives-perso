@@ -8,25 +8,27 @@
 
 #include <stdexcept>
 
+using namespace std;
+using namespace Eigen;
 
 namespace Sai2Primitives
 {
 
 
 PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
-			const std::string link_name, 
-			const Eigen::Affine3d control_frame,
+			const string link_name, 
+			const Affine3d control_frame,
 			const double loop_time) :
 	PosOriTask(robot, link_name, control_frame.translation(), control_frame.linear(), loop_time) {}
 
 PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
-			const std::string link_name, 
-			const Eigen::Vector3d pos_in_link, 
-			const Eigen::Matrix3d rot_in_link,
+			const string link_name, 
+			const Vector3d pos_in_link, 
+			const Matrix3d rot_in_link,
 			const double loop_time)
 {
 
-	Eigen::Affine3d control_frame = Eigen::Affine3d::Identity();
+	Affine3d control_frame = Affine3d::Identity();
 	control_frame.linear() = rot_in_link;
 	control_frame.translation() = pos_in_link;
 
@@ -36,7 +38,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 
 	int dof = _robot->_dof;
 
-	_T_control_to_sensor = Eigen::Affine3d::Identity();  
+	_T_control_to_sensor = Affine3d::Identity();  
 
 	// motion
 	_robot->position(_current_position, _link_name, _control_frame.translation());
@@ -52,26 +54,24 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 
 	_use_isotropic_gains_position = true;
 	_use_isotropic_gains_orientation = true;
-	_kp_pos_mat = Eigen::Matrix3d::Zero();
-	_kv_pos_mat = Eigen::Matrix3d::Zero();
-	_ki_pos_mat = Eigen::Matrix3d::Zero();
-	_kp_ori_mat = Eigen::Matrix3d::Zero();
-	_kv_ori_mat = Eigen::Matrix3d::Zero();
-	_ki_ori_mat = Eigen::Matrix3d::Zero();
+	_kp_pos_mat = Matrix3d::Zero();
+	_kv_pos_mat = Matrix3d::Zero();
+	_ki_pos_mat = Matrix3d::Zero();
+	_kp_ori_mat = Matrix3d::Zero();
+	_kv_ori_mat = Matrix3d::Zero();
+	_ki_ori_mat = Matrix3d::Zero();
 
-	_kp_force = 1.0;
+	_kp_force = 0.7;
 	_kv_force = 10.0;
-	_ki_force = 0.7;
-	_kp_moment = 1.0;
+	_ki_force = 1.3;
+	_kp_moment = 0.7;
 	_kv_moment = 10.0;
-	_ki_moment = 0.7;
+	_ki_moment = 1.3;
 
 	_use_velocity_saturation_flag = false;
 	_linear_saturation_velocity = 0.3;
 	_angular_saturation_velocity = M_PI/3;
 
-	_vc.setZero();
-	_Rc = 1.0;
 	_k_ff = 1.0;
 
 	// initialize matrices sizes
@@ -82,7 +82,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_Lambda_modified.setZero(6,6);
 	_Jbar.setZero(dof,6);
 	_N.setZero(dof,dof);
-	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
+	_N_prec = MatrixXd::Identity(dof,dof);
 
 	_URange_pos = MatrixXd::Identity(3,3);
 	_URange_ori = MatrixXd::Identity(3,3);
@@ -138,8 +138,8 @@ void PosOriTask::reInitializeTask()
 	_step_desired_acceleration.setZero();
 	_step_desired_angular_acceleration.setZero();
 
-	_sigma_position = Eigen::Matrix3d::Identity();
-	_sigma_orientation = Eigen::Matrix3d::Identity();
+	_sigma_position = Matrix3d::Identity();
+	_sigma_orientation = Matrix3d::Identity();
 
 	_desired_force.setZero();
 	_sensed_force.setZero();
@@ -158,6 +158,12 @@ void PosOriTask::reInitializeTask()
 	_passivity_enabled = true;
 	_passivity_observer = 0;
 	_E_correction = 0;
+	_stored_energy_PO = 0;
+	_PO_buffer_window = queue<double>();
+	_PO_counter = _PO_max_counter;
+	_vc_squared_sum = 0;
+	_vc.setZero();
+	_Rc = 1.0;
 
 	_task_force.setZero(6);
 	_unit_mass_force.setZero(6);
@@ -168,15 +174,15 @@ void PosOriTask::reInitializeTask()
 #endif
 }
 
-void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
+void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 {
 	if(N_prec.rows() != N_prec.cols())
 	{
-		throw std::invalid_argument("N_prec matrix not square in PosOriTask::updateTaskModel\n");
+		throw invalid_argument("N_prec matrix not square in PosOriTask::updateTaskModel\n");
 	}
 	if(N_prec.rows() != _robot->_dof)
 	{
-		throw std::invalid_argument("N_prec matrix size not consistent with robot dof in PosOriTask::updateTaskModel\n");
+		throw invalid_argument("N_prec matrix size not consistent with robot dof in PosOriTask::updateTaskModel\n");
 	}
 
 	_N_prec = N_prec;
@@ -207,21 +213,21 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 		case PARTIAL_DYNAMIC_DECOUPLING :
 		{
 			_Lambda_modified = _Lambda;
-			_Lambda_modified.block(_pos_dof,_pos_dof, _ori_dof, _ori_dof) = Eigen::MatrixXd::Identity(_ori_dof, _ori_dof);
-			_Lambda_modified.block(0,_pos_dof, _pos_dof, _ori_dof) = Eigen::MatrixXd::Zero(_pos_dof, _ori_dof);
-			_Lambda_modified.block(_pos_dof,0, _ori_dof, _pos_dof) = Eigen::MatrixXd::Zero(_ori_dof, _pos_dof);
+			_Lambda_modified.block(_pos_dof,_pos_dof, _ori_dof, _ori_dof) = MatrixXd::Identity(_ori_dof, _ori_dof);
+			_Lambda_modified.block(0,_pos_dof, _pos_dof, _ori_dof) = MatrixXd::Zero(_pos_dof, _ori_dof);
+			_Lambda_modified.block(_pos_dof,0, _ori_dof, _pos_dof) = MatrixXd::Zero(_ori_dof, _pos_dof);
 			break;
 		}
 
 		case IMPEDANCE :
 		{
-			_Lambda_modified = Eigen::MatrixXd::Identity(_pos_dof+_ori_dof,_pos_dof+_ori_dof);
+			_Lambda_modified = MatrixXd::Identity(_pos_dof+_ori_dof,_pos_dof+_ori_dof);
 			break;
 		}
 
 		case BOUNDED_INERTIA_ESTIMATES :
 		{
-			Eigen::MatrixXd M_BIE = _robot->_M;
+			MatrixXd M_BIE = _robot->_M;
 			for(int i=0 ; i<_robot->dof() ; i++)
 			{
 				if(M_BIE(i,i) < 0.1)
@@ -229,8 +235,8 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 					M_BIE(i,i) = 0.1;
 				}
 			}
-			Eigen::MatrixXd M_inv_BIE = M_BIE.inverse();
-			Eigen::MatrixXd Lambda_inv_BIE = _URange.transpose() * _projected_jacobian * (M_inv_BIE * _projected_jacobian.transpose()) * _URange;
+			MatrixXd M_inv_BIE = M_BIE.inverse();
+			MatrixXd Lambda_inv_BIE = _URange.transpose() * _projected_jacobian * (M_inv_BIE * _projected_jacobian.transpose()) * _URange;
 			_Lambda_modified = Lambda_inv_BIE.inverse();
 			break;
 		}
@@ -244,13 +250,13 @@ void PosOriTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 }
 
-void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
+void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 {
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
 	// get time since last call for the I term
-	_t_curr = std::chrono::high_resolution_clock::now();
+	_t_curr = chrono::high_resolution_clock::now();
 	if(_first_iteration)
 	{
 		_t_prev = _t_curr;
@@ -261,21 +267,21 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	// update matrix gains
 	if(_use_isotropic_gains_position)
 	{
-		_kp_pos_mat = _kp_pos * Eigen::Matrix3d::Identity();
-		_kv_pos_mat = _kv_pos * Eigen::Matrix3d::Identity();
-		_ki_pos_mat = _ki_pos * Eigen::Matrix3d::Identity();
+		_kp_pos_mat = _kp_pos * Matrix3d::Identity();
+		_kv_pos_mat = _kv_pos * Matrix3d::Identity();
+		_ki_pos_mat = _ki_pos * Matrix3d::Identity();
 	}
 	if(_use_isotropic_gains_orientation)
 	{
-		_kp_ori_mat = _kp_ori * Eigen::Matrix3d::Identity();
-		_kv_ori_mat = _kv_ori * Eigen::Matrix3d::Identity();
-		_ki_ori_mat = _ki_ori * Eigen::Matrix3d::Identity();
+		_kp_ori_mat = _kp_ori * Matrix3d::Identity();
+		_kv_ori_mat = _kv_ori * Matrix3d::Identity();
+		_ki_ori_mat = _ki_ori * Matrix3d::Identity();
 	}
 
-	Eigen::Vector3d force_feedback_related_force = Eigen::Vector3d::Zero();
-	Eigen::Vector3d position_related_force = Eigen::Vector3d::Zero();
-	Eigen::Vector3d moment_feedback_related_force = Eigen::Vector3d::Zero();
-	Eigen::Vector3d orientation_related_force = Eigen::Vector3d::Zero();
+	Vector3d force_feedback_related_force = Vector3d::Zero();
+	Vector3d position_related_force = Vector3d::Zero();
+	Vector3d moment_feedback_related_force = Vector3d::Zero();
+	Vector3d orientation_related_force = Vector3d::Zero();
 
 	// update controller state
 	_robot->position(_current_position, _link_name, _control_frame.translation());
@@ -300,7 +306,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_integrated_force_error += (_sensed_force - _desired_force) * _t_diff.count();
 
 		// compute the feedback term
-		Eigen::Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error;
+		Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error;
 		_vc = force_feedback_term;
 
 		// saturate the feedback term
@@ -394,7 +400,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		_integrated_moment_error += (_sensed_moment - _desired_moment) * _t_diff.count();
 
 		// compute the feedback term
-		Eigen::Vector3d moment_feedback_term = - _kp_moment * (_sensed_moment - _desired_moment) - _ki_moment * _integrated_moment_error;
+		Vector3d moment_feedback_term = - _kp_moment * (_sensed_moment - _desired_moment) - _ki_moment * _integrated_moment_error;
 
 		// saturate the feedback term
 		if(moment_feedback_term.norm() > 10.0)
@@ -463,7 +469,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	}
 
 	// compute task force
-	Eigen::VectorXd force_moment_contribution(6), position_orientation_contribution(6);
+	VectorXd force_moment_contribution(6), position_orientation_contribution(6);
 	force_moment_contribution.head(3) = force_feedback_related_force;
 	force_moment_contribution.tail(3) = moment_feedback_related_force;
 
@@ -472,7 +478,7 @@ void PosOriTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 	_unit_mass_force = position_orientation_contribution;
 
-	Eigen::VectorXd feedforward_force_moment = Eigen::VectorXd::Zero(6);
+	VectorXd feedforward_force_moment = VectorXd::Zero(6);
 	feedforward_force_moment.head(3) = _sigma_force * _desired_force;
 	feedforward_force_moment.tail(3) = _sigma_moment * _desired_moment;
 
@@ -501,9 +507,9 @@ bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
 	bool goal_reached = position_error < tolerance;
 	if(verbose)
 	{
-		std::cout << "position error in PosOriTask : " << position_error << std::endl;
-		std::cout << "Tolerance : " << tolerance << std::endl;
-		std::cout << "Goal reached : " << goal_reached << std::endl << std::endl;
+		cout << "position error in PosOriTask : " << position_error << endl;
+		cout << "Tolerance : " << tolerance << endl;
+		cout << "Goal reached : " << goal_reached << endl << endl;
 	}
 
 	return goal_reached;
@@ -516,9 +522,9 @@ bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbo
 	bool goal_reached = orientation_error < tolerance;
 	if(verbose)
 	{
-		std::cout << "orientation error in PosOriTask : " << orientation_error << std::endl;
-		std::cout << "Tolerance : " << tolerance << std::endl;
-		std::cout << "Goal reached : " << goal_reached << std::endl << std::endl;
+		cout << "orientation error in PosOriTask : " << orientation_error << endl;
+		cout << "Tolerance : " << tolerance << endl;
+		cout << "Goal reached : " << goal_reached << endl << endl;
 	}
 
 	return goal_reached;
@@ -544,19 +550,19 @@ void PosOriTask::setDynamicDecouplingBIE()
 	_dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 }
 
-void PosOriTask::setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
-	const Eigen::Vector3d& kv, const Eigen::Vector3d& ki)
+void PosOriTask::setNonIsotropicGainsPosition(const Matrix3d& frame, const Vector3d& kp, 
+	const Vector3d& kv, const Vector3d& ki)
 {
-	if( (Eigen::Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
+	if( (Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
 	{
-		throw std::invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsPosition\n");
+		throw invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsPosition\n");
 	}
 
 	_use_isotropic_gains_position = false;
 
-	Eigen::Matrix3d kp_pos_mat_tmp = Eigen::Matrix3d::Zero();
-	Eigen::Matrix3d kv_pos_mat_tmp = Eigen::Matrix3d::Zero();
-	Eigen::Matrix3d ki_pos_mat_tmp = Eigen::Matrix3d::Zero();
+	Matrix3d kp_pos_mat_tmp = Matrix3d::Zero();
+	Matrix3d kv_pos_mat_tmp = Matrix3d::Zero();
+	Matrix3d ki_pos_mat_tmp = Matrix3d::Zero();
 
 	for(int i=0 ; i<3 ; i++)
 	{
@@ -571,19 +577,19 @@ void PosOriTask::setNonIsotropicGainsPosition(const Eigen::Matrix3d& frame, cons
 
 }
 
-void PosOriTask::setNonIsotropicGainsOrientation(const Eigen::Matrix3d& frame, const Eigen::Vector3d& kp, 
-	const Eigen::Vector3d& kv, const Eigen::Vector3d& ki)
+void PosOriTask::setNonIsotropicGainsOrientation(const Matrix3d& frame, const Vector3d& kp, 
+	const Vector3d& kv, const Vector3d& ki)
 {
-	if( (Eigen::Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
+	if( (Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
 	{
-		throw std::invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsOrientation\n");
+		throw invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsOrientation\n");
 	}
 
 	_use_isotropic_gains_orientation = false;
 
-	Eigen::Matrix3d kp_ori_mat_tmp = Eigen::Matrix3d::Zero();
-	Eigen::Matrix3d kv_ori_mat_tmp = Eigen::Matrix3d::Zero();
-	Eigen::Matrix3d ki_ori_mat_tmp = Eigen::Matrix3d::Zero();
+	Matrix3d kp_ori_mat_tmp = Matrix3d::Zero();
+	Matrix3d kv_ori_mat_tmp = Matrix3d::Zero();
+	Matrix3d ki_ori_mat_tmp = Matrix3d::Zero();
 
 	for(int i=0 ; i<3 ; i++)
 	{
@@ -615,22 +621,22 @@ void PosOriTask::setIsotropicGainsOrientation(const double kp, const double kv, 
 	_ki_ori = ki;	
 }
 
-void PosOriTask::setForceSensorFrame(const std::string link_name, const Eigen::Affine3d transformation_in_link)
+void PosOriTask::setForceSensorFrame(const string link_name, const Affine3d transformation_in_link)
 {
 	if(link_name != _link_name)
 	{
-		throw std::invalid_argument("The link to which is attached the sensor should be the same as the link to which is attached the control frame in PosOriTask::setForceSensorFrame\n");
+		throw invalid_argument("The link to which is attached the sensor should be the same as the link to which is attached the control frame in PosOriTask::setForceSensorFrame\n");
 	}
 	_T_control_to_sensor = _control_frame.inverse() * transformation_in_link;
 }
 
-void PosOriTask::updateSensedForceAndMoment(const Eigen::Vector3d sensed_force_sensor_frame, 
-							    		    const Eigen::Vector3d sensed_moment_sensor_frame)
+void PosOriTask::updateSensedForceAndMoment(const Vector3d sensed_force_sensor_frame, 
+							    		    const Vector3d sensed_moment_sensor_frame)
 {
 	// find the transform from base frame to control frame
-	Eigen::Affine3d T_base_link;
+	Affine3d T_base_link;
 	_robot->transform(T_base_link, _link_name);
-	Eigen::Affine3d T_base_control = T_base_link * _control_frame;
+	Affine3d T_base_control = T_base_link * _control_frame;
 
 	// find the resolved sensed force and moment in control frame
 	_sensed_force = _T_control_to_sensor.rotation() * sensed_force_sensor_frame;
@@ -641,47 +647,47 @@ void PosOriTask::updateSensedForceAndMoment(const Eigen::Vector3d sensed_force_s
 	_sensed_moment = T_base_control.rotation() * _sensed_moment;
 }
 
-void PosOriTask::setForceAxis(const Eigen::Vector3d force_axis)
+void PosOriTask::setForceAxis(const Vector3d force_axis)
 {
-	Eigen::Vector3d normalized_axis = force_axis.normalized();
+	Vector3d normalized_axis = force_axis.normalized();
 
 	_sigma_force = normalized_axis*normalized_axis.transpose();
-	_sigma_position = Eigen::Matrix3d::Identity() - _sigma_force;
+	_sigma_position = Matrix3d::Identity() - _sigma_force;
 
 	resetIntegratorsLinear();
 	_otg->reInitialize(_current_position, _current_orientation);
 }
 
-void PosOriTask::updateForceAxis(const Eigen::Vector3d force_axis)
+void PosOriTask::updateForceAxis(const Vector3d force_axis)
 {
-	Eigen::Vector3d normalized_axis = force_axis.normalized();
+	Vector3d normalized_axis = force_axis.normalized();
 
 	_sigma_force = normalized_axis*normalized_axis.transpose();
-	_sigma_position = Eigen::Matrix3d::Identity() - _sigma_force;
+	_sigma_position = Matrix3d::Identity() - _sigma_force;
 }
 
-void PosOriTask::setLinearMotionAxis(const Eigen::Vector3d motion_axis)
+void PosOriTask::setLinearMotionAxis(const Vector3d motion_axis)
 {
-	Eigen::Vector3d normalized_axis = motion_axis.normalized();
+	Vector3d normalized_axis = motion_axis.normalized();
 
 	_sigma_position = normalized_axis*normalized_axis.transpose();
-	_sigma_force = Eigen::Matrix3d::Identity() - _sigma_position;
+	_sigma_force = Matrix3d::Identity() - _sigma_position;
 
 	resetIntegratorsLinear();
 	_otg->reInitialize(_current_position, _current_orientation);
 }
 
-void PosOriTask::updateLinearMotionAxis(const Eigen::Vector3d motion_axis)
+void PosOriTask::updateLinearMotionAxis(const Vector3d motion_axis)
 {
-	Eigen::Vector3d normalized_axis = motion_axis.normalized();
+	Vector3d normalized_axis = motion_axis.normalized();
 
 	_sigma_position = normalized_axis*normalized_axis.transpose();
-	_sigma_force = Eigen::Matrix3d::Identity() - _sigma_position;	
+	_sigma_force = Matrix3d::Identity() - _sigma_position;	
 }
 
 void PosOriTask::setFullForceControl()
 {
-	_sigma_force = Eigen::Matrix3d::Identity();
+	_sigma_force = Matrix3d::Identity();
 	_sigma_position.setZero();
 
 	resetIntegratorsLinear();
@@ -690,52 +696,52 @@ void PosOriTask::setFullForceControl()
 
 void PosOriTask::setFullLinearMotionControl()
 {
-	_sigma_position = Eigen::Matrix3d::Identity();
+	_sigma_position = Matrix3d::Identity();
 	_sigma_force.setZero();
 
 	resetIntegratorsLinear();
 	_otg->reInitialize(_current_position, _current_orientation);
 }
 
-void PosOriTask::setMomentAxis(const Eigen::Vector3d moment_axis)
+void PosOriTask::setMomentAxis(const Vector3d moment_axis)
 {
-	Eigen::Vector3d normalized_axis = moment_axis.normalized();
+	Vector3d normalized_axis = moment_axis.normalized();
 
 	_sigma_moment = normalized_axis*normalized_axis.transpose();
-	_sigma_orientation = Eigen::Matrix3d::Identity() - _sigma_moment;
+	_sigma_orientation = Matrix3d::Identity() - _sigma_moment;
 
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::updateMomentAxis(const Eigen::Vector3d moment_axis)
+void PosOriTask::updateMomentAxis(const Vector3d moment_axis)
 {
-	Eigen::Vector3d normalized_axis = moment_axis.normalized();
+	Vector3d normalized_axis = moment_axis.normalized();
 
 	_sigma_moment = normalized_axis*normalized_axis.transpose();
-	_sigma_orientation = Eigen::Matrix3d::Identity() - _sigma_moment;	
+	_sigma_orientation = Matrix3d::Identity() - _sigma_moment;	
 }
 
-void PosOriTask::setAngularMotionAxis(const Eigen::Vector3d motion_axis)
+void PosOriTask::setAngularMotionAxis(const Vector3d motion_axis)
 {
-	Eigen::Vector3d normalized_axis = motion_axis.normalized();
+	Vector3d normalized_axis = motion_axis.normalized();
 
 	_sigma_orientation = normalized_axis*normalized_axis.transpose();
-	_sigma_moment = Eigen::Matrix3d::Identity() - _sigma_orientation;
+	_sigma_moment = Matrix3d::Identity() - _sigma_orientation;
 
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::updateAngularMotionAxis(const Eigen::Vector3d motion_axis)
+void PosOriTask::updateAngularMotionAxis(const Vector3d motion_axis)
 {
-	Eigen::Vector3d normalized_axis = motion_axis.normalized();
+	Vector3d normalized_axis = motion_axis.normalized();
 
 	_sigma_orientation = normalized_axis*normalized_axis.transpose();
-	_sigma_moment = Eigen::Matrix3d::Identity() - _sigma_orientation;
+	_sigma_moment = Matrix3d::Identity() - _sigma_orientation;
 }
 
 void PosOriTask::setFullMomentControl()
 {
-	_sigma_moment = Eigen::Matrix3d::Identity();
+	_sigma_moment = Matrix3d::Identity();
 	_sigma_orientation.setZero();
 
 	resetIntegratorsAngular();
@@ -743,7 +749,7 @@ void PosOriTask::setFullMomentControl()
 
 void PosOriTask::setFullAngularMotionControl()
 {
-	_sigma_orientation = Eigen::Matrix3d::Identity();
+	_sigma_orientation = Matrix3d::Identity();
 	_sigma_moment.setZero();
 
 	resetIntegratorsAngular();
@@ -769,6 +775,16 @@ void PosOriTask::setClosedLoopMomentControl()
 void PosOriTask::setOpenLoopMomentControl()
 {
 	_closed_loop_moment_control = false;
+}
+
+void PosOriTask::enablePassivity()
+{
+	_passivity_enabled = true;
+}
+
+void PosOriTask::disablePassivity()
+{
+	_passivity_enabled = false;
 }
 
 void PosOriTask::resetIntegrators()
