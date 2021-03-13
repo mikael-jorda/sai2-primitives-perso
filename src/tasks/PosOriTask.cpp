@@ -655,7 +655,9 @@ void PosOriTask::setForceAxis(const Vector3d force_axis)
 	_sigma_position = Matrix3d::Identity() - _sigma_force;
 
 	resetIntegratorsLinear();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position, _current_orientation);
+#endif
 }
 
 void PosOriTask::updateForceAxis(const Vector3d force_axis)
@@ -674,7 +676,9 @@ void PosOriTask::setLinearMotionAxis(const Vector3d motion_axis)
 	_sigma_force = Matrix3d::Identity() - _sigma_position;
 
 	resetIntegratorsLinear();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position, _current_orientation);
+#endif
 }
 
 void PosOriTask::updateLinearMotionAxis(const Vector3d motion_axis)
@@ -691,7 +695,9 @@ void PosOriTask::setFullForceControl()
 	_sigma_position.setZero();
 
 	resetIntegratorsLinear();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position, _current_orientation);
+#endif
 }
 
 void PosOriTask::setFullLinearMotionControl()
@@ -700,7 +706,9 @@ void PosOriTask::setFullLinearMotionControl()
 	_sigma_force.setZero();
 
 	resetIntegratorsLinear();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position, _current_orientation);
+#endif
 }
 
 void PosOriTask::setMomentAxis(const Vector3d moment_axis)

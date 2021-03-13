@@ -435,7 +435,9 @@ void PositionTask::setForceAxis(const Vector3d force_axis)
 	_sigma_motion = Matrix3d::Identity() - _sigma_force;
 
 	resetIntegrators();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position);
+#endif
 }
 
 
@@ -456,7 +458,9 @@ void PositionTask::setLinearMotionAxis(const Vector3d motion_axis)
 	_sigma_force = Matrix3d::Identity() - _sigma_motion;
 
 	resetIntegrators();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position);
+#endif
 }
 
 
@@ -474,7 +478,9 @@ void PositionTask::setFullForceControl()
 	_sigma_motion.setZero();
 
 	resetIntegrators();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position);
+#endif
 }
 
 void PositionTask::setFullLinearMotionControl()
@@ -483,7 +489,9 @@ void PositionTask::setFullLinearMotionControl()
 	_sigma_force.setZero();
 
 	resetIntegrators();
+#ifdef USING_OTG 
 	_otg->reInitialize(_current_position);
+#endif
 }
 
 void PositionTask::setClosedLoopForceControl()

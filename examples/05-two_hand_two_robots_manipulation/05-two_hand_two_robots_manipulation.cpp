@@ -362,10 +362,10 @@ void simulation(vector<Sai2Model::Sai2Model*> robots_sim, Simulation::Sai2Simula
 	}
 
 	double end_time = timer.elapsedTime();
-	std::cout << "\n";
-	std::cout << "Simulation Loop run time  : " << end_time << " seconds\n";
-	std::cout << "Simulation Loop updates   : " << timer.elapsedCycles() << "\n";
-	std::cout << "Simulation Loop frequency : " << timer.elapsedCycles()/end_time << "Hz\n";
+	cout << "\n";
+	cout << "Simulation Loop run time  : " << end_time << " seconds\n";
+	cout << "Simulation Loop updates   : " << timer.elapsedCycles() << "\n";
+	cout << "Simulation Loop frequency : " << timer.elapsedCycles()/end_time << "Hz\n";
 }
 
 //------------------------------------------------------------------------------
@@ -394,22 +394,22 @@ Vector2d gripperControl(const int robot_index, vector<Sai2Model::Sai2Model*> rob
 	if(gripper_desired_width > gripper_max_widths[i])
 	{
 		gripper_desired_width = gripper_max_widths[i];
-		std::cout << "WARNING : Desired gripper " << i << " width higher than max width. saturating to max width\n" << std::endl;
+		cout << "WARNING : Desired gripper " << i << " width higher than max width. saturating to max width\n" << endl;
 	}
 	if(gripper_desired_width < 0)
 	{
 		gripper_desired_width = 0;
-		std::cout << "WARNING : Desired gripper " << i << " width lower than 0. saturating to 0\n" << std::endl;
+		cout << "WARNING : Desired gripper " << i << " width lower than 0. saturating to 0\n" << endl;
 	}
 	if(gripper_desired_speed < 0)
 	{
 		gripper_desired_speed = 0;
-		std::cout << "WARNING : Desired gripper " << i << " speed lower than 0. saturating to 0\n" << std::endl;
+		cout << "WARNING : Desired gripper " << i << " speed lower than 0. saturating to 0\n" << endl;
 	} 
 	if(gripper_desired_force < 0)
 	{
 		gripper_desired_force = 0;
-		std::cout << "WARNING : Desired gripper " << i << " force lower than 0. saturating to 0\n" << std::endl;
+		cout << "WARNING : Desired gripper " << i << " force lower than 0. saturating to 0\n" << endl;
 	}
 
 	double gripper_constraint_force = -400.0*gripper_center_point - 40.0*gripper_center_point_velocity;
@@ -517,8 +517,8 @@ void control(Simulation::Sai2Simulation* sim)
 
 #ifndef USING_OTG // use velocity saturation is OTG is not compiled
 	two_hand_task->_use_velocity_saturation_flag = true;
-	two_hand_task->_linear_saturation_velocity = 0.15*Vector3d::Ones();
-	two_hand_task->_angular_saturation_velocity = 20.0/180.0*M_PI*Vector3d::Ones();
+	two_hand_task->_linear_saturation_velocity = 0.15;
+	two_hand_task->_angular_saturation_velocity = 20.0/180.0*M_PI;
 #endif
 
 	// create a timer
@@ -698,8 +698,6 @@ void control(Simulation::Sai2Simulation* sim)
 			robot_control_torques[i] = command_torques[i];
 		}
 
-		cout << "state : " << state << endl;
-
 		prev_time = current_time;
 		controller_counter++;
 	}
@@ -711,10 +709,10 @@ void control(Simulation::Sai2Simulation* sim)
 	}
 
 	double end_time = timer.elapsedTime();
-	std::cout << "\n";
-	std::cout << "Controller Loop run time  : " << end_time << " seconds\n";
-	std::cout << "Controller Loop updates   : " << timer.elapsedCycles() << "\n";
-    std::cout << "Controller Loop frequency : " << timer.elapsedCycles()/end_time << "Hz\n";
+	cout << "\n";
+	cout << "Controller Loop run time  : " << end_time << " seconds\n";
+	cout << "Controller Loop updates   : " << timer.elapsedCycles() << "\n";
+    cout << "Controller Loop frequency : " << timer.elapsedCycles()/end_time << "Hz\n";
 }
 
 
