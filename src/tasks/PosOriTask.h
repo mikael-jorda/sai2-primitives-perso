@@ -88,6 +88,31 @@ public:
 		            const Matrix3d rot_in_link = Matrix3d::Identity(),
 		            const double loop_time = 0.001);
 
+	/**
+	 * @brief      Constructor that takes a Vector3d for definition of the
+	 *             control frame position, a Matrix3d for the frame
+	 *             orientation, and a selection matrix for the partial task. 
+	 * 			   Creates a full position controller by default.
+	 *
+	 * @param      robot        A pointer to a Sai2Model object for the robot
+	 *                          that is to be controlled
+ 	 * @param      selection    The selection vector for the partial task.
+	 * @param      link_name    The name of the link in the robot at which to
+	 *                          attach the control frame
+	 * @param      pos_in_link  The position the control frame in local link
+	 *                          coordinates
+	 * @param      rot_in_link  The orientation of the control frame in local
+	 *                          link coordinates
+	 * @param[in]  loop_time    time taken by a control loop. Used only in
+	 *                          trajectory generation
+	 */
+	PosOriTask(Sai2Model::Sai2Model* robot, 
+		            const Matrix<double, 6, 6> selection,
+		            const string link_name, 
+		            const Vector3d pos_in_link, 
+		            const Matrix3d rot_in_link = Matrix3d::Identity(),
+		            const double loop_time = 0.001);
+
 
 	//------------------------------------------------
 	// Methods
@@ -467,6 +492,7 @@ public:
 	// internal variables, not to be touched by the user
 	string _link_name;
 	Affine3d _control_frame;   // in link_frame
+	Matrix<double, 6, 6> _selection;  
 
 	// motion quantities
 	Vector3d _current_position;      // robot frame

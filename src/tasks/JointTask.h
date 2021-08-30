@@ -73,6 +73,18 @@ public:
 	 */
 	void reInitializeTask();
 
+	/** 
+	 * @brief      Adds compensation for additional load 
+	 * 
+	 * @param      mass: load mass
+	 * @param      inertia: load inertia
+	 * @param      link_name: link name
+	 * @param      pos_in_link: position in link 
+	 */
+	void addLoad(double mass, const Eigen::MatrixXd& inertia, const std::string link_name, const Eigen::VectorXd& pos_in_link);
+
+	void removeLoad();
+
 	// ---------- set dynamic decoupling type for the controller  ----------------
 	void setDynamicDecouplingFull();
 	void setDynamicDecouplingBIE();
@@ -89,7 +101,6 @@ public:
 	Eigen::VectorXd _desired_position;       // defaults to the current configuration when the task is created
 	Eigen::VectorXd _desired_velocity;       // defaults to zero
 	Eigen::VectorXd _desired_acceleration;   // defaults to zero
-
 
 	double _kp;      // defaults to 50.0
 	double _kv;      // defaults to 14.0
@@ -129,6 +140,9 @@ public:
 	Eigen::MatrixXd _ki_mat;
 
 	Eigen::MatrixXd _M_modified;
+	Eigen::MatrixXd _M_load;
+	Eigen::VectorXd _g_load;
+	bool _load_on;
 	int _dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 
 #ifdef USING_OTG

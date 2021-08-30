@@ -37,6 +37,9 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 	// initialize matrices sizes
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
 	_M_modified = Eigen::MatrixXd::Zero(dof,dof);
+	_M_load = Eigen::MatrixXd::Zero(dof,dof);
+	_g_load = Eigen::VectorXd::Zero(dof);
+	_load_on = false;
 
 #ifdef USING_OTG 
 	_use_interpolation_flag = true;
@@ -136,7 +139,7 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	{
 		case FULL_DYNAMIC_DECOUPLING :
 		{
-			_M_modified = _robot->_M;
+			_M_modified = _robot->_M + _M_load;
 			break;
 		}
 
@@ -241,6 +244,25 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 	// update previous time
 	_t_prev = _t_curr;
+}
+
+void JointTask::addLoad(double mass, const Eigen::MatrixXd& inertia, const std::string link_name, const Eigen::VectorXd& pos_in_link)
+{
+	MatrixXd Jv(3, _robot->dof());
+	MatrixXd Jw(3, _robot->dof());
+	Vector3d f_load = Vector3d(0, 0, mass * 9.81);
+	_robot->Jv(Jv, link_name, pos_in_link);
+	_robot->Jw(Jw, link_name);  // default rotation in link
+	_M_load = mass * Jv.transpose() * Jv + Jw.transpose() * inertia * Jw;	
+	_g_load = Jv.transpose() * f_load;
+	_load_on = true;
+}
+
+void JointTask::removeLoad()
+{
+	_M_load.setZero();	
+	_g_load.setZero();
+	_load_on = false;
 }
 
 } /* namespace Sai2Primitives */

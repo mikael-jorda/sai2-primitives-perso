@@ -8,7 +8,7 @@ SET(CMAKE_CXX_FLAGS "-std=c++11 -I/usr/include -I/usr/local/include")
 SET(CMAKE_BUILD_TYPE "Release")
 
 # option to use OTG 
-option(USE_OTG "use the Reflexxes library for trajectory generation" OFF)
+option(USE_OTG "use the Reflexxes library for trajectory generation" ON)
 if(USE_OTG)
 	# need to set these two paths manually depending on install path of Reflexxes library
 	SET (OTG_SOURCE_DIR ${PROJECT_SOURCE_DIR}/../external/ReflexxesTypeII) # need to manually set the path
