@@ -84,6 +84,8 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_N.setZero(dof,dof);
 	_N_prec = MatrixXd::Identity(dof,dof);
 
+	_projected_jacobian_col_to_remove = -1;		// initialize as -1 so nothing is removed
+
 	_URange_pos = MatrixXd::Identity(3,3);
 	_URange_ori = MatrixXd::Identity(3,3);
 	_URange = MatrixXd::Identity(6,6);
@@ -167,11 +169,42 @@ void PosOriTask::reInitializeTask()
 
 	_task_force.setZero(6);
 	_unit_mass_force.setZero(6);
-	_first_iteration = true;	
+	_first_iteration = true;
+
+	_projected_jacobian_col_to_remove = -1;
 
 #ifdef USING_OTG 
 	_otg->reInitialize(_current_position, _current_orientation);
 #endif
+}
+
+void PosOriTask::removeMatrixColumn(MatrixXd& matrix, const int col_to_remove)
+{
+	unsigned int num_rows = matrix.rows();
+	unsigned int num_cols = matrix.cols()-1;
+
+	// check for valid column to remove
+	if(col_to_remove < 0 || col_to_remove > num_cols) {
+		throw invalid_argument("invalid column to be removed from matrix");
+		return;
+	}
+	// if the column to be removed is not the last one, organize the matrix
+	else if(col_to_remove < num_cols){
+		matrix.block(0,col_to_remove,num_rows,num_cols-col_to_remove) = matrix.rightCols(num_cols-col_to_remove);
+	}
+	// crop the matrix
+	matrix.conservativeResize(num_rows, num_cols);
+}
+
+void PosOriTask::removeTaskJacobianColumn(const int col_to_remove)
+{
+	// check for valid column to remove
+	if(col_to_remove < 0 || col_to_remove >= _projected_jacobian.cols()) {
+		throw invalid_argument("invalid column to be removed from task jacobian");
+		return;
+	}
+
+	_projected_jacobian_col_to_remove = col_to_remove;
 }
 
 void PosOriTask::updateTaskModel(const MatrixXd N_prec)
@@ -189,6 +222,13 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
+
+	// TODO: completely remove task Jacobian column instead of setting to zero (breaks dof check in sai2model)
+	// reduce the projected task Jacobian
+	if(_projected_jacobian_col_to_remove > -1) {
+//		removeMatrixColumn(_projected_jacobian, _projected_jacobian_col_to_remove);
+		_projected_jacobian.col(_projected_jacobian_col_to_remove).setZero();
+	}
 
 	_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
 	_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec);
@@ -254,6 +294,13 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 {
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
+
+	// TODO: completely remove task Jacobian column instead of setting to zero (breaks dof check in sai2model)
+	// reduce the projected task Jacobian
+	if(_projected_jacobian_col_to_remove > -1) {
+//		removeMatrixColumn(_projected_jacobian, _projected_jacobian_col_to_remove);
+		_projected_jacobian.col(_projected_jacobian_col_to_remove).setZero();
+	}
 
 	// get time since last call for the I term
 	_t_curr = chrono::high_resolution_clock::now();

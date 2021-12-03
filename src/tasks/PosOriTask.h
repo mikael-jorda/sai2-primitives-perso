@@ -96,6 +96,21 @@ public:
 	// -------- core methods --------
 
 	/**
+	 * @brief		Removes the desired column from the original matrix
+	 *
+	 * @param		reduced_jacobian	Matrix to which the reduced task Jacobian will be written
+	 * @param[in]	col_to_remove		The column to be removed from the matrix
+	 */
+	void removeMatrixColumn(MatrixXd& matrix, const int col_to_remove);
+
+	/**
+	 * @brief		Removes the desired column (joint space degree of freedom) from the full task Jacobian
+	 *
+	 * @param[in]	col_to_remove		The column to be removed from the full task Jacobian
+	 */
+	void removeTaskJacobianColumn(const int col_to_remove);
+
+	/**
 	 * @brief      update the task model (jacobians, task inertia and nullspace
 	 *             matrices)
 	 * @details    This function updates the jacobian, projected jacobian, task
@@ -533,6 +548,8 @@ public:
 	MatrixXd _Lambda, _Lambda_modified;
 	MatrixXd _Jbar;
 	MatrixXd _N;
+
+	int _projected_jacobian_col_to_remove;
 
 	MatrixXd _URange_pos;
 	MatrixXd _URange_ori;
