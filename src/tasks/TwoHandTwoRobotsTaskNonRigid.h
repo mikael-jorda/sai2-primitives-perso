@@ -1,5 +1,5 @@
 /*
- * TwoHandTwoRobotsTask.h
+ * TwoHandTwoRobotsTaskNonRigid.h
  *
  *      This class creates a 6Dof position + orientation hybrid controller for a robotic manipulator using operational space formulation and an underlying PID compensator.
  *      If used for hybrid position force control, assumes a force sensor is attached to the same link as the control frame and the force sensed values are given in sensor frame.
@@ -10,8 +10,8 @@
  *      Author: Mikael Jorda
  */
 
-#ifndef SAI2_PRIMITIVES_TWOHANDTWOROBOTS_TASK_H_
-#define SAI2_PRIMITIVES_TWOHANDTWOROBOTS_TASK_H_
+#ifndef SAI2_PRIMITIVES_TWOHANDTWOROBOTSNONRIGID_TASK_H_
+#define SAI2_PRIMITIVES_TWOHANDTWOROBOTSNONRIGID_TASK_H_
 
 #include "Sai2Model.h"
 #include "TemplateTask.h"
@@ -27,7 +27,7 @@
 namespace Sai2Primitives
 {
 
-class TwoHandTwoRobotsTask
+class TwoHandTwoRobotsTaskNonRigid
 {
 public:
 
@@ -49,7 +49,7 @@ public:
 	 * @param[in]  loop_time      time taken by a control loop. Used only in
 	 *                            trajectory generation
 	 */
-	TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
+	TwoHandTwoRobotsTaskNonRigid(Sai2Model::Sai2Model* robot_arm_1,
 						 Sai2Model::Sai2Model* robot_arm_2, 
 		            const std::string link_name_1, 
 					const std::string link_name_2, 
@@ -73,7 +73,7 @@ public:
 	 * @param[in]  loop_time    time taken by a control loop. Used only in
 	 *                          trajectory generation
 	 */
-	TwoHandTwoRobotsTask(Sai2Model::Sai2Model* robot_arm_1,
+	TwoHandTwoRobotsTaskNonRigid(Sai2Model::Sai2Model* robot_arm_1,
 						 Sai2Model::Sai2Model* robot_arm_2, 
 		            const std::string link_name_1, 
 		            const std::string link_name_2, 
@@ -189,7 +189,7 @@ public:
 	Eigen::Vector3d _desired_object_angular_velocity;   // world frame
 
 	Eigen::Vector3d _desired_object_acceleration;           // world frame
-	Eigen::Vector3d _desired_object_angular_acceleration;   // world framez
+	Eigen::Vector3d _desired_object_angular_acceleration;   // world frame
 
 	// gains for position control
 	double _kp_pos, _kp_ori;

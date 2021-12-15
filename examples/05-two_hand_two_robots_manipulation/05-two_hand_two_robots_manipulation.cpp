@@ -130,6 +130,8 @@ int main() {
 	// load graphics scene
 	auto graphics = new Sai2Graphics::Sai2Graphics(world_file, true);
 	Vector3d camera_pos, camera_lookat, camera_vertical;
+	graphics->showLinkFrame(true, "PANDA1", "link6", 0.15); 
+	graphics->showLinkFrame(true, "PANDA2", "link6", 0.15); 
 	graphics->getCameraPose(camera_name, camera_pos, camera_vertical, camera_lookat);
 
 	// load simulation world

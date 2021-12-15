@@ -72,6 +72,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTaskNonRigid.cpp
 	)
 
 # add primitives 
@@ -87,10 +88,10 @@ SET(PERCEPTION_SOURCE
 	)
 
 # add humanoid 
-SET(HUMANOID_SOURCE 
-	${PROJECT_SOURCE_DIR}/src/humanoid/FloatingBaseContactModel.cpp
-	${PROJECT_SOURCE_DIR}/src/humanoid/InternalForceSelectionBarrierMethod.cpp
-	)
+#SET(HUMANOID_SOURCE 
+#	${PROJECT_SOURCE_DIR}/src/humanoid/FloatingBaseContactModel.cpp
+#	${PROJECT_SOURCE_DIR}/src/humanoid/InternalForceSelectionBarrierMethod.cpp
+#	)
 
 
 # add haptic_tasks

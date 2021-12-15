@@ -82,7 +82,7 @@ public:
 	 * @param      pos_in_link: position in link 
 	 */
 	void addLoad(double mass, const Eigen::MatrixXd& inertia, const std::string link_name, const Eigen::VectorXd& pos_in_link);
-
+	void updateLoadDynamics();
 	void removeLoad();
 
 	// ---------- set dynamic decoupling type for the controller  ----------------
@@ -142,6 +142,10 @@ public:
 	Eigen::MatrixXd _M_modified;
 	Eigen::MatrixXd _M_load;
 	Eigen::VectorXd _g_load;
+	double _load_mass;
+	Eigen::MatrixXd _load_inertia;
+	string _load_link_name;
+	Eigen::VectorXd _load_pos_in_link;
 	bool _load_on;
 	int _dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 

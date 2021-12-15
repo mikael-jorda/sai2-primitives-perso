@@ -134,6 +134,11 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	}
 
 	_N_prec = N_prec;
+	
+	if (_load_on) 
+	{
+		updateLoadDynamics();
+	}		
 
 	switch(_dynamic_decoupling_type)
 	{
@@ -248,14 +253,22 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 void JointTask::addLoad(double mass, const Eigen::MatrixXd& inertia, const std::string link_name, const Eigen::VectorXd& pos_in_link)
 {
+	_load_mass = mass;
+	_load_inertia = inertia;
+	_load_link_name = link_name;
+	_load_pos_in_link = pos_in_link;
+	_load_on = true;
+}
+
+void JointTask::updateLoadDynamics()
+{
 	MatrixXd Jv(3, _robot->dof());
 	MatrixXd Jw(3, _robot->dof());
-	Vector3d f_load = Vector3d(0, 0, mass * 9.81);
-	_robot->Jv(Jv, link_name, pos_in_link);
-	_robot->Jw(Jw, link_name);  // default rotation in link
-	_M_load = mass * Jv.transpose() * Jv + Jw.transpose() * inertia * Jw;	
-	_g_load = Jv.transpose() * f_load;
-	_load_on = true;
+	Vector3d f_load = Vector3d(0, 0, _load_mass * 9.81);
+	_robot->Jv(Jv, _load_link_name, _load_pos_in_link);
+	_robot->Jw(Jw, _load_link_name);  // default rotation in link
+	_M_load = _load_mass * Jv.transpose() * Jv + Jw.transpose() * _load_inertia * Jw;	
+	_g_load = Jv.transpose() * f_load;	
 }
 
 void JointTask::removeLoad()
