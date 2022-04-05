@@ -73,6 +73,12 @@ public:
 	 */
 	void reInitializeTask();
 
+	/**
+	 * @brief	   Computes norm residual of goal
+	 * 
+	*/
+	double normError();
+
 	/** 
 	 * @brief      Adds compensation for additional load 
 	 * 

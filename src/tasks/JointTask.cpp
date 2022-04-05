@@ -251,6 +251,11 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_t_prev = _t_curr;
 }
 
+double JointTask::normError()
+{
+	return (_robot->_q - _desired_position).norm();
+}
+
 void JointTask::addLoad(double mass, const Eigen::MatrixXd& inertia, const std::string link_name, const Eigen::VectorXd& pos_in_link)
 {
 	_load_mass = mass;
