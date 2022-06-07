@@ -89,7 +89,6 @@ void OrientationTask::reInitializeTask()
 #endif
 }
 
-
 void OrientationTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 {
 	if(N_prec.rows() != N_prec.cols())
@@ -106,6 +105,37 @@ void OrientationTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	_robot->Jw(_jacobian, _link_name);
 	_projected_jacobian = _jacobian * _N_prec;
 	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _projected_jacobian, _N_prec);
+
+	switch(_dynamic_decoupling_type)
+	{
+		case FULL_DYNAMIC_DECOUPLING :
+		{
+			_Lambda_modified = _Lambda;
+			break;
+		}
+
+		case BOUNDED_INERTIA_ESTIMATES :
+		{
+			MatrixXd M_BIE = _robot->_M;
+			for(int i=0 ; i<_robot->dof() ; i++)
+			{
+				if(M_BIE(i,i) < 0.1)
+				{
+					M_BIE(i,i) = 0.1;
+				}
+			}
+			MatrixXd M_inv_BIE = M_BIE.inverse();
+			MatrixXd Lambda_inv_BIE = _projected_jacobian * (M_inv_BIE * _projected_jacobian.transpose());
+			_Lambda_modified = Lambda_inv_BIE.inverse();
+			break;
+		}
+
+		default :
+		{
+			_Lambda_modified = _Lambda;
+			break;			
+		}
+	}
 
 }
 
@@ -157,11 +187,11 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 		{
 			_step_desired_angular_velocity *= _saturation_velocity/_step_desired_angular_velocity.norm();
 		}
-		_task_force = _Lambda * (_step_desired_angular_acceleration -_kv*(_current_angular_velocity - _step_desired_angular_velocity));
+		_task_force = _Lambda_modified * (_step_desired_angular_acceleration -_kv*(_current_angular_velocity - _step_desired_angular_velocity));
 	}
 	else
 	{
-		_task_force = _Lambda*(_step_desired_angular_acceleration -_kp * _step_orientation_error - _kv*(_current_angular_velocity - _step_desired_angular_velocity ) - _ki * _integrated_orientation_error);
+		_task_force = _Lambda_modified*(_step_desired_angular_acceleration -_kp * _step_orientation_error - _kv*(_current_angular_velocity - _step_desired_angular_velocity ) - _ki * _integrated_orientation_error);
 	}
 
 	// compute task torques
@@ -171,6 +201,15 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_t_prev = _t_curr;
 }
 
+void OrientationTask::setDynamicDecouplingFull()
+{
+	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
+}
+
+void OrientationTask::setDynamicDecouplingBIE()
+{
+	_dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
+}
 
 } /* namespace Sai2Primitives */
 

@@ -47,6 +47,7 @@ set(SAI2-PRIMITIVES_EXAMPLES_COMMON_LIBRARIES
 	${GLFW_LIBRARY}
 	)
 
+ADD_SUBDIRECTORY(00-partial_joint_control)
 ADD_SUBDIRECTORY(01-joint_control)
 ADD_SUBDIRECTORY(02-task_space_control)
 ADD_SUBDIRECTORY(03-task_and_redundancy)

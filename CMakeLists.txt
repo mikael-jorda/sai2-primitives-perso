@@ -71,6 +71,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/OrientationTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
+	${PROJECT_SOURCE_DIR}/src/tasks/PartialJointTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTaskNonRigid.cpp
 	)

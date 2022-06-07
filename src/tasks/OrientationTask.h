@@ -26,6 +26,13 @@ namespace Sai2Primitives
 
 class OrientationTask : public TemplateTask
 {
+
+enum DynamicDecouplingType
+{
+	FULL_DYNAMIC_DECOUPLING = 0,            // use the real Lambda matrix
+	BOUNDED_INERTIA_ESTIMATES,           // Use a Lambda computed from a saturated joint space mass matrix
+};
+
 public:
 
 	/**
@@ -95,6 +102,9 @@ public:
 	 */
 	void reInitializeTask();
 
+	void setDynamicDecouplingFull();
+	void setDynamicDecouplingBIE();
+
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
@@ -133,7 +143,7 @@ public:
 
 	Eigen::MatrixXd _jacobian;
 	Eigen::MatrixXd _projected_jacobian;
-	Eigen::MatrixXd _Lambda;
+	Eigen::MatrixXd _Lambda, _Lambda_modified;
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
@@ -141,6 +151,8 @@ public:
 	Eigen::Vector3d _step_orientation_error;
 	Eigen::Vector3d _step_desired_angular_velocity;
 	Eigen::Vector3d _step_desired_angular_acceleration;
+
+	int _dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 
 #ifdef USING_OTG
 	double _loop_time;
