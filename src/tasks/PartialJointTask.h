@@ -44,7 +44,7 @@ public:
 	 * @param[in]  loop_time  time taken by a control loop. Used only in trajectory generation
 	 */
 	PartialJointTask(Sai2Model::Sai2Model* robot,
-                        std::vector<int> selection,
+                        const std::vector<int> selection,
 			            const double loop_time = 0.001);
 
 	/**

@@ -14,7 +14,7 @@ namespace Sai2Primitives
 
 
 PartialJointTask::PartialJointTask(Sai2Model::Sai2Model* robot, 
-                                        std::vector<int> selection, 
+                                        const std::vector<int> selection, 
                                         const double loop_time)
 {
 	_robot = robot;
@@ -252,7 +252,7 @@ void PartialJointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 double PartialJointTask::normError()
 {
-	return (_robot->_q(active_joints) - _desired_position(active_joints)).norm();
+	return (_robot->_q(active_joints) - _desired_position).norm();
 }
 
 } /* namespace Sai2Primitives */ 
