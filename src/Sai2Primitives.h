@@ -1,4 +1,5 @@
 #include "tasks/JointTask.h"
+#include "tasks/PartialJointTask.h"
 #include "tasks/PositionTask.h"
 #include "tasks/OrientationTask.h"
 #include "tasks/PosOriTask.h"
