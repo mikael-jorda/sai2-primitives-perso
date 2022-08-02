@@ -48,6 +48,7 @@ OrientationTask::OrientationTask(Sai2Model::Sai2Model* robot,
 	_jacobian.setZero(3,dof);
 	_projected_jacobian.setZero(3,dof);
 	_Lambda.setZero(3,3);
+	_Lambda_modified.setZero(3,3);
 	_Jbar.setZero(dof,3);
 	_N.setZero(dof,dof);
 	_N_prec = Eigen::MatrixXd::Identity(dof,dof);
@@ -130,6 +131,12 @@ void OrientationTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 			break;
 		}
 
+		case IMPEDANCE : 
+		{
+			_Lambda_modified = MatrixXd::Identity(_Lambda.rows(), _Lambda.rows());
+			break;
+		}
+
 		default :
 		{
 			_Lambda_modified = _Lambda;
@@ -199,6 +206,11 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 
 	// update previous time
 	_t_prev = _t_curr;
+}
+
+void OrientationTask::setDynamicDecouplingNone()
+{
+	_dynamic_decoupling_type = IMPEDANCE;
 }
 
 void OrientationTask::setDynamicDecouplingFull()

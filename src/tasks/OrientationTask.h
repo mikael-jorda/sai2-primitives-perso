@@ -29,8 +29,9 @@ class OrientationTask : public TemplateTask
 
 enum DynamicDecouplingType
 {
-	FULL_DYNAMIC_DECOUPLING = 0,            // use the real Lambda matrix
+	FULL_DYNAMIC_DECOUPLING,            // use the real Lambda matrix
 	BOUNDED_INERTIA_ESTIMATES,           // Use a Lambda computed from a saturated joint space mass matrix
+	IMPEDANCE
 };
 
 public:
@@ -70,7 +71,7 @@ public:
 	 */
 	OrientationTask(Sai2Model::Sai2Model* robot, 
 		            const std::string link_name, 
-		            const Eigen::Vector3d pos_in_link = Eigen::Vector3d::Zero(), 
+		            const Eigen::Vector3d pos_in_link, 
 		            const Eigen::Matrix3d rot_in_link = Eigen::Matrix3d::Identity(),
 		            const double loop_time = 0.001);
 
@@ -102,6 +103,7 @@ public:
 	 */
 	void reInitializeTask();
 
+	void setDynamicDecouplingNone();
 	void setDynamicDecouplingFull();
 	void setDynamicDecouplingBIE();
 
@@ -143,7 +145,8 @@ public:
 
 	Eigen::MatrixXd _jacobian;
 	Eigen::MatrixXd _projected_jacobian;
-	Eigen::MatrixXd _Lambda, _Lambda_modified;
+	Eigen::MatrixXd _Lambda;
+	Eigen::MatrixXd _Lambda_modified;
 	Eigen::MatrixXd _Jbar;
 	Eigen::MatrixXd _N;
 
