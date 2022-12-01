@@ -76,6 +76,16 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 	_sigma_motion = Matrix3d::Identity();
 	_sigma_force = Matrix3d::Zero();
 
+	// sns 
+	_sns_flag = false;
+	_sns_dt = 5e-3;
+	_nonlinear = VectorXd::Zero(_robot->dof());
+	_ddq_next = VectorXd::Zero(_robot->dof());
+	_ddq_max = VectorXd::Zero(_robot->dof());
+	_ddq_min = VectorXd::Zero(_robot->dof());
+	_ddq_sat = VectorXd::Zero(_robot->dof());
+	_sns_err_flag = VectorXi::Zero(_robot->dof());
+
 #ifdef USING_OTG 
 	_use_interpolation_flag = true;
 
@@ -338,6 +348,58 @@ void PositionTask::computeTorques(VectorXd& task_joint_torques)
 	_task_force = _Lambda_modified * _URange.transpose() * _motion_control + _URange.transpose() * _force_control;
 	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;
 
+	// sns saturation 
+	if (_sns_flag) {
+		// compute saturation 
+		_ddq_next = _robot->_M_inv * (task_joint_torques - _nonlinear);
+		// limit checks
+		auto _ddq_min = max( (2 / (_sns_dt * _sns_dt)) * (_joint_pos_lim.first - _robot->_q - _robot->_dq * _sns_dt),
+								(_joint_vel_lim.first - _robot->_q) / _sns_dt,
+								_joint_acc_lim.first );
+		auto _ddq_max = min( (2 / (_sns_dt * _sns_dt)) * (_joint_pos_lim.second - _robot->_q - _robot->_dq * _sns_dt), 
+								(_joint_vel_lim.second - _robot->_q) / _sns_dt,
+								_joint_acc_lim.second );
+		_ddq_sat.setZero();
+
+		std::vector<int> limit_ind{_robot->dof()};
+		int n_limit = 0;
+		_sns_err_flag.setZero();
+		for (int i = 0; i < _robot->dof(); ++i) {
+			if (_ddq_next(i) > _ddq_max.first(i)) {
+				_ddq_sat(i) = _ddq_max.first(i);
+				limit_ind[n_limit] = i;
+				_sns_err_flag(i) = _ddq_max.second;
+				n_limit++;
+			} else if (_ddq_next(i) < _ddq_min.first(i)) {
+				_ddq_sat(i) = _ddq_min.first(i);
+				limit_ind[n_limit] = i;
+				_sns_err_flag(i) = _ddq_min.second;
+				n_limit++;
+			} 
+		}
+
+		if (n_limit != 0) {
+			_J_sns = MatrixXd::Zero(n_limit, _robot->dof());
+			VectorXd _nonlinear_sns(n_limit);
+			VectorXd _ddq_sat_sns(n_limit);
+			for (int i = 0; i < n_limit; ++i) {
+				_J_sns(i, limit_ind[i]) = 1;
+				_nonlinear_sns(i) = _nonlinear(limit_ind[i]);
+				_ddq_sat_sns(i) = _ddq_sat(limit_ind[i]);
+			}
+			_Lambda_sns = (_J_sns * _robot->_M_inv * _J_sns.transpose()).inverse();
+			_J_bar_sns = _robot->_M_inv * _J_sns.transpose() * _Lambda_sns;
+			_tau_sns = _J_sns.transpose() * (_Lambda_sns * _ddq_sat_sns + _nonlinear_sns);
+			_N_sns = MatrixXd::Identity(_robot->dof(), _robot->dof()) - _J_bar_sns * _J_sns;
+			
+			// recompute torques
+			task_joint_torques = _tau_sns + _N_sns.transpose() * task_joint_torques;
+
+			// recompute nullspace matrix 
+			_N = _N * _N_sns;
+		}
+	}
+
 	// update previous time
 	_t_prev = _t_curr;
 }
@@ -521,6 +583,59 @@ void PositionTask::resetIntegrators()
 	_integrated_force_error.setZero();
 	_first_iteration = true;
 }
+
+// SNS
+void PositionTask::setJointLimits(std::pair<VectorXd, VectorXd> joint_pos_lim,
+									std::pair<VectorXd, VectorXd> joint_vel_lim,
+									std::pair<VectorXd, VectorXd> joint_acc_lim)
+{
+	_joint_pos_lim = joint_pos_lim;
+	_joint_vel_lim = joint_vel_lim;
+	_joint_acc_lim = joint_acc_lim;
+}
+
+std::pair<VectorXd, int> PositionTask::min(const VectorXd& x, const VectorXd& y, const VectorXd& z)
+{
+	VectorXd min_vec(x.size());
+	int ind;
+	for (int i = 0; i < x.size(); ++i) {
+		if ((x(i) < y(i)) && (x(i) < z(i))) {
+			min_vec(i) = x(i);
+			ind = 1;
+		} else if (y(i) < z(i)) {
+			min_vec(i) = y(i);
+			ind = 2;
+		} else {
+			min_vec(i) = z(i);
+			ind = 3;
+		}
+	}
+	std::pair<VectorXd, int> result;
+	result = std::make_pair(min_vec, ind);
+	return result;
+}
+
+std::pair<VectorXd, int> PositionTask::max(const VectorXd& x, const VectorXd& y, const VectorXd& z)
+{
+	VectorXd max_vec(x.size());
+	int ind;
+	for (int i = 0; i < x.size(); ++i) {
+		if ((x(i) > y(i)) && (x(i) > z(i))) {
+			max_vec(i) = x(i);
+			ind = 1;
+		} else if (y(i) > z(i)) {
+			max_vec(i) = y(i);
+			ind = 2;
+		} else {
+			max_vec(i) = z(i);
+			ind = 3;
+		}
+	}
+	std::pair<VectorXd, int> result;
+	result = std::make_pair(max_vec, ind);
+	return result;
+}
+
 
 } /* namespace Sai2Primitives */
 

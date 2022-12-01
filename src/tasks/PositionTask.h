@@ -247,6 +247,17 @@ public:
 	 */
 	void resetIntegrators();
 
+	/**
+	 * @brief 	   Sets joint limits for SNS control
+	 * 
+	 */
+	void setJointLimits(std::pair<VectorXd, VectorXd> joint_pos_lim,
+							std::pair<VectorXd, VectorXd> joint_vel_lim,
+							std::pair<VectorXd, VectorXd> joint_acc_lim);
+
+	std::pair<VectorXd, int> min(const VectorXd& x, const VectorXd& y, const VectorXd& z);
+	std::pair<VectorXd, int> max(const VectorXd& x, const VectorXd& y, const VectorXd& z);
+
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
@@ -346,6 +357,24 @@ public:
 	VectorXd _step_desired_position;
 	VectorXd _step_desired_velocity;
 	VectorXd _step_desired_acceleration;
+
+	// SNS control 
+	bool _sns_flag;
+	double _sns_dt;  // < 5 ms is unstable for forward prediction
+	VectorXd _ddq_next;
+	VectorXd _ddq_max;
+	VectorXd _ddq_min;
+	VectorXd _ddq_sat;
+	MatrixXd _J_sns;
+	MatrixXd _J_bar_sns;
+	VectorXd _tau_sns;
+	MatrixXd _N_sns;
+	MatrixXd _Lambda_sns;
+	VectorXd _nonlinear;
+	VectorXi _sns_err_flag;
+	std::pair<VectorXd, VectorXd> _joint_pos_lim;
+	std::pair<VectorXd, VectorXd> _joint_vel_lim;
+	std::pair<VectorXd, VectorXd> _joint_acc_lim;  
 
 #ifdef USING_OTG
 	double _loop_time;
