@@ -78,8 +78,9 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 
 	// sns 
 	_sns_flag = false;
-	_sns_dt = 5e-3;
+	_sns_dt = 5e-2;
 	_nonlinear = VectorXd::Zero(_robot->dof());
+	_sensed_torques = VectorXd::Zero(_robot->dof());
 	_ddq_next = VectorXd::Zero(_robot->dof());
 	_ddq_max = VectorXd::Zero(_robot->dof());
 	_ddq_min = VectorXd::Zero(_robot->dof());
@@ -351,7 +352,7 @@ void PositionTask::computeTorques(VectorXd& task_joint_torques)
 	// sns saturation 
 	if (_sns_flag) {
 		// compute saturation 
-		_ddq_next = _robot->_M_inv * (task_joint_torques - _nonlinear);
+		_ddq_next = _M_inv_orig * (task_joint_torques - _nonlinear + _sensed_torques);
 		// limit checks
 		auto _ddq_min = max( (2 / (_sns_dt * _sns_dt)) * (_joint_pos_lim.first - _robot->_q - _robot->_dq * _sns_dt),
 								(_joint_vel_lim.first - _robot->_q) / _sns_dt,
@@ -403,9 +404,6 @@ void PositionTask::computeTorques(VectorXd& task_joint_torques)
 	// update previous time
 	_t_prev = _t_curr;
 }
-
-
-
 
 bool PositionTask::goalPositionReached(const double tolerance, const bool verbose)
 {
@@ -592,6 +590,13 @@ void PositionTask::setJointLimits(std::pair<VectorXd, VectorXd> joint_pos_lim,
 	_joint_pos_lim = joint_pos_lim;
 	_joint_vel_lim = joint_vel_lim;
 	_joint_acc_lim = joint_acc_lim;
+}
+
+void PositionTask::updateSNS(const MatrixXd& M_inv, const VectorXd& nonlinear, const VectorXd& sensed_torques)
+{
+	_M_inv_orig = M_inv;
+	_nonlinear = nonlinear;
+	_sensed_torques = sensed_torques;
 }
 
 std::pair<VectorXd, int> PositionTask::min(const VectorXd& x, const VectorXd& y, const VectorXd& z)

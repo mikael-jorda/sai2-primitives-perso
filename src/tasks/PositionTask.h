@@ -255,6 +255,11 @@ public:
 							std::pair<VectorXd, VectorXd> joint_vel_lim,
 							std::pair<VectorXd, VectorXd> joint_acc_lim);
 
+	/**
+	 * @brief Updates SNS inertial terms
+	 */
+	void updateSNS(const MatrixXd& M_inv, const VectorXd& nonlinear, const VectorXd& sensed_torques);
+
 	std::pair<VectorXd, int> min(const VectorXd& x, const VectorXd& y, const VectorXd& z);
 	std::pair<VectorXd, int> max(const VectorXd& x, const VectorXd& y, const VectorXd& z);
 
@@ -361,6 +366,8 @@ public:
 	// SNS control 
 	bool _sns_flag;
 	double _sns_dt;  // < 5 ms is unstable for forward prediction
+	MatrixXd _M_inv_orig;
+	VectorXd _sensed_torques;  // need to account for external torques
 	VectorXd _ddq_next;
 	VectorXd _ddq_max;
 	VectorXd _ddq_min;
