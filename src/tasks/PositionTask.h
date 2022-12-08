@@ -247,22 +247,6 @@ public:
 	 */
 	void resetIntegrators();
 
-	/**
-	 * @brief 	   Sets joint limits for SNS control
-	 * 
-	 */
-	void setJointLimits(std::pair<VectorXd, VectorXd> joint_pos_lim,
-							std::pair<VectorXd, VectorXd> joint_vel_lim,
-							std::pair<VectorXd, VectorXd> joint_acc_lim);
-
-	/**
-	 * @brief Updates SNS inertial terms
-	 */
-	void updateSNS(const MatrixXd& M_inv, const VectorXd& nonlinear, const VectorXd& sensed_torques);
-
-	std::pair<VectorXd, int> min(const VectorXd& x, const VectorXd& y, const VectorXd& z);
-	std::pair<VectorXd, int> max(const VectorXd& x, const VectorXd& y, const VectorXd& z);
-
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
@@ -363,25 +347,15 @@ public:
 	VectorXd _step_desired_velocity;
 	VectorXd _step_desired_acceleration;
 
-	// SNS control 
-	bool _sns_flag;
-	double _sns_dt;  // < 5 ms is unstable for forward prediction
-	MatrixXd _M_inv_orig;
-	VectorXd _sensed_torques;  // need to account for external torques
-	VectorXd _ddq_next;
-	VectorXd _ddq_max;
-	VectorXd _ddq_min;
-	VectorXd _ddq_sat;
-	MatrixXd _J_sns;
-	MatrixXd _J_bar_sns;
-	VectorXd _tau_sns;
-	MatrixXd _N_sns;
-	MatrixXd _Lambda_sns;
-	VectorXd _nonlinear;
-	VectorXi _sns_err_flag;
-	std::pair<VectorXd, VectorXd> _joint_pos_lim;
-	std::pair<VectorXd, VectorXd> _joint_vel_lim;
-	std::pair<VectorXd, VectorXd> _joint_acc_lim;  
+	// lambda singularity handling
+	bool _use_lambda_truncation_flag = true;
+	int _sing_flag = 0;
+	MatrixXd _Lambda_inv;
+	MatrixXd _Lambda_ns;
+	MatrixXd _Lambda_s;
+	double _e_sing = 1e-3;  
+	double _e_max = 1e-4;  // bounds subject to tuning
+	double _e_min = 1e-6;
 
 #ifdef USING_OTG
 	double _loop_time;

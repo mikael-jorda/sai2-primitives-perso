@@ -76,17 +76,6 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 	_sigma_motion = Matrix3d::Identity();
 	_sigma_force = Matrix3d::Zero();
 
-	// sns 
-	_sns_flag = false;
-	_sns_dt = 5e-2;
-	_nonlinear = VectorXd::Zero(_robot->dof());
-	_sensed_torques = VectorXd::Zero(_robot->dof());
-	_ddq_next = VectorXd::Zero(_robot->dof());
-	_ddq_max = VectorXd::Zero(_robot->dof());
-	_ddq_min = VectorXd::Zero(_robot->dof());
-	_ddq_sat = VectorXd::Zero(_robot->dof());
-	_sns_err_flag = VectorXi::Zero(_robot->dof());
-
 #ifdef USING_OTG 
 	_use_interpolation_flag = true;
 
@@ -161,10 +150,75 @@ void PositionTask::updateTaskModel(const MatrixXd N_prec)
 	_robot->Jv(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
-	_robot->URangeJacobian(_URange, _projected_jacobian, _N_prec);
-	_unconstrained_dof = _URange.cols();
+	if (_use_lambda_truncation_flag) {
+		// Lambda truncation method 
+		_robot->URangeJacobian(_URange, _projected_jacobian, _N_prec, 1e0);
+		_unconstrained_dof = _URange.cols();
 
-	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
+		_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
+	} else {
+		// Lambda smoothing method 
+		_Lambda_inv = _projected_jacobian * _robot->_M_inv * _projected_jacobian.transpose();
+
+		// eigendecomposition 
+		Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 3, 3>> eigensolver(_Lambda_inv);
+		int n_cols = 0;
+		for (int i = 2; i >= 0; --i) {
+			if (abs(eigensolver.eigenvalues()(i)) < _e_sing) {
+				n_cols = i + 1;
+				break;
+			}
+		}
+		if (n_cols != 0) {
+			_sing_flag = 1;
+			if (n_cols == 3) {
+				MatrixXd U_s = eigensolver.eigenvectors();
+				MatrixXd D_s = MatrixXd::Zero(3, 3);
+				VectorXd e_s = eigensolver.eigenvalues();
+				for (int i = 0; i < D_s.cols(); ++i) {
+					if (abs(D_s(i, i)) < _e_min) {
+						D_s(i, i) = 0;
+					} else if (abs(D_s(i, i)) > _e_max) {
+						D_s(i, i) = 1 / e_s(i);
+					} else {
+						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+					}
+				}
+				_Lambda = U_s * D_s * U_s.transpose();
+				_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+				_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+			} else {
+				MatrixXd U_ns = eigensolver.eigenvectors().rightCols(3 - n_cols);
+				MatrixXd D_ns = MatrixXd::Zero(3 - n_cols, 3 - n_cols);
+				VectorXd e_ns = eigensolver.eigenvalues().segment(n_cols, 3 - n_cols);
+				for (int i = 0; i < D_ns.cols(); ++i) {
+					D_ns(i, i) = 1 / e_ns(i);  // safe
+				}
+				MatrixXd U_s = eigensolver.eigenvectors().leftCols(n_cols);
+				MatrixXd D_s = MatrixXd::Zero(n_cols, n_cols);
+				VectorXd e_s = eigensolver.eigenvalues().segment(0, n_cols);
+				for (int i = 0; i < D_s.cols(); ++i) {
+					if (abs(D_s(i, i)) < _e_min) {
+						D_s(i, i) = 0;
+					} else if (abs(D_s(i, i)) > _e_max) {
+						D_s(i, i) = 1 / e_s(i);
+					} else {
+						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+					}
+					_Lambda_ns = U_ns * D_ns * U_ns.transpose();
+					_Lambda_s = U_s * D_s * U_s.transpose();
+					_Lambda = _Lambda_ns + _Lambda_s;	
+					_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+					_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+				}			
+			}
+		} else {
+			_sing_flag = 0;
+			_Lambda = _Lambda_inv.inverse();
+			_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+			_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+		}
+	}
 
 	switch(_dynamic_decoupling_type)
 	{
@@ -349,58 +403,6 @@ void PositionTask::computeTorques(VectorXd& task_joint_torques)
 	_task_force = _Lambda_modified * _URange.transpose() * _motion_control + _URange.transpose() * _force_control;
 	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;
 
-	// sns saturation 
-	if (_sns_flag) {
-		// compute saturation 
-		_ddq_next = _M_inv_orig * (task_joint_torques - _nonlinear + _sensed_torques);
-		// limit checks
-		auto _ddq_min = max( (2 / (_sns_dt * _sns_dt)) * (_joint_pos_lim.first - _robot->_q - _robot->_dq * _sns_dt),
-								(_joint_vel_lim.first - _robot->_q) / _sns_dt,
-								_joint_acc_lim.first );
-		auto _ddq_max = min( (2 / (_sns_dt * _sns_dt)) * (_joint_pos_lim.second - _robot->_q - _robot->_dq * _sns_dt), 
-								(_joint_vel_lim.second - _robot->_q) / _sns_dt,
-								_joint_acc_lim.second );
-		_ddq_sat.setZero();
-
-		std::vector<int> limit_ind{_robot->dof()};
-		int n_limit = 0;
-		_sns_err_flag.setZero();
-		for (int i = 0; i < _robot->dof(); ++i) {
-			if (_ddq_next(i) > _ddq_max.first(i)) {
-				_ddq_sat(i) = _ddq_max.first(i);
-				limit_ind[n_limit] = i;
-				_sns_err_flag(i) = _ddq_max.second;
-				n_limit++;
-			} else if (_ddq_next(i) < _ddq_min.first(i)) {
-				_ddq_sat(i) = _ddq_min.first(i);
-				limit_ind[n_limit] = i;
-				_sns_err_flag(i) = _ddq_min.second;
-				n_limit++;
-			} 
-		}
-
-		if (n_limit != 0) {
-			_J_sns = MatrixXd::Zero(n_limit, _robot->dof());
-			VectorXd _nonlinear_sns(n_limit);
-			VectorXd _ddq_sat_sns(n_limit);
-			for (int i = 0; i < n_limit; ++i) {
-				_J_sns(i, limit_ind[i]) = 1;
-				_nonlinear_sns(i) = _nonlinear(limit_ind[i]);
-				_ddq_sat_sns(i) = _ddq_sat(limit_ind[i]);
-			}
-			_Lambda_sns = (_J_sns * _robot->_M_inv * _J_sns.transpose()).inverse();
-			_J_bar_sns = _robot->_M_inv * _J_sns.transpose() * _Lambda_sns;
-			_tau_sns = _J_sns.transpose() * (_Lambda_sns * _ddq_sat_sns + _nonlinear_sns);
-			_N_sns = MatrixXd::Identity(_robot->dof(), _robot->dof()) - _J_bar_sns * _J_sns;
-			
-			// recompute torques
-			task_joint_torques = _tau_sns + _N_sns.transpose() * task_joint_torques;
-
-			// recompute nullspace matrix 
-			_N = _N * _N_sns;
-		}
-	}
-
 	// update previous time
 	_t_prev = _t_curr;
 }
@@ -581,66 +583,6 @@ void PositionTask::resetIntegrators()
 	_integrated_force_error.setZero();
 	_first_iteration = true;
 }
-
-// SNS
-void PositionTask::setJointLimits(std::pair<VectorXd, VectorXd> joint_pos_lim,
-									std::pair<VectorXd, VectorXd> joint_vel_lim,
-									std::pair<VectorXd, VectorXd> joint_acc_lim)
-{
-	_joint_pos_lim = joint_pos_lim;
-	_joint_vel_lim = joint_vel_lim;
-	_joint_acc_lim = joint_acc_lim;
-}
-
-void PositionTask::updateSNS(const MatrixXd& M_inv, const VectorXd& nonlinear, const VectorXd& sensed_torques)
-{
-	_M_inv_orig = M_inv;
-	_nonlinear = nonlinear;
-	_sensed_torques = sensed_torques;
-}
-
-std::pair<VectorXd, int> PositionTask::min(const VectorXd& x, const VectorXd& y, const VectorXd& z)
-{
-	VectorXd min_vec(x.size());
-	int ind;
-	for (int i = 0; i < x.size(); ++i) {
-		if ((x(i) < y(i)) && (x(i) < z(i))) {
-			min_vec(i) = x(i);
-			ind = 1;
-		} else if (y(i) < z(i)) {
-			min_vec(i) = y(i);
-			ind = 2;
-		} else {
-			min_vec(i) = z(i);
-			ind = 3;
-		}
-	}
-	std::pair<VectorXd, int> result;
-	result = std::make_pair(min_vec, ind);
-	return result;
-}
-
-std::pair<VectorXd, int> PositionTask::max(const VectorXd& x, const VectorXd& y, const VectorXd& z)
-{
-	VectorXd max_vec(x.size());
-	int ind;
-	for (int i = 0; i < x.size(); ++i) {
-		if ((x(i) > y(i)) && (x(i) > z(i))) {
-			max_vec(i) = x(i);
-			ind = 1;
-		} else if (y(i) > z(i)) {
-			max_vec(i) = y(i);
-			ind = 2;
-		} else {
-			max_vec(i) = z(i);
-			ind = 3;
-		}
-	}
-	std::pair<VectorXd, int> result;
-	result = std::make_pair(max_vec, ind);
-	return result;
-}
-
 
 } /* namespace Sai2Primitives */
 
