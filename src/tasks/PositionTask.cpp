@@ -175,9 +175,9 @@ void PositionTask::updateTaskModel(const MatrixXd N_prec)
 				MatrixXd D_s = MatrixXd::Zero(3, 3);
 				VectorXd e_s = eigensolver.eigenvalues();
 				for (int i = 0; i < D_s.cols(); ++i) {
-					if (abs(D_s(i, i)) < _e_min) {
+					if (abs(e_s(i)) < _e_min) {
 						D_s(i, i) = 0;
-					} else if (abs(D_s(i, i)) > _e_max) {
+					} else if (abs(e_s(i)) > _e_max) {
 						D_s(i, i) = 1 / e_s(i);
 					} else {
 						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
@@ -189,17 +189,17 @@ void PositionTask::updateTaskModel(const MatrixXd N_prec)
 			} else {
 				MatrixXd U_ns = eigensolver.eigenvectors().rightCols(3 - n_cols);
 				MatrixXd D_ns = MatrixXd::Zero(3 - n_cols, 3 - n_cols);
-				VectorXd e_ns = eigensolver.eigenvalues().segment(n_cols, 3 - n_cols);
+				VectorXd e_ns = eigensolver.eigenvalues().tail(3 - n_cols);
 				for (int i = 0; i < D_ns.cols(); ++i) {
 					D_ns(i, i) = 1 / e_ns(i);  // safe
 				}
 				MatrixXd U_s = eigensolver.eigenvectors().leftCols(n_cols);
 				MatrixXd D_s = MatrixXd::Zero(n_cols, n_cols);
-				VectorXd e_s = eigensolver.eigenvalues().segment(0, n_cols);
+				VectorXd e_s = eigensolver.eigenvalues().head(n_cols);
 				for (int i = 0; i < D_s.cols(); ++i) {
-					if (abs(D_s(i, i)) < _e_min) {
+					if (abs(e_s(i)) < _e_min) {
 						D_s(i, i) = 0;
-					} else if (abs(D_s(i, i)) > _e_max) {
+					} else if (abs(e_s(i)) > _e_max) {
 						D_s(i, i) = 1 / e_s(i);
 					} else {
 						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
