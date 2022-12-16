@@ -35,96 +35,6 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_robot = robot;
 	_link_name = link_name;
 	_control_frame = control_frame;
-	_selection = MatrixXd::Identity(6, 6);  // default full control 
-
-	int dof = _robot->_dof;
-
-	_T_control_to_sensor = Affine3d::Identity();  
-
-	// motion
-	_robot->position(_current_position, _link_name, _control_frame.translation());
-	_robot->rotation(_current_orientation, _link_name);
-
-	// default values for gains and velocity saturation
-	_kp_pos = 50.0;
-	_kv_pos = 14.0;
-	_ki_pos = 0.0;
-	_kp_ori = 50.0;
-	_kv_ori = 14.0;
-	_ki_ori = 0.0;
-
-	_use_isotropic_gains_position = true;
-	_use_isotropic_gains_orientation = true;
-	_kp_pos_mat = Matrix3d::Zero();
-	_kv_pos_mat = Matrix3d::Zero();
-	_ki_pos_mat = Matrix3d::Zero();
-	_kp_ori_mat = Matrix3d::Zero();
-	_kv_ori_mat = Matrix3d::Zero();
-	_ki_ori_mat = Matrix3d::Zero();
-
-	_kp_force = 0.7;
-	_kv_force = 10.0;
-	_ki_force = 1.3;
-	_kp_moment = 0.7;
-	_kv_moment = 10.0;
-	_ki_moment = 1.3;
-
-	_use_velocity_saturation_flag = false;
-	_linear_saturation_velocity = 0.3;
-	_angular_saturation_velocity = M_PI/3;
-
-	_k_ff = 1.0;
-
-	// initialize matrices sizes
-	_jacobian.setZero(6,dof);
-	_projected_jacobian.setZero(6,dof);
-	_prev_projected_jacobian.setZero(6,dof);
-	_Lambda.setZero(6,6);
-	_Lambda_modified.setZero(6,6);
-	_Jbar.setZero(dof,6);
-	_N.setZero(dof,dof);
-	_N_prec = MatrixXd::Identity(dof,dof);
-
-	_URange_pos = MatrixXd::Identity(3,3);
-	_URange_ori = MatrixXd::Identity(3,3);
-	_URange = MatrixXd::Identity(6,6);
-
-	_pos_dof = 3;
-	_ori_dof = 3;
-
-	_first_iteration = true;
-
-#ifdef USING_OTG
-	_use_interpolation_flag = true; 
-	_loop_time = loop_time;
-	_otg = new OTG_posori(_current_position, _current_orientation, _loop_time);
-
-	_otg->setMaxLinearVelocity(0.3);
-	_otg->setMaxLinearAcceleration(1.0);
-	_otg->setMaxLinearJerk(3.0);
-
-	_otg->setMaxAngularVelocity(M_PI/3);
-	_otg->setMaxAngularAcceleration(M_PI);
-	_otg->setMaxAngularJerk(3*M_PI);
-#endif
-	reInitializeTask();
-}
-
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
-	            const Matrix<double, 6, 6> selection,
-	            const string link_name, 
-	            const Vector3d pos_in_link, 
-	            const Matrix3d rot_in_link,
-	            const double loop_time) 
-{
-	Affine3d control_frame = Affine3d::Identity();
-	control_frame.linear() = rot_in_link;
-	control_frame.translation() = pos_in_link;
-
-	_robot = robot;
-	_link_name = link_name;
-	_control_frame = control_frame;
-	_selection = selection;
 
 	int dof = _robot->_dof;
 
@@ -281,7 +191,6 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 	_projected_jacobian = _jacobian * _N_prec;
 
 	if (_use_lambda_truncation_flag) {
-		// Lambda truncation method 
 		_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
 		_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec);
 
@@ -649,7 +558,7 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;
-	
+
 	// update previous time
 	_prev_projected_jacobian = _projected_jacobian;
 	_t_prev = _t_curr;
@@ -971,5 +880,5 @@ void PosOriTask::resetIntegratorsAngular()
 	_integrated_moment_error.setZero();
 }
 
-} /* namespace Sai2Primitives */
 
+} /* namespace Sai2Primitives */

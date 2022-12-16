@@ -151,8 +151,7 @@ void PositionTask::updateTaskModel(const MatrixXd N_prec)
 	_projected_jacobian = _jacobian * _N_prec;
 
 	if (_use_lambda_truncation_flag) {
-		// Lambda truncation method 
-		_robot->URangeJacobian(_URange, _projected_jacobian, _N_prec, 1e0);
+		_robot->URangeJacobian(_URange, _projected_jacobian, _N_prec);
 		_unconstrained_dof = _URange.cols();
 
 		_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
@@ -407,6 +406,9 @@ void PositionTask::computeTorques(VectorXd& task_joint_torques)
 	_t_prev = _t_curr;
 }
 
+
+
+
 bool PositionTask::goalPositionReached(const double tolerance, const bool verbose)
 {
 	double position_error = (_desired_position - _current_position).transpose() * ( _URange * _sigma_motion * _URange.transpose()) * (_desired_position - _current_position);
@@ -585,4 +587,3 @@ void PositionTask::resetIntegrators()
 }
 
 } /* namespace Sai2Primitives */
-
