@@ -150,10 +150,74 @@ void PositionTask::updateTaskModel(const MatrixXd N_prec)
 	_robot->Jv(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
-	_robot->URangeJacobian(_URange, _projected_jacobian, _N_prec);
-	_unconstrained_dof = _URange.cols();
+	if (_use_lambda_truncation_flag) {
+		_robot->URangeJacobian(_URange, _projected_jacobian, _N_prec);
+		_unconstrained_dof = _URange.cols();
 
-	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
+		_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
+	} else {
+		// Lambda smoothing method 
+		_Lambda_inv = _projected_jacobian * _robot->_M_inv * _projected_jacobian.transpose();
+
+		// eigendecomposition 
+		Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 3, 3>> eigensolver(_Lambda_inv);
+		int n_cols = 0;
+		for (int i = 2; i >= 0; --i) {
+			if (abs(eigensolver.eigenvalues()(i)) < _e_sing) {
+				n_cols = i + 1;
+				break;
+			}
+		}
+		if (n_cols != 0) {
+			_sing_flag = 1;
+			if (n_cols == 3) {
+				MatrixXd U_s = eigensolver.eigenvectors();
+				MatrixXd D_s = MatrixXd::Zero(3, 3);
+				VectorXd e_s = eigensolver.eigenvalues();
+				for (int i = 0; i < D_s.cols(); ++i) {
+					if (abs(e_s(i)) < _e_min) {
+						D_s(i, i) = 0;
+					} else if (abs(e_s(i)) > _e_max) {
+						D_s(i, i) = 1 / e_s(i);
+					} else {
+						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+					}
+				}
+				_Lambda = U_s * D_s * U_s.transpose();
+				_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+				_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+			} else {
+				MatrixXd U_ns = eigensolver.eigenvectors().rightCols(3 - n_cols);
+				MatrixXd D_ns = MatrixXd::Zero(3 - n_cols, 3 - n_cols);
+				VectorXd e_ns = eigensolver.eigenvalues().tail(3 - n_cols);
+				for (int i = 0; i < D_ns.cols(); ++i) {
+					D_ns(i, i) = 1 / e_ns(i);  // safe
+				}
+				MatrixXd U_s = eigensolver.eigenvectors().leftCols(n_cols);
+				MatrixXd D_s = MatrixXd::Zero(n_cols, n_cols);
+				VectorXd e_s = eigensolver.eigenvalues().head(n_cols);
+				for (int i = 0; i < D_s.cols(); ++i) {
+					if (abs(e_s(i)) < _e_min) {
+						D_s(i, i) = 0;
+					} else if (abs(e_s(i)) > _e_max) {
+						D_s(i, i) = 1 / e_s(i);
+					} else {
+						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+					}
+					_Lambda_ns = U_ns * D_ns * U_ns.transpose();
+					_Lambda_s = U_s * D_s * U_s.transpose();
+					_Lambda = _Lambda_ns + _Lambda_s;	
+					_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+					_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+				}			
+			}
+		} else {
+			_sing_flag = 0;
+			_Lambda = _Lambda_inv.inverse();
+			_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+			_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+		}
+	}
 
 	switch(_dynamic_decoupling_type)
 	{
@@ -523,4 +587,3 @@ void PositionTask::resetIntegrators()
 }
 
 } /* namespace Sai2Primitives */
-

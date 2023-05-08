@@ -35,96 +35,6 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_robot = robot;
 	_link_name = link_name;
 	_control_frame = control_frame;
-	_selection = MatrixXd::Identity(6, 6);  // default full control 
-
-	int dof = _robot->_dof;
-
-	_T_control_to_sensor = Affine3d::Identity();  
-
-	// motion
-	_robot->position(_current_position, _link_name, _control_frame.translation());
-	_robot->rotation(_current_orientation, _link_name);
-
-	// default values for gains and velocity saturation
-	_kp_pos = 50.0;
-	_kv_pos = 14.0;
-	_ki_pos = 0.0;
-	_kp_ori = 50.0;
-	_kv_ori = 14.0;
-	_ki_ori = 0.0;
-
-	_use_isotropic_gains_position = true;
-	_use_isotropic_gains_orientation = true;
-	_kp_pos_mat = Matrix3d::Zero();
-	_kv_pos_mat = Matrix3d::Zero();
-	_ki_pos_mat = Matrix3d::Zero();
-	_kp_ori_mat = Matrix3d::Zero();
-	_kv_ori_mat = Matrix3d::Zero();
-	_ki_ori_mat = Matrix3d::Zero();
-
-	_kp_force = 0.7;
-	_kv_force = 10.0;
-	_ki_force = 1.3;
-	_kp_moment = 0.7;
-	_kv_moment = 10.0;
-	_ki_moment = 1.3;
-
-	_use_velocity_saturation_flag = false;
-	_linear_saturation_velocity = 0.3;
-	_angular_saturation_velocity = M_PI/3;
-
-	_k_ff = 1.0;
-
-	// initialize matrices sizes
-	_jacobian.setZero(6,dof);
-	_projected_jacobian.setZero(6,dof);
-	_prev_projected_jacobian.setZero(6,dof);
-	_Lambda.setZero(6,6);
-	_Lambda_modified.setZero(6,6);
-	_Jbar.setZero(dof,6);
-	_N.setZero(dof,dof);
-	_N_prec = MatrixXd::Identity(dof,dof);
-
-	_URange_pos = MatrixXd::Identity(3,3);
-	_URange_ori = MatrixXd::Identity(3,3);
-	_URange = MatrixXd::Identity(6,6);
-
-	_pos_dof = 3;
-	_ori_dof = 3;
-
-	_first_iteration = true;
-
-#ifdef USING_OTG
-	_use_interpolation_flag = true; 
-	_loop_time = loop_time;
-	_otg = new OTG_posori(_current_position, _current_orientation, _loop_time);
-
-	_otg->setMaxLinearVelocity(0.3);
-	_otg->setMaxLinearAcceleration(1.0);
-	_otg->setMaxLinearJerk(3.0);
-
-	_otg->setMaxAngularVelocity(M_PI/3);
-	_otg->setMaxAngularAcceleration(M_PI);
-	_otg->setMaxAngularJerk(3*M_PI);
-#endif
-	reInitializeTask();
-}
-
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
-	            const Matrix<double, 6, 6> selection,
-	            const string link_name, 
-	            const Vector3d pos_in_link, 
-	            const Matrix3d rot_in_link,
-	            const double loop_time) 
-{
-	Affine3d control_frame = Affine3d::Identity();
-	control_frame.linear() = rot_in_link;
-	control_frame.translation() = pos_in_link;
-
-	_robot = robot;
-	_link_name = link_name;
-	_control_frame = control_frame;
-	_selection = selection;
 
 	int dof = _robot->_dof;
 
@@ -280,17 +190,81 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
-	_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
-	_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec);
+	if (_use_lambda_truncation_flag) {
+		_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
+		_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec);
 
-	_pos_dof = _URange_pos.cols();
-	_ori_dof = _URange_ori.cols();
+		_pos_dof = _URange_pos.cols();
+		_ori_dof = _URange_ori.cols();
 
-	_URange.setZero(6, _pos_dof + _ori_dof);
-	_URange.block(0,0,3,_pos_dof) = _URange_pos;
-	_URange.block(3,_pos_dof,3,_ori_dof) = _URange_ori;
+		_URange.setZero(6, _pos_dof + _ori_dof);
+		_URange.block(0,0,3,_pos_dof) = _URange_pos;
+		_URange.block(3,_pos_dof,3,_ori_dof) = _URange_ori;
 
-	_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
+		_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
+	} else {
+		// Lambda smoothing method 
+		_Lambda_inv = _projected_jacobian * _robot->_M_inv * _projected_jacobian.transpose();
+
+		// eigendecomposition 
+		Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> eigensolver(_Lambda_inv);
+		int n_cols = 0;
+		for (int i = 5; i >= 0; --i) {
+			if (abs(eigensolver.eigenvalues()(i)) < _e_sing) {
+				n_cols = i + 1;
+				break;
+			}
+		}
+		if (n_cols != 0) {
+			_sing_flag = 1;
+			if (n_cols == 6) {
+				MatrixXd U_s = eigensolver.eigenvectors();
+				MatrixXd D_s = MatrixXd::Zero(6, 6);
+				VectorXd e_s = eigensolver.eigenvalues();
+				for (int i = 0; i < D_s.cols(); ++i) {
+					if (abs(e_s(i)) < _e_min) {
+						D_s(i, i) = 0;
+					} else if (abs(e_s(i)) > _e_max) {
+						D_s(i, i) = 1 / e_s(i);
+					} else {
+						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+					}
+				}
+				_Lambda = U_s * D_s * U_s.transpose();
+				_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+				_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+			} else {
+				MatrixXd U_ns = eigensolver.eigenvectors().rightCols(6 - n_cols);
+				MatrixXd D_ns = MatrixXd::Zero(6 - n_cols, 6 - n_cols);
+				VectorXd e_ns = eigensolver.eigenvalues().tail(6 - n_cols);
+				for (int i = 0; i < D_ns.cols(); ++i) {
+					D_ns(i, i) = 1 / e_ns(i);  // safe
+				}
+				MatrixXd U_s = eigensolver.eigenvectors().leftCols(n_cols);
+				MatrixXd D_s = MatrixXd::Zero(n_cols, n_cols);
+				VectorXd e_s = eigensolver.eigenvalues().head(n_cols);
+				for (int i = 0; i < D_s.cols(); ++i) {
+					if (abs(e_s(i)) < _e_min) {
+						D_s(i, i) = 0;
+					} else if (abs(e_s(i)) > _e_max) {
+						D_s(i, i) = 1 / e_s(i);
+					} else {
+						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+					}
+					_Lambda_ns = U_ns * D_ns * U_ns.transpose();
+					_Lambda_s = U_s * D_s * U_s.transpose();
+					_Lambda = _Lambda_ns + _Lambda_s;	
+					_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+					_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+				}			
+			}
+		} else {
+			_sing_flag = 0;
+			_Lambda = _Lambda_inv.inverse();
+			_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+			_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
+		}
+	}
 
 	switch(_dynamic_decoupling_type)
 	{
@@ -908,4 +882,3 @@ void PosOriTask::resetIntegratorsAngular()
 
 
 } /* namespace Sai2Primitives */
-

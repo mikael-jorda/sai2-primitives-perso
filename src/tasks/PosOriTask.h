@@ -432,6 +432,22 @@ public:
 	 */
 	void resetIntegratorsAngular();
 
+	// /**
+	//  * @brief 	   Sets joint limits for SNS control
+	//  * 
+	//  */
+	// void setJointLimits(std::pair<VectorXd, VectorXd> joint_pos_lim,
+	// 						std::pair<VectorXd, VectorXd> joint_vel_lim,
+	// 						std::pair<VectorXd, VectorXd> joint_acc_lim);
+
+	// /**
+	//  * @brief Updates SNS inertial terms
+	//  */
+	// void updateSNS(const MatrixXd& M_inv, const VectorXd& nonlinear, const VectorXd& sensed_torques);
+
+	// std::pair<VectorXd, int> min(const VectorXd& x, const VectorXd& y, const VectorXd& z);
+	// std::pair<VectorXd, int> max(const VectorXd& x, const VectorXd& y, const VectorXd& z);
+
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
@@ -576,6 +592,16 @@ public:
 	Vector3d _step_desired_angular_velocity;
 	Vector3d _step_desired_acceleration;
 	Vector3d _step_desired_angular_acceleration;
+
+	// lambda singularity handling
+	bool _use_lambda_truncation_flag = true;
+	int _sing_flag = 0;
+	MatrixXd _Lambda_inv;
+	MatrixXd _Lambda_ns;
+	MatrixXd _Lambda_s;
+	double _e_sing = 1e-1;  
+	double _e_max = 1e-1;  // bounds subject to tuning
+	double _e_min = 1e-2;
 
 #ifdef USING_OTG
 	double _loop_time;

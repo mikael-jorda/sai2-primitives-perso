@@ -347,6 +347,16 @@ public:
 	VectorXd _step_desired_velocity;
 	VectorXd _step_desired_acceleration;
 
+	// lambda singularity handling
+	bool _use_lambda_truncation_flag = true;
+	int _sing_flag = 0;
+	MatrixXd _Lambda_inv;
+	MatrixXd _Lambda_ns;
+	MatrixXd _Lambda_s;
+	double _e_sing = 1e-1;  
+	double _e_max = 1e-1;  // bounds subject to tuning
+	double _e_min = 1e-2;
+	
 #ifdef USING_OTG
 	double _loop_time;
 	OTG* _otg;           // default limits: Velocity - 0.3 m/s, acceleration - 1 m/s^2, jerk 3 m/s^3
