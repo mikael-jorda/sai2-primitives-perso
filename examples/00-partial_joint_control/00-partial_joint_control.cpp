@@ -214,10 +214,10 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	partial_joint_task->_kp = 100.0;
 	partial_joint_task->_kv = 20.0;
 	partial_joint_task->_ki = 0.0;
-
+	
 	#ifdef USING_OTG
-		// disable the interpolation for the first phase
-		partial_joint_task->_use_interpolation_flag = false;
+		partial_joint_task->_use_velocity_saturation_flag = true;
+		partial_joint_task->_use_interpolation_flag = true;
 	#endif
 
 	// create a loop timer
@@ -293,7 +293,7 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 			cout << time << endl;
 			cout << "desired position : " << partial_joint_task->_desired_position.transpose() << endl;
 			cout << "current position : " << partial_joint_task->_current_position.transpose() << endl;
-			cout << "position error : " << partial_joint_task->normError() << endl;
+			cout << "position error : " << partial_joint_task->squaredNormError() << endl;
 			cout << "partial joint task torques : " << partial_joint_task_torques.transpose() << endl;
 			cout << "joint task torques in nullspace : " << joint_task_torques.transpose() << endl;
 			// cout << "nullspace matrix: \n" << partial_joint_task->_N << endl;

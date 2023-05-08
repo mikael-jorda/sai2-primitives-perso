@@ -18,10 +18,14 @@ PartialJointTask::PartialJointTask(Sai2Model::Sai2Model* robot,
                                         const double loop_time)
 {
 	_robot = robot;
-    active_joints = selection;
-    int dof = active_joints.size();
+    _active_joints = selection;
+    int dof = _active_joints.size();
 
-	_current_position = _robot->_q(active_joints);
+	// _current_position = _robot->_q(_active_joints);
+	_current_position.setZero(dof);
+	for (int i = 0; i < dof; ++i) {
+		_current_position(i) = _robot->_q(_active_joints[i]);
+	}
 	_current_velocity.setZero(dof);
 
 	// default values for gains and velocity saturation
@@ -41,7 +45,7 @@ PartialJointTask::PartialJointTask(Sai2Model::Sai2Model* robot,
 	_M_modified = Eigen::MatrixXd::Zero(dof,dof);
     _J = Eigen::MatrixXd::Zero(dof,robot->dof());
     for (int i = 0; i < dof; ++i) {
-        _J(i, active_joints[i]) = 1;
+        _J(i, _active_joints[i]) = 1;
     }
 
 #ifdef USING_OTG 
@@ -58,9 +62,13 @@ PartialJointTask::PartialJointTask(Sai2Model::Sai2Model* robot,
 
 void PartialJointTask::reInitializeTask()
 {
-    int dof = active_joints.size();
+    int dof = _active_joints.size();
 
-	_desired_position = _robot->_q(active_joints);
+	// _desired_position = _robot->_q(_active_joints);
+	_desired_position.setZero(dof);
+	for (int i = 0; i < dof; ++i) {
+		_desired_position(i) = _robot->_q(_active_joints[i]);
+	}
 	_desired_velocity.setZero(dof);
 	_desired_acceleration.setZero(dof);
 
@@ -94,7 +102,7 @@ void PartialJointTask::setDynamicDecouplingNone()
 
 void PartialJointTask::setNonIsotropicGains(const Eigen::VectorXd& kp, const Eigen::VectorXd& kv, const Eigen::VectorXd& ki)
 {
-	int dof = active_joints.size();
+	int dof = _active_joints.size();
 
 	if(kp.size() != dof || kv.size() != dof || ki.size() != dof)
 	{
@@ -150,7 +158,7 @@ void PartialJointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 		case BOUNDED_INERTIA_ESTIMATES :
 		{
 			_M_modified = (_J * _robot->_M_inv * _J.transpose()).inverse();
-			for(int i=0 ; i<active_joints.size() ; i++)
+			for(int i=0 ; i<_active_joints.size() ; i++)
 			{
 				if(_M_modified(i,i) < 0.1)
 				{
@@ -162,7 +170,7 @@ void PartialJointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 		case IMPEDANCE :
 		{
-			_M_modified = Eigen::MatrixXd::Identity(active_joints.size(), active_joints.size());
+			_M_modified = Eigen::MatrixXd::Identity(_active_joints.size(), _active_joints.size());
 			break;
 		}
 
@@ -177,7 +185,7 @@ void PartialJointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 void PartialJointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 {
-	int dof = active_joints.size();
+	int dof = _active_joints.size();
 
 	// get time since last call for the I term
 	if(_first_iteration)
@@ -201,8 +209,14 @@ void PartialJointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	}
 
 	// update constroller state
-	_current_position = _robot->_q(active_joints);
-	_current_velocity = _robot->_dq(active_joints);
+	// _current_position = _robot->_q(_active_joints);
+	// _current_velocity = _robot->_dq(_active_joints);
+	for (int i = 0; i < dof; ++i) {
+		_current_position(i) = _robot->_q(_active_joints[i]);
+	}
+	for (int i = 0; i < dof; ++i) {
+		_current_velocity(i) = _robot->_dq(_active_joints[i]);
+	}
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
 	_step_desired_acceleration = _desired_acceleration;
@@ -223,7 +237,8 @@ void PartialJointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	if(_use_velocity_saturation_flag)
 	{
 		_step_desired_velocity = -_kp_mat*_kv_mat.inverse() * (_current_position - _step_desired_position) - _ki_mat*_kv_mat.inverse() * _integrated_position_error;
-		for(int i=0; i<_robot->dof(); i++)
+		// for(int i=0; i<_robot->dof(); i++)
+		for (int i = 0; i < dof; ++i) 
 		{
 			if(_step_desired_velocity(i) > _saturation_velocity(i))
 			{
@@ -250,9 +265,14 @@ void PartialJointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_t_prev = _t_curr;
 }
 
-double PartialJointTask::normError()
+double PartialJointTask::squaredNormError()
 {
-	return (_robot->_q(active_joints) - _desired_position).norm();
+	// return (_robot->_q(_active_joints) - _desired_position).norm();
+	double err = 0;
+	for (int i = 0; i < _active_joints.size(); ++i) {
+		err += (_robot->_q(_active_joints[i]) - _desired_position(i)) * (_robot->_q(_active_joints[i]) - _desired_position(i));
+	}
+	return err;
 }
 
 } /* namespace Sai2Primitives */ 

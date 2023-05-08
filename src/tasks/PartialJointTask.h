@@ -79,7 +79,7 @@ public:
 	 * @brief	   Computes norm residual of goal
 	 * 
 	*/
-	double normError();
+	double squaredNormError();
 
 // ---------- set dynamic decoupling type for the controller  ----------------
 	void setDynamicDecouplingFull();
@@ -130,7 +130,7 @@ public:
 	Eigen::VectorXd _step_desired_velocity;
 	Eigen::VectorXd _step_desired_acceleration;
 
-    std::vector<int> active_joints;  
+    std::vector<int> _active_joints;  
 	bool _use_isotropic_gains;
 	Eigen::MatrixXd _kp_mat;
 	Eigen::MatrixXd _kv_mat;
