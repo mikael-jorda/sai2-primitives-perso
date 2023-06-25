@@ -26,7 +26,7 @@ void MomentumObserver::reInitialize()
 	_integrated_rho_hat.setZero(dof);
 	_r.setZero(dof);
 
-	_rho_0 = _robot->_M * _robot->_dq;
+	_rho_0 = _robot->M() * _robot->dq();
 }
 
 
@@ -51,13 +51,13 @@ void MomentumObserver::update(VectorXd& command_torques, VectorXd& known_contact
 {
 	int dof = _robot->dof();
 
-	_rho = _robot->_M * _robot->_dq;
+	_rho = _robot->M() * _robot->dq();
 
 	MatrixXd C = MatrixXd::Zero(dof,dof);
 	_robot->factorizedChristoffelMatrix(C);
 	VectorXd g = VectorXd::Zero(dof);
 	_robot->gravityVector(g);
-	_beta = g - C.transpose()*_robot->_dq;
+	_beta = g - C.transpose()*_robot->dq();
 
 	VectorXd rho_hat_dot = command_torques - _beta - known_contact_torques + _r;
 	_integrated_rho_hat += rho_hat_dot * _dt;

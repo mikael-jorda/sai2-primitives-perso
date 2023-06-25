@@ -36,7 +36,7 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 	_link_name = link_name;
 	_control_frame = control_frame;
 
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
 	_T_control_to_sensor = Affine3d::Identity();
 
@@ -93,7 +93,7 @@ PositionTask::PositionTask(Sai2Model::Sai2Model* robot,
 
 void PositionTask::reInitializeTask()
 {
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
 	_robot->position(_current_position, _link_name, _control_frame.translation());
 	_robot->position(_desired_position, _link_name, _control_frame.translation());
@@ -140,7 +140,7 @@ void PositionTask::updateTaskModel(const MatrixXd N_prec)
 	{
 		throw invalid_argument("N_prec matrix not square in PositionTask::updateTaskModel\n");
 	}
-	if(N_prec.rows() != _robot->_dof)
+	if(N_prec.rows() != _robot->dof())
 	{
 		throw invalid_argument("N_prec matrix size not consistent with robot dof in PositionTask::updateTaskModel\n");
 	}
@@ -205,7 +205,7 @@ void PositionTask::computeTorques(VectorXd& task_joint_torques)
 
 	// update constroller state
 	_robot->position(_current_position, _link_name, _control_frame.translation());
-	_current_velocity = _projected_jacobian * _robot->_dq;
+	_current_velocity = _projected_jacobian * _robot->dq();
 
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;

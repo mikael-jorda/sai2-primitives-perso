@@ -1,7 +1,3 @@
-# add the include directory to the include paths
-INCLUDE_DIRECTORIES (
-	${SAI2-PRIMITIVES_INCLUDE_DIRS})
-
 # include Chai3d 
 # -- this is required by Chai3d to pick the correct path for OpenGL headers
 FIND_PACKAGE(CHAI3D REQUIRED)
@@ -17,30 +13,26 @@ INCLUDE_DIRECTORIES(${CHAI3D_INCLUDE_DIRS})
 # - SAI2-SIMULATION
 find_package(SAI2-SIMULATION REQUIRED)
 include_directories(${SAI2-SIMULATION_INCLUDE_DIRS})
-add_definitions(${SAI2-SIMULATION_DEFINITIONS})
 
 # - SAI2-GRAPHICS
 FIND_PACKAGE(SAI2-GRAPHICS REQUIRED)
 include_directories(${SAI2-GRAPHICS_INCLUDE_DIRS})
-add_definitions(${SAI2-GRAPHICS_DEFINITIONS})
 
 # - SAI2-COMMON
 FIND_PACKAGE(SAI2-COMMON REQUIRED)
 include_directories(${SAI2-COMMON_INCLUDE_DIRS})
-add_definitions(${SAI2-COMMON_DEFINITIONS})
 
 # - SAI2-URDF
 FIND_PACKAGE(SAI2-URDF REQUIRED)
 include_directories(${SAI2-URDF_INCLUDE_DIRS})
-add_definitions(${SAI2-URDF_DEFINITIONS})
 
 # - glfw3
 find_package(glfw3 QUIET)
 find_library(GLFW_LIBRARY glfw)
 
 set(SAI2-PRIMITIVES_EXAMPLES_COMMON_LIBRARIES
-	${SAI2-GRAPHICS_LIBARY}
-	${SAI2-SIMULATION_LIBRARY}
+	${SAI2-GRAPHICS_LIBRARIES}
+	${SAI2-SIMULATION_LIBRARIES}
 	${SAI2-COMMON_LIBRARIES}
 	${SAI2-URDF_LIBRARIES}
 	${CHAI3D_LIBRARIES}
@@ -50,6 +42,6 @@ set(SAI2-PRIMITIVES_EXAMPLES_COMMON_LIBRARIES
 ADD_SUBDIRECTORY(01-joint_control)
 ADD_SUBDIRECTORY(02-task_space_control)
 ADD_SUBDIRECTORY(03-task_and_redundancy)
-ADD_SUBDIRECTORY(04-surface_surface_contact)
-ADD_SUBDIRECTORY(05-two_hand_two_robots_manipulation)
-ADD_SUBDIRECTORY(10-haptic_impedance_control)
+# ADD_SUBDIRECTORY(04-surface_surface_contact)
+# ADD_SUBDIRECTORY(05-two_hand_two_robots_manipulation)
+# ADD_SUBDIRECTORY(10-haptic_impedance_control)

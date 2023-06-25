@@ -36,7 +36,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_link_name = link_name;
 	_control_frame = control_frame;
 
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
 	_T_control_to_sensor = Affine3d::Identity();  
 
@@ -111,7 +111,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 
 void PosOriTask::reInitializeTask()
 {
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
 	// motion
 	_robot->position(_current_position, _link_name, _control_frame.translation());
@@ -180,7 +180,7 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 	{
 		throw invalid_argument("N_prec matrix not square in PosOriTask::updateTaskModel\n");
 	}
-	if(N_prec.rows() != _robot->_dof)
+	if(N_prec.rows() != _robot->dof())
 	{
 		throw invalid_argument("N_prec matrix size not consistent with robot dof in PosOriTask::updateTaskModel\n");
 	}
@@ -227,7 +227,7 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 
 		case BOUNDED_INERTIA_ESTIMATES :
 		{
-			MatrixXd M_BIE = _robot->_M;
+			MatrixXd M_BIE = _robot->M();
 			for(int i=0 ; i<_robot->dof() ; i++)
 			{
 				if(M_BIE(i,i) < 0.1)
@@ -288,8 +288,8 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 	_robot->rotation(_current_orientation, _link_name);
 	_current_orientation = _current_orientation * _control_frame.linear(); // orientation of compliant frame in robot frame
 	Sai2Model::orientationError(_orientation_error, _desired_orientation, _current_orientation);
-	_current_velocity = _projected_jacobian.block(0,0,3,_robot->_dof) * _robot->_dq;
-	_current_angular_velocity = _projected_jacobian.block(3,0,3,_robot->_dof) * _robot->_dq;
+	_current_velocity = _projected_jacobian.block(0,0,3,_robot->dof()) * _robot->dq();
+	_current_angular_velocity = _projected_jacobian.block(3,0,3,_robot->dof()) * _robot->dq();
 
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
