@@ -63,8 +63,8 @@ SurfaceSurfaceAlignment::SurfaceSurfaceAlignment(Sai2Model::Sai2Model* robot,
 	_desired_normal_force = 10.0;
 
 	// TODO make a nullspace criteria to avoid singularities and one to avoid obstacles
-	_joint_task->_desired_position = _robot->_q;
-	_joint_task->_desired_velocity.setZero(_robot->_dof);
+	_joint_task->_desired_position = _robot->q();
+	_joint_task->_desired_velocity.setZero(_robot->dof());
 }
 
 SurfaceSurfaceAlignment::~SurfaceSurfaceAlignment()
@@ -103,7 +103,7 @@ void SurfaceSurfaceAlignment::updatePrimitiveModel()
 
 void SurfaceSurfaceAlignment::computeTorques(Eigen::VectorXd& torques)
 {
-	torques.setZero(_robot->_dof);
+	torques.setZero(_robot->dof());
 
 	Eigen::Vector3d localz;
 	Eigen::Matrix3d R_base_link;
@@ -122,9 +122,9 @@ void SurfaceSurfaceAlignment::computeTorques(Eigen::VectorXd& torques)
 	Eigen::VectorXd posori_torques;
 	Eigen::VectorXd joint_torques;
 	Eigen::VectorXd gravity_torques;
-	posori_torques.setZero(_robot->_dof);
-	joint_torques.setZero(_robot->_dof);
-	gravity_torques.setZero(_robot->_dof);
+	posori_torques.setZero(_robot->dof());
+	joint_torques.setZero(_robot->dof());
+	gravity_torques.setZero(_robot->dof());
 
 	_posori_task->computeTorques(posori_torques);
 	_joint_task->computeTorques(joint_torques);

@@ -17,9 +17,9 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 			const double loop_time)
 {
 	_robot = robot;
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
-	_current_position = _robot->_q;
+	_current_position = _robot->q();
 	_current_velocity.setZero(dof);
 
 	// default values for gains and velocity saturation
@@ -52,9 +52,9 @@ JointTask::JointTask(Sai2Model::Sai2Model* robot,
 
 void JointTask::reInitializeTask()
 {
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
-	_desired_position = _robot->_q;
+	_desired_position = _robot->q();
 	_desired_velocity.setZero(dof);
 	_desired_acceleration.setZero(dof);
 
@@ -125,7 +125,7 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	{
 		throw std::invalid_argument("N_prec matrix not square in JointTask::updateTaskModel\n");
 	}
-	if(N_prec.rows() != _robot->_dof)
+	if(N_prec.rows() != _robot->dof())
 	{
 		throw std::invalid_argument("N_prec matrix size not consistent with robot dof in JointTask::updateTaskModel\n");
 	}
@@ -136,13 +136,13 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	{
 		case FULL_DYNAMIC_DECOUPLING :
 		{
-			_M_modified = _robot->_M;
+			_M_modified = _robot->M();
 			break;
 		}
 
 		case BOUNDED_INERTIA_ESTIMATES :
 		{
-			_M_modified = _robot->_M;
+			_M_modified = _robot->M();
 			for(int i=0 ; i<_robot->dof() ; i++)
 			{
 				if(_M_modified(i,i) < 0.1)
@@ -161,7 +161,7 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 		default :
 		{
-			_M_modified = _robot->_M;
+			_M_modified = _robot->M();
 			break;		
 		}
 	}
@@ -170,7 +170,7 @@ void JointTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 
 void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 {
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
 	// get time since last call for the I term
 	if(_first_iteration)
@@ -194,8 +194,8 @@ void JointTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	}
 
 	// update constroller state
-	_current_position = _robot->_q;
-	_current_velocity = _robot->_dq;
+	_current_position = _robot->q();
+	_current_velocity = _robot->dq();
 	_step_desired_position = _desired_position;
 	_step_desired_velocity = _desired_velocity;
 	_step_desired_acceleration = _desired_acceleration;

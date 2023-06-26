@@ -33,7 +33,7 @@ OrientationTask::OrientationTask(Sai2Model::Sai2Model* robot,
 	_link_name = link_name;
 	_control_frame = control_frame;
 
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 	_robot->rotation(_current_orientation, _link_name);
 	_current_angular_velocity.setZero();
 
@@ -67,7 +67,7 @@ OrientationTask::OrientationTask(Sai2Model::Sai2Model* robot,
 
 void OrientationTask::reInitializeTask()
 {
-	int dof = _robot->_dof;
+	int dof = _robot->dof();
 
 	_robot->rotation(_desired_orientation, _link_name);
 	_desired_angular_velocity.setZero();
@@ -96,7 +96,7 @@ void OrientationTask::updateTaskModel(const Eigen::MatrixXd N_prec)
 	{
 		throw std::invalid_argument("N_prec matrix not square in OrientationTask::updateTaskModel\n");
 	}
-	if(N_prec.rows() != _robot->_dof)
+	if(N_prec.rows() != _robot->dof())
 	{
 		throw std::invalid_argument("N_prec matrix size not consistent with robot dof in OrientationTask::updateTaskModel\n");
 	}
@@ -130,7 +130,7 @@ void OrientationTask::computeTorques(Eigen::VectorXd& task_joint_torques)
 	_robot->rotation(_current_orientation, _link_name);
 	_current_orientation = _current_orientation * _control_frame.linear(); // orientation of compliant frame in robot frame
 	Sai2Model::orientationError(_orientation_error, _desired_orientation, _current_orientation);
-	_current_angular_velocity = _projected_jacobian * _robot->_dq;
+	_current_angular_velocity = _projected_jacobian * _robot->dq();
 	_step_desired_orientation = _desired_orientation;
 	_step_orientation_error = _orientation_error;
 	_step_desired_angular_velocity = _desired_angular_velocity;

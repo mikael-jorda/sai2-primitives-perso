@@ -143,7 +143,7 @@ void TwoHandTwoRobotsTask::updateTaskModel(const Eigen::MatrixXd N_prec_1, const
 	{
 		throw std::invalid_argument("N_prec_1 matrix not square in TwoHandTwoRobotsTask::updateTaskModel\n");
 	}
-	if(N_prec_1.rows() != _robot_arm_1->_dof)
+	if(N_prec_1.rows() != _robot_arm_1->dof())
 	{
 		throw std::invalid_argument("N_prec_1 matrix size not consistent with robot dof in TwoHandTwoRobotsTask::updateTaskModel\n");
 	}
@@ -151,7 +151,7 @@ void TwoHandTwoRobotsTask::updateTaskModel(const Eigen::MatrixXd N_prec_1, const
 	{
 		throw std::invalid_argument("N_prec_2 matrix not square in TwoHandTwoRobotsTask::updateTaskModel\n");
 	}
-	if(N_prec_2.rows() != _robot_arm_2->_dof)
+	if(N_prec_2.rows() != _robot_arm_2->dof())
 	{
 		throw std::invalid_argument("N_prec_2 matrix size not consistent with robot dof in TwoHandTwoRobotsTask::updateTaskModel\n");
 	}
@@ -164,9 +164,9 @@ void TwoHandTwoRobotsTask::updateTaskModel(const Eigen::MatrixXd N_prec_1, const
 	int dof_tot = dof_1 + dof_2;
 
 	// compute the jacobians at the contact points
-	_robot_arm_1->J_0WorldFrame(_jacobian_1, _link_name_1, _control_frame_1.translation());
+	_robot_arm_1->JWorldFrame(_jacobian_1, _link_name_1, _control_frame_1.translation());
 	_projected_jacobian_1 = _jacobian_1 * _N_prec_1;
-	_robot_arm_2->J_0WorldFrame(_jacobian_2, _link_name_2, _control_frame_2.translation());
+	_robot_arm_2->JWorldFrame(_jacobian_2, _link_name_2, _control_frame_2.translation());
 	_projected_jacobian_2 = _jacobian_2 * _N_prec_2;
 
 	// compute the nullspace matrices
@@ -183,8 +183,8 @@ void TwoHandTwoRobotsTask::updateTaskModel(const Eigen::MatrixXd N_prec_1, const
 	_J_res_int = _grasp_matrix_inverse.transpose() * J_tot;
 
 	MatrixXd M_tot_inv = MatrixXd::Zero(dof_tot, dof_tot);
-	M_tot_inv.block(0,0,dof_1,dof_1) = _robot_arm_1->_M_inv;
-	M_tot_inv.block(dof_1,dof_1,dof_2,dof_2) = _robot_arm_2->_M_inv;
+	M_tot_inv.block(0,0,dof_1,dof_1) = _robot_arm_1->MInv();
+	M_tot_inv.block(dof_1,dof_1,dof_2,dof_2) = _robot_arm_2->MInv();
 
 	MatrixXd Lambda_res_int_inv = _J_res_int * M_tot_inv * _J_res_int.transpose();
 	MatrixXd Lambda_res_int = Lambda_res_int_inv.inverse();
@@ -251,8 +251,8 @@ void TwoHandTwoRobotsTask::computeTorques(Eigen::VectorXd& task_joint_torques_1,
 	_T_world_object.linear() = _current_object_orientation;
 
 	// compute object velocities from robot velocities and grasp matrix
-	Eigen::VectorXd r1_velocity = _projected_jacobian_1 * _robot_arm_1->_dq;
-	Eigen::VectorXd r2_velocity = _projected_jacobian_2 * _robot_arm_2->_dq;
+	Eigen::VectorXd r1_velocity = _projected_jacobian_1 * _robot_arm_1->dq();
+	Eigen::VectorXd r2_velocity = _projected_jacobian_2 * _robot_arm_2->dq();
 	Eigen::VectorXd contact_velocities = Eigen::VectorXd::Zero(12);
 	contact_velocities << r1_velocity.head(3), r2_velocity.head(3), r1_velocity.tail(3), r2_velocity.tail(3);
 	Eigen::VectorXd object_full_velocities = _grasp_matrix_inverse.transpose()*contact_velocities;
@@ -506,20 +506,20 @@ void TwoHandTwoRobotsTask::reInitializeTask()
 
 	Eigen::MatrixXd augmented_R1 = Eigen::MatrixXd::Zero(6,6);
 	Eigen::MatrixXd augmented_R2 = Eigen::MatrixXd::Zero(6,6);
-	augmented_R1.block<3,3>(0,0) = _robot_arm_1->_T_world_robot.linear();
-	augmented_R1.block<3,3>(3,3) = _robot_arm_1->_T_world_robot.linear();
-	augmented_R2.block<3,3>(0,0) = _robot_arm_2->_T_world_robot.linear();
-	augmented_R2.block<3,3>(3,3) = _robot_arm_2->_T_world_robot.linear();
+	augmented_R1.block<3,3>(0,0) = _robot_arm_1->TWorldRobot().linear();
+	augmented_R1.block<3,3>(3,3) = _robot_arm_1->TWorldRobot().linear();
+	augmented_R2.block<3,3>(0,0) = _robot_arm_2->TWorldRobot().linear();
+	augmented_R2.block<3,3>(3,3) = _robot_arm_2->TWorldRobot().linear();
 
 	_robot_1_effective_inertia.setZero(6,6);
 	Eigen::MatrixXd J1_at_object_center;
-	_robot_arm_1->J_0(J1_at_object_center, _link_name_1, _T_hand1_object.translation());
+	_robot_arm_1->J(J1_at_object_center, _link_name_1, _T_hand1_object.translation());
 	J1_at_object_center = augmented_R1 * J1_at_object_center;
 	_robot_arm_1->taskInertiaMatrix(_robot_1_effective_inertia, J1_at_object_center);
 
 	_robot_2_effective_inertia.setZero(6,6);
 	Eigen::MatrixXd J2_at_object_center;
-	_robot_arm_2->J_0(J2_at_object_center, _link_name_2, _T_hand2_object.translation());
+	_robot_arm_2->J(J2_at_object_center, _link_name_2, _T_hand2_object.translation());
 	J2_at_object_center = augmented_R2 * J2_at_object_center;
 	_robot_arm_2->taskInertiaMatrix(_robot_2_effective_inertia, J2_at_object_center);
 
