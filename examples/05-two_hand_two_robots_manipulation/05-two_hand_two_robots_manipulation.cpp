@@ -37,7 +37,6 @@ const vector<string> robot_names = {
 const vector<string> object_names = {
 	"tray",
 };
-const string camera_name = "camera";
 
 const int n_robots = robot_names.size();
 const int n_objects = object_names.size();
@@ -88,33 +87,14 @@ vector<double> gripper_widths = {
 	0,
 };
 
-vector<Vector3d> object_positions;
-vector<Quaterniond> object_orientations;
+vector<Affine3d> object_poses;
 
 // simulation function prototype
-void simulation(vector<Sai2Model::Sai2Model*> robots, Simulation::Sai2Simulation* sim);
-void control(Simulation::Sai2Simulation* sim);
+void simulation(vector<Sai2Model::Sai2Model*> robots, Sai2Simulation::Sai2Simulation* sim);
+void control(Sai2Simulation::Sai2Simulation* sim);
 
 // function to perform gripper control for a given robot
 Vector2d gripperControl(const int robot_index, vector<Sai2Model::Sai2Model*> robots);
-
-// callback to print glfw errors
-void glfwError(int error, const char* description);
-
-// callback when a key is pressed
-void keySelect(GLFWwindow* window, int key, int scancode, int action, int mods);
-
-// callback when a mouse button is pressed
-void mouseClick(GLFWwindow* window, int button, int action, int mods);
-
-// flags for scene camera movement
-bool fTransXp = false;
-bool fTransXn = false;
-bool fTransYp = false;
-bool fTransYn = false;
-bool fTransZp = false;
-bool fTransZn = false;
-bool fRotPanTilt = false;
 
 // state machine
 #define PRE_PICK_TRAY               0
@@ -128,12 +108,10 @@ int main() {
 	cout << "Loading URDF world model file: " << world_file << endl;
 
 	// load graphics scene
-	auto graphics = new Sai2Graphics::Sai2Graphics(world_file, true);
-	Vector3d camera_pos, camera_lookat, camera_vertical;
-	graphics->getCameraPose(camera_name, camera_pos, camera_vertical, camera_lookat);
+	auto graphics = new Sai2Graphics::Sai2Graphics(world_file);
 
 	// load simulation world
-	auto sim = new Simulation::Sai2Simulation(world_file, false);
+	auto sim = new Sai2Simulation::Sai2Simulation(world_file);
 	sim->setCollisionRestitution(0);
 	sim->setCoeffFrictionStatic(0.8);
 
@@ -147,143 +125,33 @@ int main() {
 	// read joint positions, velocities, update model
 	for(int i=0 ; i<n_robots ; i++)
 	{
-		sim->getJointPositions(robot_names[i], robots_sim[i]->_q);
-		sim->getJointVelocities(robot_names[i], robots_sim[i]->_dq);
+		robots_sim[i]->setQ(sim->getJointPositions(robot_names[i]));
+		robots_sim[i]->setDq(sim->getJointVelocities(robot_names[i]));
 		robots_sim[i]->updateKinematics();
 	}
 
 	// read objects initial positions
 	for(int i=0 ; i< n_objects ; i++)
 	{
-		Vector3d obj_pos = Vector3d::Zero();
-		Quaterniond obj_ori = Quaterniond::Identity();
-		sim->getObjectPosition(object_names[i], obj_pos, obj_ori);
-		object_positions.push_back(obj_pos);
-		object_orientations.push_back(obj_ori);
+		object_poses.push_back(sim->getObjectPose(object_names[i]));
 	}
-
-	/*------- Set up visualization -------*/
-	// set up error callback
-	glfwSetErrorCallback(glfwError);
-
-	// initialize GLFW
-	glfwInit();
-
-	// retrieve resolution of computer display and position window accordingly
-	GLFWmonitor* primary = glfwGetPrimaryMonitor();
-	const GLFWvidmode* mode = glfwGetVideoMode(primary);
-
-	// information about computer screen and GLUT display window
-	int screenW = mode->width;
-	int screenH = mode->height;
-	int windowW = 0.8 * screenH;
-	int windowH = 0.5 * screenH;
-	int windowPosY = (screenH - windowH) / 2;
-	int windowPosX = windowPosY;
-
-	// create window and make it current
-	glfwWindowHint(GLFW_VISIBLE, 0);
-	GLFWwindow* window = glfwCreateWindow(windowW, windowH, "SAI2.0 - PandaApplications", NULL, NULL);
-	glfwSetWindowPos(window, windowPosX, windowPosY);
-	glfwShowWindow(window);
-	glfwMakeContextCurrent(window);
-	glfwSwapInterval(1);
-
-	// set callbacks
-	glfwSetKeyCallback(window, keySelect);
-	glfwSetMouseButtonCallback(window, mouseClick);
-
-	// cache variables
-	double last_cursorx, last_cursory;
 
 	fSimulationRunning = true;
 	thread sim_thread(simulation, robots_sim, sim);
 	thread control_thread(control, sim);
 
 	// while window is open:
-	while (!glfwWindowShouldClose(window))
+	while (graphics->isWindowOpen())
 	{
-		// update graphics. this automatically waits for the correct amount of time
-		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
 		for(int i=0 ; i<n_robots ; i++)
 		{
-			graphics->updateGraphics(robot_names[i], robots_sim[i]);
+			graphics->updateRobotGraphics(robot_names[i], robots_sim[i]->q());
 		}
 		for(int i=0 ; i< n_objects ; i++)
 		{
-			graphics->updateObjectGraphics(object_names[i], object_positions[i], object_orientations[i]);
+			graphics->updateObjectGraphics(object_names[i], object_poses[i]);
 		}
-		graphics->render(camera_name, width, height);
-
-		// swap buffers
-		glfwSwapBuffers(window);
-
-		// wait until all GL commands are completed
-		glFinish();
-
-		// check for any OpenGL errors
-		GLenum err;
-		err = glGetError();
-		assert(err == GL_NO_ERROR);
-
-		// poll for events
-		glfwPollEvents();
-
-		// move scene camera as required
-		// graphics->getCameraPose(camera_name, camera_pos, camera_vertical, camera_lookat);
-		Vector3d cam_depth_axis;
-		cam_depth_axis = camera_lookat - camera_pos;
-		cam_depth_axis.normalize();
-		Vector3d cam_up_axis;
-		// cam_up_axis = camera_vertical;
-		// cam_up_axis.normalize();
-		cam_up_axis << 0.0, 0.0, 1.0; //TODO: there might be a better way to do this
-		Vector3d cam_roll_axis = (camera_lookat - camera_pos).cross(cam_up_axis);
-		cam_roll_axis.normalize();
-		Vector3d cam_lookat_axis = camera_lookat;
-		cam_lookat_axis.normalize();
-		if (fTransXp) {
-			camera_pos = camera_pos + 0.05*cam_roll_axis;
-			camera_lookat = camera_lookat + 0.05*cam_roll_axis;
-		}
-		if (fTransXn) {
-			camera_pos = camera_pos - 0.05*cam_roll_axis;
-			camera_lookat = camera_lookat - 0.05*cam_roll_axis;
-		}
-		if (fTransYp) {
-			// camera_pos = camera_pos + 0.05*cam_lookat_axis;
-			camera_pos = camera_pos + 0.05*cam_up_axis;
-			camera_lookat = camera_lookat + 0.05*cam_up_axis;
-		}
-		if (fTransYn) {
-			// camera_pos = camera_pos - 0.05*cam_lookat_axis;
-			camera_pos = camera_pos - 0.05*cam_up_axis;
-			camera_lookat = camera_lookat - 0.05*cam_up_axis;
-		}
-		if (fTransZp) {
-			camera_pos = camera_pos + 0.1*cam_depth_axis;
-			camera_lookat = camera_lookat + 0.1*cam_depth_axis;
-		}	    
-		if (fTransZn) {
-			camera_pos = camera_pos - 0.1*cam_depth_axis;
-			camera_lookat = camera_lookat - 0.1*cam_depth_axis;
-		}
-		if (fRotPanTilt) {
-			// get current cursor position
-			double cursorx, cursory;
-			glfwGetCursorPos(window, &cursorx, &cursory);
-			//TODO: might need to re-scale from screen units to physical units
-			double compass = 0.006*(cursorx - last_cursorx);
-			double azimuth = 0.006*(cursory - last_cursory);
-			double radius = (camera_pos - camera_lookat).norm();
-			Matrix3d m_tilt; m_tilt = AngleAxisd(azimuth, -cam_roll_axis);
-			camera_pos = camera_lookat + m_tilt*(camera_pos - camera_lookat);
-			Matrix3d m_pan; m_pan = AngleAxisd(compass, -cam_up_axis);
-			camera_pos = camera_lookat + m_pan*(camera_pos - camera_lookat);
-		}
-		graphics->setCameraPose(camera_name, camera_pos, cam_up_axis, camera_lookat);
-		glfwGetCursorPos(window, &last_cursorx, &last_cursory);
+		graphics->renderGraphicsWorld();
 	}
 
 	// stop simulation
@@ -291,17 +159,11 @@ int main() {
 	sim_thread.join();
 	control_thread.join();
 
-	// destroy context
-	glfwDestroyWindow(window);
-
-	// terminate
-	glfwTerminate();
-
 	return 0;
 }
 
 //------------------------------------------------------------------------------
-void simulation(vector<Sai2Model::Sai2Model*> robots_sim, Simulation::Sai2Simulation* sim) {
+void simulation(vector<Sai2Model::Sai2Model*> robots_sim, Sai2Simulation::Sai2Simulation* sim) {
 
 	// create a timer
 	double sim_freq = 2000.0;
@@ -311,6 +173,8 @@ void simulation(vector<Sai2Model::Sai2Model*> robots_sim, Simulation::Sai2Simula
 	bool fTimerDidSleep = true;
 	double start_time = timer.elapsedTime(); //secs
 	double last_time = start_time;
+
+	sim->setTimestep(1.0 / sim_freq);
 
 	unsigned long long simulation_counter = 0;
 
@@ -335,27 +199,27 @@ void simulation(vector<Sai2Model::Sai2Model*> robots_sim, Simulation::Sai2Simula
 		}
 
 		// integrate forward
-		sim->integrate(1.0/sim_freq);
+		sim->integrate();
 
 		// read joint positions, velocities, update model in the simulation because robot model is different in simulation and control
 		for(int i=0 ; i<n_robots ; i++)
 		{
-			sim->getJointPositions(robot_names[i], robots_sim[i]->_q);
-			sim->getJointVelocities(robot_names[i], robots_sim[i]->_dq);
+			robots_sim[i]->setQ(sim->getJointPositions(robot_names[i]));
+			robots_sim[i]->setDq(sim->getJointVelocities(robot_names[i]));
 			robots_sim[i]->updateKinematics();
 		}
 
 		// get object positions from simulation
 		for(int i=0 ; i< n_objects ; i++)
 		{
-			sim->getObjectPosition(object_names[i], object_positions[i], object_orientations[i]);
+			object_poses[i] = sim->getObjectPose(object_names[i]);
 		}
 
 		// send the first 7 joints to the robot models in the controller
 		for(int i=0 ; i<n_robots ; i++)
 		{
-			robot_joint_positions[i] = robots_sim[i]->_q.head<7>();
-			robot_joint_velocities[i] = robots_sim[i]->_dq.head<7>();
+			robot_joint_positions[i] = robots_sim[i]->q().head<7>();
+			robot_joint_velocities[i] = robots_sim[i]->dq().head<7>();
 		}
 
 		simulation_counter++;
@@ -380,11 +244,11 @@ Vector2d gripperControl(const int robot_index, vector<Sai2Model::Sai2Model*> rob
 	double gripper_behavior_force = 0;
 
 	// gripper state
-	double gripper_center_point = (robots_sim[i]->_q(7) + robots_sim[i]->_q(8))/2.0;
-	double gripper_center_point_velocity = (robots_sim[i]->_dq(7) + robots_sim[i]->_dq(8))/2.0;
+	double gripper_center_point = (robots_sim[i]->q()(7) + robots_sim[i]->q()(8))/2.0;
+	double gripper_center_point_velocity = (robots_sim[i]->dq()(7) + robots_sim[i]->dq()(8))/2.0;
 
-	gripper_widths[i] = (robots_sim[i]->_q(7) - robots_sim[i]->_q(8))/2;
-	double gripper_opening_speed = (robots_sim[i]->_dq(7) - robots_sim[i]->_dq(8))/2;
+	gripper_widths[i] = (robots_sim[i]->q()(7) - robots_sim[i]->q()(8))/2;
+	double gripper_opening_speed = (robots_sim[i]->dq()(7) - robots_sim[i]->dq()(8))/2;
 
 	// compute gripper torques
 	double gripper_desired_width = gripper_desired_widths[i];
@@ -436,7 +300,7 @@ Vector2d gripperControl(const int robot_index, vector<Sai2Model::Sai2Model*> rob
 
 
 //------------------------------------------------------------------------------
-void control(Simulation::Sai2Simulation* sim)
+void control(Sai2Simulation::Sai2Simulation* sim)
 {
 	// object gravity
 	VectorXd object_gravity = VectorXd::Zero(6);
@@ -463,8 +327,8 @@ void control(Simulation::Sai2Simulation* sim)
 	for(int i=0 ; i<n_robots ; i++)
 	{
 		robots_control.push_back(new Sai2Model::Sai2Model(robot_control_files[i], false, sim->getRobotBaseTransform(robot_names[i])));
-		robots_control[i]->_q = robot_joint_positions[i];
-		robots_control[i]->_dq = robot_joint_velocities[i];
+		robots_control[i]->setQ(robot_joint_positions[i]);
+		robots_control[i]->setDq(robot_joint_velocities[i]);
 		robots_control[i]->updateModel();
 	}
 
@@ -540,8 +404,8 @@ void control(Simulation::Sai2Simulation* sim)
 		// read robot state and update robot model
 		for(int i=0 ; i<n_robots ; i++)
 		{
-			robots_control[i]->_q = robot_joint_positions[i];
-			robots_control[i]->_dq = robot_joint_velocities[i];
+			robots_control[i]->setQ(robot_joint_positions[i]);
+			robots_control[i]->setDq(robot_joint_velocities[i]);
 
 			robots_control[i]->updateModel();
 			robots_control[i]->coriolisForce(coriolis[i]);
@@ -696,6 +560,7 @@ void control(Simulation::Sai2Simulation* sim)
 		for(int i=0 ; i<n_robots ; i++)
 		{
 			robot_control_torques[i] = command_torques[i];
+			// robot_control_torques[i].setZero();
 		}
 
 		prev_time = current_time;
@@ -713,74 +578,4 @@ void control(Simulation::Sai2Simulation* sim)
 	cout << "Controller Loop run time  : " << end_time << " seconds\n";
 	cout << "Controller Loop updates   : " << timer.elapsedCycles() << "\n";
     cout << "Controller Loop frequency : " << timer.elapsedCycles()/end_time << "Hz\n";
-}
-
-
-//------------------------------------------------------------------------------
-
-void glfwError(int error, const char* description) {
-	cerr << "GLFW Error: " << description << endl;
-	exit(1);
-}
-
-//------------------------------------------------------------------------------
-
-void keySelect(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-	bool set = (action != GLFW_RELEASE);
-	switch(key) {
-		case GLFW_KEY_ESCAPE:
-			// exit application
-			glfwSetWindowShouldClose(window,GL_TRUE);
-			break;
-		case GLFW_KEY_RIGHT:
-			fTransXp = set;
-			break;
-		case GLFW_KEY_LEFT:
-			fTransXn = set;
-			break;
-		case GLFW_KEY_UP:
-			fTransYp = set;
-			break;
-		case GLFW_KEY_DOWN:
-			fTransYn = set;
-			break;
-		case GLFW_KEY_A:
-			fTransZp = set;
-			break;
-		case GLFW_KEY_Z:
-			fTransZn = set;
-			break;
-		default:
-			break;
-	}
-}
-
-//------------------------------------------------------------------------------
-
-void mouseClick(GLFWwindow* window, int button, int action, int mods) {
-	bool set = (action != GLFW_RELEASE);
-	//TODO: mouse interaction with robot
-	switch (button) {
-		// left click pans and tilts
-		case GLFW_MOUSE_BUTTON_LEFT:
-			fRotPanTilt = set;
-			// NOTE: the code below is recommended but doesn't work well
-			// if (fRotPanTilt) {
-			// 	// lock cursor
-			// 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-			// } else {
-			// 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-			// }
-			break;
-		// if right click: don't handle. this is for menu selection
-		case GLFW_MOUSE_BUTTON_RIGHT:
-			//TODO: menu
-			break;
-		// if middle click: don't handle. doesn't work well on laptops
-		case GLFW_MOUSE_BUTTON_MIDDLE:
-			break;
-		default:
-			break;
-	}
 }

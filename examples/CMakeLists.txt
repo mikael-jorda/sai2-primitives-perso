@@ -42,6 +42,6 @@ set(SAI2-PRIMITIVES_EXAMPLES_COMMON_LIBRARIES
 ADD_SUBDIRECTORY(01-joint_control)
 ADD_SUBDIRECTORY(02-task_space_control)
 ADD_SUBDIRECTORY(03-task_and_redundancy)
-# ADD_SUBDIRECTORY(04-surface_surface_contact)
-# ADD_SUBDIRECTORY(05-two_hand_two_robots_manipulation)
+ADD_SUBDIRECTORY(04-surface_surface_contact)
+ADD_SUBDIRECTORY(05-two_hand_two_robots_manipulation)
 # ADD_SUBDIRECTORY(10-haptic_impedance_control)

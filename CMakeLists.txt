@@ -59,7 +59,7 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/OrientationTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
-	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
 	)
 
 # # add primitives 
@@ -98,7 +98,6 @@ INCLUDE_DIRECTORIES (
 	${SAI2-PRIMITIVES_INCLUDE_DIRS}
 	${EIGEN3_INCLUDE_DIR}
 	${SAI2-MODEL_INCLUDE_DIRS}
-	# ${CHAI3D_INCLUDE_DIRS}
 	)
 
 # Create the library
@@ -109,7 +108,7 @@ if(USE_OTG)
 		# ${HUMANOID_SOURCE}
 		# ${PRIMITIVES_SOURCE}
 		# ${HAPTIC_TASKS_SOURCE}
-		# ${OTG_SOURCE}
+		${OTG_SOURCE}
 		)
 else()
 	ADD_LIBRARY (sai2-primitives STATIC

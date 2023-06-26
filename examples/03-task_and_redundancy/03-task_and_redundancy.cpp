@@ -31,10 +31,6 @@ const string world_file = "resources/world.urdf";
 const string robot_file = "resources/panda_arm.urdf";
 const string robot_name = "PANDA";
 
-const string camera_name = "camera";
-
-mutex m;
-
 // simulation and control loop
 void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim);
 void simulation(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim);
@@ -56,9 +52,7 @@ int main (int argc, char** argv) {
 
 	// load robots
 	auto robot = new Sai2Model::Sai2Model(robot_file, false);
-	Eigen::VectorXd robot_q;
-	sim->getJointPositions(robot_name, robot_q);
-	robot->set_q(robot_q);
+	robot->setQ(sim->getJointPositions(robot_name));
 	robot->updateModel();
 
 	// start the simulation thread first
@@ -71,7 +65,7 @@ int main (int argc, char** argv) {
     // while window is open:
     while (graphics->isWindowOpen()) {
 		graphics->updateRobotGraphics(robot_name, robot->q());
-		graphics->updateDisplayedWorld();
+		graphics->renderGraphicsWorld();
 	}
 
 	// stop simulation
@@ -132,14 +126,8 @@ void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim) {
 		double loop_dt = curr_time - last_time;
 
 		// read joint positions, velocities, update model
-		{
-			lock_guard<mutex> lock(m);
-			Eigen::VectorXd q, dq;
-			sim->getJointPositions(robot_name, q);
-			sim->getJointVelocities(robot_name, dq);
-			robot->set_q(q);
-			robot->set_dq(dq);
-		}
+		robot->setQ(sim->getJointPositions(robot_name));
+		robot->setDq(sim->getJointVelocities(robot_name));
 		robot->updateModel();
 
 		// update tasks model. Order is important to define the hierarchy
@@ -193,10 +181,7 @@ void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim) {
 		command_torques = posori_task_torques + joint_task_torques;
 
 		// send to simulation
-		{
-			lock_guard<mutex> lock(m);
-			sim->setJointTorques(robot_name, command_torques);
-		}
+		sim->setJointTorques(robot_name, command_torques);
 		
 
 		// -------------------------------------------
@@ -240,10 +225,7 @@ void simulation(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim
 		fTimerDidSleep = timer.waitForNextLoop();
 
 		// integrate forward
-		{
-			lock_guard<mutex> lock(m);
-			sim->integrate();
-		}
+		sim->integrate();
 
 	}
 

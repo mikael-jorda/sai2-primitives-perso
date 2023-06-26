@@ -187,7 +187,7 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 
 	_N_prec = N_prec;
 
-	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
+	_robot->J(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
 	_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
@@ -252,7 +252,7 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 
 void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 {
-	_robot->J_0(_jacobian, _link_name, _control_frame.translation());
+	_robot->J(_jacobian, _link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
 	// get time since last call for the I term

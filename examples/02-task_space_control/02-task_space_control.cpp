@@ -31,18 +31,16 @@ void sighandler(int){fSimulationRunning = false;}
 using namespace std;
 using namespace Eigen;
 
-// mutex for safe threading
-mutex m;
-
 // config file names and object names
 const string world_file = "resources/world.urdf";
 const string robot_file = "resources/puma.urdf";
 const string robot_name = "PUMA"; // name in the workd file
-const string camera_name = "camera";
 
 // simulation and control loop
 void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim);
 void simulation(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim);
+
+Eigen::VectorXd control_torques, ui_torques;
 
 /* 
  * Main function 
@@ -67,10 +65,12 @@ int main (int argc, char** argv) {
 	// load robots
 	auto robot = new Sai2Model::Sai2Model(robot_file);
 	// update robot model from simulation configuration
-	Eigen::VectorXd robot_q;
-	sim->getJointPositions(robot_name, robot_q);
-	robot->set_q(robot_q);
+	robot->setQ(sim->getJointPositions(robot_name));
 	robot->updateModel();
+	control_torques.setZero(robot->dof());
+
+	ui_torques.setZero(robot->dof());
+	graphics->addUIForceInteraction(robot_name);
 
 	// start the simulation thread first
 	fSimulationRunning = true;
@@ -82,7 +82,8 @@ int main (int argc, char** argv) {
     // while window is open:
     while (graphics->isWindowOpen()) {
 		graphics->updateRobotGraphics(robot_name, robot->q());
-		graphics->updateDisplayedWorld();
+		graphics->renderGraphicsWorld();
+		ui_torques = graphics->getUITorques(robot_name);
 	}
 
 	// stop simulation
@@ -99,7 +100,6 @@ void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim) {
 	// update robot model and initialize control vectors
 	robot->updateModel();
 	int dof = robot->dof();
-	VectorXd command_torques = VectorXd::Zero(dof);
 	MatrixXd N_prec = MatrixXd::Identity(dof,dof);
 
 	// prepare the task
@@ -147,14 +147,8 @@ void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim) {
 		double loop_dt = curr_time - last_time;
 
 		// read joint positions, velocities, update model
-		{
-			lock_guard<mutex> lock(m);
-			Eigen::VectorXd q, dq;
-			sim->getJointPositions(robot_name, q);
-			sim->getJointVelocities(robot_name, dq);
-			robot->set_q(q);
-			robot->set_dq(dq);
-		}
+		robot->setQ(sim->getJointPositions(robot_name));
+		robot->setDq(sim->getJointVelocities(robot_name));
 		robot->updateModel();
 
 		// update tasks model
@@ -199,14 +193,7 @@ void control(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim) {
 		posori_task->computeTorques(posori_task_torques);
 		
 		//------ Final torques
-		command_torques = posori_task_torques;
-
-		// -------------------------------------------
-		{
-			lock_guard<mutex> lock(m);
-			sim->setJointTorques(robot_name, command_torques);
-		}
-		
+		control_torques = posori_task_torques;
 
 		// -------------------------------------------
 		if(controller_counter % 500 == 0)
@@ -248,13 +235,10 @@ void simulation(Sai2Model::Sai2Model* robot, Sai2Simulation::Sai2Simulation* sim
 	sim->setTimestep(1.0/sim_freq);
 
 	while (fSimulationRunning) {
-		fTimerDidSleep = timer.waitForNextLoop();
+		timer.waitForNextLoop();
 
-		// integrate forward
-		{
-			lock_guard<mutex> lock(m);
-			sim->integrate();
-		}
+		sim->setJointTorques(robot_name, control_torques + ui_torques);
+		sim->integrate();
 
 	}
 
