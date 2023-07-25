@@ -72,20 +72,20 @@ SET(TASKS_SOURCE
 	${PROJECT_SOURCE_DIR}/src/tasks/PosOriTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/PartialJointTask.cpp
-	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
-	${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTaskNonRigid.cpp
+	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTaskNonRigid.cpp
 	)
 
 # add primitives 
 SET(PRIMITIVES_SOURCE 
-	${PROJECT_SOURCE_DIR}/src/primitives/RedundantArmMotion.cpp
-	${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
+	# ${PROJECT_SOURCE_DIR}/src/primitives/RedundantArmMotion.cpp
+	# ${PROJECT_SOURCE_DIR}/src/primitives/SurfaceSurfaceAlignment.cpp
 	)
 
 # add perception 
 SET(PERCEPTION_SOURCE 
-	${PROJECT_SOURCE_DIR}/src/perception/ForceSpaceParticleFilter.cpp
-	${PROJECT_SOURCE_DIR}/src/perception/MomentumObserver.cpp
+	# ${PROJECT_SOURCE_DIR}/src/perception/ForceSpaceParticleFilter.cpp
+	# ${PROJECT_SOURCE_DIR}/src/perception/MomentumObserver.cpp
 	)
 
 # add humanoid 
@@ -97,11 +97,11 @@ SET(PERCEPTION_SOURCE
 
 # add haptic_tasks
 SET(HAPTIC_TASKS_SOURCE
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/ImpedanceControl.cpp
-	${PROJECT_SOURCE_DIR}/src/haptic_tasks/PositionControl.cpp
+	# ${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
+	# ${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
+	# ${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
+	# ${PROJECT_SOURCE_DIR}/src/haptic_tasks/ImpedanceControl.cpp
+	# ${PROJECT_SOURCE_DIR}/src/haptic_tasks/PositionControl.cpp
 	)
 
 # add header files

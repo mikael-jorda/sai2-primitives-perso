@@ -35,6 +35,107 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_robot = robot;
 	_link_name = link_name;
 	_control_frame = control_frame;
+	_selection = MatrixXd::Identity(6, 6);  // default full control 
+
+	int dof = _robot->_dof;
+
+	_T_control_to_sensor = Affine3d::Identity();  
+
+	// motion
+	_robot->position(_current_position, _link_name, _control_frame.translation());
+	_robot->rotation(_current_orientation, _link_name);
+
+	// default values for gains and velocity saturation
+	_kp_pos = 50.0;
+	_kv_pos = 14.0;
+	_ki_pos = 0.0;
+	_kp_ori = 50.0;
+	_kv_ori = 14.0;
+	_ki_ori = 0.0;
+
+	_use_isotropic_gains_position = true;
+	_use_isotropic_gains_orientation = true;
+	_kp_pos_mat = Matrix3d::Zero();
+	_kv_pos_mat = Matrix3d::Zero();
+	_ki_pos_mat = Matrix3d::Zero();
+	_kp_ori_mat = Matrix3d::Zero();
+	_kv_ori_mat = Matrix3d::Zero();
+	_ki_ori_mat = Matrix3d::Zero();
+
+	_kp_force = 0.7;
+	_kv_force = 10.0;
+	_ki_force = 1.3;
+	_kp_moment = 0.7;
+	_kv_moment = 10.0;
+	_ki_moment = 1.3;
+
+	_use_velocity_saturation_flag = false;
+	_linear_saturation_velocity = 0.3;
+	_angular_saturation_velocity = M_PI/3;
+
+	_k_ff = 1.0;
+
+	// initialize matrices sizes
+	_jacobian.setZero(6,dof);
+	_projected_jacobian.setZero(6,dof);
+	_prev_projected_jacobian.setZero(6,dof);
+	// _Lambda.setZero(6,6);
+	// _Lambda_modified.setZero(6,6);
+	_Lambda.setIdentity(6,6);
+	_Lambda_modified.setIdentity(6,6);
+	_Jbar.setZero(dof,6);
+	_N.setZero(dof,dof);
+	_N_prec = MatrixXd::Identity(dof,dof);
+
+	_URange_pos = MatrixXd::Identity(3,3);
+	_URange_ori = MatrixXd::Identity(3,3);
+	_URange = MatrixXd::Identity(6,6);
+
+	_pos_dof = 3;
+	_ori_dof = 3;
+
+	_first_iteration = true;
+
+	// obtain q dependencies 
+	std::vector<int> q_dependency = robot->getLinkDependency(link_name);
+	// std::unique_ptr<Sai2Primitives::PartialJointTask> _sing_joint_task(new Sai2Primitives::PartialJointTask(robot, q_dependency, loop_time));
+	_sing_joint_task = new Sai2Primitives::PartialJointTask(robot, q_dependency, loop_time); 
+	_sing_joint_task->reInitializeTask();
+	_sing_joint_task->_use_velocity_saturation_flag = true;
+
+	_prev_torques = VectorXd::Zero(dof);	
+
+#ifdef USING_OTG
+	_use_interpolation_flag = true; 
+	_loop_time = loop_time;
+	_otg = new OTG_posori(_current_position, _current_orientation, _loop_time);
+
+	_otg->setMaxLinearVelocity(0.3);
+	_otg->setMaxLinearAcceleration(1.0);
+	_otg->setMaxLinearJerk(3.0);
+
+	_otg->setMaxAngularVelocity(M_PI/3);
+	_otg->setMaxAngularAcceleration(M_PI);
+	_otg->setMaxAngularJerk(3*M_PI);
+#endif
+	reInitializeTask();
+}
+
+PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
+	            const Matrix<double, 6, 6> selection,
+	            const string link_name, 
+	            const Vector3d pos_in_link, 
+	            const Matrix3d rot_in_link,
+	            const double loop_time) 
+{
+	Affine3d control_frame = Affine3d::Identity();
+	control_frame.linear() = rot_in_link;
+	control_frame.translation() = pos_in_link;
+
+	_robot = robot;
+	_link_name = link_name;
+	_control_frame = control_frame;
+	_selection = selection;
 
 	int dof = _robot->_dof;
 
@@ -154,6 +255,7 @@ void PosOriTask::reInitializeTask()
 
 	_closed_loop_force_control = false;
 	_closed_loop_moment_control = false;
+	_open_loop_force_control_with_lambda = false;
 
 	_passivity_enabled = true;
 	_passivity_observer = 0;
@@ -191,79 +293,127 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 	_projected_jacobian = _jacobian * _N_prec;
 
 	if (_use_lambda_truncation_flag) {
-		_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec);
-		_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec);
+		_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec, 1e-1);
+		_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec, 1e-1);
 
 		_pos_dof = _URange_pos.cols();
 		_ori_dof = _URange_ori.cols();
+
+		_truncated_jacobian = false;
+		if (_pos_dof != 3 || _ori_dof != 3) {
+			std::cout << "(pos_dof, ori_dof): " << "(" << _pos_dof << ", " << _ori_dof << ")\n";
+			_truncated_jacobian = true;
+		}
 
 		_URange.setZero(6, _pos_dof + _ori_dof);
 		_URange.block(0,0,3,_pos_dof) = _URange_pos;
 		_URange.block(3,_pos_dof,3,_ori_dof) = _URange_ori;
 
 		_robot->operationalSpaceMatrices(_Lambda, _Jbar, _N, _URange.transpose() * _projected_jacobian, _N_prec);
-	} else {
-		// Lambda smoothing method 
+
+	} else if (_use_lambda_smoothing_flag) {
+		// Lambda smoothing method (Park 2012)
 		_Lambda_inv = _projected_jacobian * _robot->_M_inv * _projected_jacobian.transpose();
 
 		// eigendecomposition 
-		Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> eigensolver(_Lambda_inv);
+		Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 6, 6>> eigensolver(_Lambda_inv);  // sorted increasing e-values 
 		int n_cols = 0;
 		for (int i = 5; i >= 0; --i) {
-			if (abs(eigensolver.eigenvalues()(i)) < _e_sing) {
+			if (abs(eigensolver.eigenvalues()(i)) < _e_max) {
 				n_cols = i + 1;
+				_sing_flag = 1;
 				break;
 			}
+			_sing_flag = 0;
 		}
-		if (n_cols != 0) {
-			_sing_flag = 1;
+		if (_sing_flag) {
 			if (n_cols == 6) {
 				MatrixXd U_s = eigensolver.eigenvectors();
 				MatrixXd D_s = MatrixXd::Zero(6, 6);
 				VectorXd e_s = eigensolver.eigenvalues();
-				for (int i = 0; i < D_s.cols(); ++i) {
+				for (int i = 0; i < 6; ++i) {
 					if (abs(e_s(i)) < _e_min) {
 						D_s(i, i) = 0;
 					} else if (abs(e_s(i)) > _e_max) {
-						D_s(i, i) = 1 / e_s(i);
+						D_s(i, i) = abs(e_s(i));
 					} else {
-						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+						D_s(i, i) = abs(e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
 					}
 				}
-				_Lambda = U_s * D_s * U_s.transpose();
+				_Lambda = U_s * D_s.inverse() * U_s.transpose();
 				_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
 				_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
 			} else {
+				// non-singular components
 				MatrixXd U_ns = eigensolver.eigenvectors().rightCols(6 - n_cols);
-				MatrixXd D_ns = MatrixXd::Zero(6 - n_cols, 6 - n_cols);
 				VectorXd e_ns = eigensolver.eigenvalues().tail(6 - n_cols);
-				for (int i = 0; i < D_ns.cols(); ++i) {
-					D_ns(i, i) = 1 / e_ns(i);  // safe
-				}
+				MatrixXd D_ns = e_ns.asDiagonal();
+
+				// singular components 
 				MatrixXd U_s = eigensolver.eigenvectors().leftCols(n_cols);
-				MatrixXd D_s = MatrixXd::Zero(n_cols, n_cols);
+				MatrixXd H_s = MatrixXd::Zero(n_cols, n_cols);
 				VectorXd e_s = eigensolver.eigenvalues().head(n_cols);
-				for (int i = 0; i < D_s.cols(); ++i) {
+				MatrixXd D_s = e_s.asDiagonal();
+				for (int i = 0; i < n_cols; ++i) {
 					if (abs(e_s(i)) < _e_min) {
-						D_s(i, i) = 0;
+						H_s(i, i) = 0;
 					} else if (abs(e_s(i)) > _e_max) {
-						D_s(i, i) = 1 / e_s(i);
+						H_s(i, i) = 1;
 					} else {
-						D_s(i, i) = (1 / e_s(i)) * (0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2)));
+						H_s(i, i) = 0.5 + 0.5 * sin( (M_PI / (_e_max - _e_min)) * (abs(e_s(i)) - _e_min) - (M_PI / 2));
 					}
-					_Lambda_ns = U_ns * D_ns * U_ns.transpose();
-					_Lambda_s = U_s * D_s * U_s.transpose();
-					_Lambda = _Lambda_ns + _Lambda_s;	
-					_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
-					_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
-				}			
+				}
+				_Lambda_ns = U_ns * D_ns.inverse() * U_ns.transpose();
+				_Lambda_s = U_s * H_s * D_s.inverse() * U_s.transpose();
+				// std::cout << "Lambda_ns: \n" << _Lambda_ns << "\n";
+				// std::cout << "Lambda_s: \n" << _Lambda_s << "\n";
+				// std::cout << "U_s: \n" << U_s << "\n";
+				// std:cout << "D_s: \n" << D_s << "\n";
+				// std::cout << "H_s: \n" << H_s << "\n";
+				// std::cout << "Lambda smoothing: \n" << _Lambda << "\n";
+				_Lambda = _Lambda_ns + _Lambda_s;	
+				_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
+				_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;			
 			}
 		} else {
-			_sing_flag = 0;
 			_Lambda = _Lambda_inv.inverse();
 			_Jbar = _robot->_M_inv * _projected_jacobian.transpose() * _Lambda;
 			_N = MatrixXd::Identity(_robot->_dof, _robot->_dof) - _Jbar * _projected_jacobian;
 		}
+	} else if (_use_lambda_interpolation_flag) {
+		// Lambda interpolation method (custom)
+		_Lambda_inv = _projected_jacobian * _robot->_M_inv * _projected_jacobian.transpose();
+
+		_robot->URangeJacobian(_URange_pos, _projected_jacobian.topRows(3), _N_prec, 1e-1);
+		_robot->URangeJacobian(_URange_ori, _projected_jacobian.bottomRows(3), _N_prec, 1e-1);
+
+		_pos_dof = _URange_pos.cols();
+		_ori_dof = _URange_ori.cols();
+
+		if (_pos_dof != 3 || _ori_dof != 3) {
+			_truncated_jacobian = true;
+			if (_sing_transition == false) {
+				_sing_transition = true;  // initiate transition here
+				_sing_first_transition = true;
+				_transition_cnt = 0;
+				_Lambda_start = _Lambda;  
+				_Lambda_end = invLambdaReduction(_Lambda_inv).inverse();
+				_Lambda = _Lambda_start;  // using previous lambda first 
+			} else {
+				_transition_cnt++;
+				_Lambda = lambdaInterpolation(_Lambda_start, _Lambda_end, _transition_cnt * 1.0 / _sing_samples);
+				// _Jbar = _robot->_M_inv * (_URange.transpose() * _projected_jacobian).transpose() * _Lambda;
+				// _N = MatrixXd::Identity(_robot->dof(), _robot->dof()) - _Jbar * _URange.transpose() * _projected_jacobian;
+			}
+		} else {
+			_truncated_jacobian = false;
+			// _sing_transition flag only reversed after N samples of transition
+		}
+
+		if (_transition_cnt > _sing_samples) {
+			_sing_transition = false;
+		}
+
 	}
 
 	switch(_dynamic_decoupling_type)
@@ -417,7 +567,6 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 				}
 			}
 
-
 			// compute PC
 			if(_PO_counter <= 0)
 			{
@@ -546,21 +695,99 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 	feedforward_force_moment.head(3) = _sigma_force * _desired_force;
 	feedforward_force_moment.tail(3) = _sigma_moment * _desired_moment;
 
+	// if (_open_loop_force_control_with_lambda && !_closed_loop_force_control) {
+	// 	feedforward_force_moment = _Lambda_modified * feedforward_force_moment;
+	// }
+
 	if(_closed_loop_force_control)
 	{
 		feedforward_force_moment *= _k_ff;
 	}
 
 	_linear_force_control = force_feedback_related_force + feedforward_force_moment.head(3);
-	_linear_motion_control = position_related_force;
+	_linear_motion_control = position_related_force;	
 
 	_task_force = _Lambda_modified * _URange.transpose() * (position_orientation_contribution) + _URange.transpose() * (force_moment_contribution + feedforward_force_moment);
+
+	// open loop control with added lambda (custom option)
+	if (_open_loop_force_control_with_lambda && !_closed_loop_force_control) {
+		_task_force = _Lambda_modified * _URange.transpose() * (position_orientation_contribution) + _Lambda_modified * _URange.transpose() * (force_moment_contribution + feedforward_force_moment);
+	}
 
 	// compute task torques
 	task_joint_torques = _projected_jacobian.transpose() * _URange * _task_force;
 
+	// compute task torques with interpolated lambda 
+	if (_use_lambda_interpolation_flag) {
+		_task_force = _Lambda_modified * (position_orientation_contribution) + (force_moment_contribution + feedforward_force_moment);
+		task_joint_torques = _projected_jacobian.transpose() * _task_force;
+	}
+
+	// add partial joint task torques if jacobian is truncated
+	if (_use_lambda_truncation_flag && _truncated_jacobian) {
+		// for (int i = 0; i < _sing_joint_task->_desired_position.size(); ++i) {
+			// _sing_joint_task->_desired_position(i) += 0.1 * sgn(_robot->_dq(_sing_joint_task->_active_joints[i])) * M_PI / 180;  // naive update of 0.1 degrees per control cycle in direction of last velocity
+			// _sing_joint_task->_desired_position.array() += 0.1 * M_PI / 180;
+		// }
+		_sing_joint_task->updateTaskModel(_N);
+		_sing_joint_task->computeTorques(_sing_joint_torques);
+		task_joint_torques += _sing_joint_torques;
+		_N = _sing_joint_task->_N;
+	}
+
+	// // compute saturated task torques for torque spike
+	// for (int i = 0; i < task_joint_torques.size(); ++i) {
+	// 	if (abs(_prev_torques(i) - task_joint_torques(i)) > _max_torque_diff) {
+	// 		std::cout << "Torque spike saturation \n";
+	// 		task_joint_torques(i) = _prev_torques(i) + _max_torque_diff * sgn(task_joint_torques(i) - _prev_torques(i));
+	// 	}
+	// }
+
+	// add partial joint task torques if jacobian is truncated
+	// _sing_joint_task->_desired_position = 
+	// _sing_joint_task->updateTaskModel(_N);
+	// _sing_joint_task->computeTorques(_sing_joint_torques);
+	// _N = _sing_joint_task->_N;
+	// task_joint_torques += _sing_joint_torques;
+
+	// // overwrite task torques if in a singularity transition 
+	// if (_sing_transition && _use_blending_flag) {
+	// 	// std::cout << "Singularity transition: \n";
+	// 	if (_sing_first_transition) {
+	// 		_sing_start_torques = _prev_torques;
+	// 		_sing_end_torques = task_joint_torques;
+	// 		_sing_first_transition = false; 
+	// 	}
+	// 	double alpha = 1. / exp(_sing_blending_rate * _sing_cnt); // 1 -> 0
+	// 	std::cout << "alpha: " << alpha << "\n";
+
+	// 	// _manip_matrix = _projected_jacobian.topRows(_pos_dof) * _projected_jacobian.topRows(_pos_dof).transpose();
+	// 	// _sing_joint_task->_desired_position = - _manip_matrix.determinant() * (_manip_matrix.inverse() * )
+	// 	_sing_joint_task->_desired_position.array() += 1e-1;  // random exit strategy; if dJdq is available, then minimize manipulability metric 
+	// 	_sing_joint_task->updateTaskModel(_N);  // uses the nullspace of the truncated jacobian task 
+	// 	_sing_joint_task->computeTorques(_sing_joint_torques);
+	// 	_N = _sing_joint_task->_N;
+
+	// 	task_joint_torques = alpha * _sing_start_torques + (1 - alpha) * _sing_end_torques + _sing_joint_torques;
+
+	// 	_sing_cnt++;
+	// 	if (_sing_cnt > _sing_samples) {
+	// 		_sing_transition = false;
+	// 		_sing_cnt = 0;
+	// 		// std::cout << "Leaving singularity transition: \n";
+	// 	}
+	// }
+
 	// update previous time
+	// partial joint task for singularity is updated only if the jacobian isn't truncated
+	if (_use_lambda_truncation_flag == true && _truncated_jacobian == false) {
+		for (int i = 0; i < _sing_joint_task->_desired_position.size(); ++i) {
+			_sing_joint_task->_desired_position(i) = _robot->_q(_sing_joint_task->_active_joints[i]);  
+			_sing_joint_task->_desired_velocity(i) = _robot->_dq(_sing_joint_task->_active_joints[i]);
+		}
+	}
 	_prev_projected_jacobian = _projected_jacobian;
+	_prev_torques = task_joint_torques;
 	_t_prev = _t_curr;
 }
 
@@ -880,5 +1107,56 @@ void PosOriTask::resetIntegratorsAngular()
 	_integrated_moment_error.setZero();
 }
 
+MatrixXd PosOriTask::lambdaInterpolation(const MatrixXd& lambda_0, const MatrixXd& lambda_1, const double& theta) 
+{
+	// Eigen::Matrix<double, 6, 6> lambda_0_log = lambda_0.log();
+	// Eigen::Matrix<double, 6, 6> lambda_1_log = lambda_1.log();
+	// Eigen::Matrix<double, 6, 6> lambda_linear_interp = lambda_0_log + theta * lambda_1_log;
+	// return lambda_linear_interp.exp();
+	// return (lambda_0.log() + theta * lambda_1.log()).exp();
+	// return lambda_0.pow(1 - theta) * lambda_1.pow(theta);
+	return lambda_0 * (1 - theta) + lambda_1 * theta;
+}
+
+MatrixXd PosOriTask::lambdaReduction(const MatrixXd& A, const double& tol) 
+{
+    int k = A.rows();
+    if (A.rows() > A.cols()) {
+        k = A.cols();
+    }
+    MatrixXd Sigma = MatrixXd::Zero(k, k);
+    JacobiSVD<MatrixXd> svd(A, ComputeFullU | ComputeFullV);
+    Sigma(0, 0) = svd.singularValues()(0);
+    double ratio = 0;
+
+    for (int i = 1; i < svd.singularValues().size(); ++i) {
+        // ratio = svd.singularValues()(i) / svd.singularValues()(0);
+		ratio = svd.singularValues()(i);
+        if (ratio > tol) {
+            Sigma(i, i) = svd.singularValues()(i);
+        }
+    }
+    return svd.matrixU() * Sigma * svd.matrixV();
+}
+
+MatrixXd PosOriTask::invLambdaReduction(const MatrixXd& A, const double& tol) 
+{
+    int k = A.rows();
+    if (A.rows() > A.cols()) {
+        k = A.cols();
+    }
+    MatrixXd Sigma = MatrixXd::Zero(k, k);
+    JacobiSVD<MatrixXd> svd(A, ComputeFullU | ComputeFullV);
+	double ratio = 0;
+
+    for (int i = svd.singularValues().size() - 1; i > 0; --i) {
+        // ratio = svd.singularValues()(i) / svd.singularValues()(0);
+		ratio = svd.singularValues()(i);
+        if (ratio < tol) {
+            Sigma(i, i) = svd.singularValues()(i);
+        }
+    }
+    return svd.matrixU() * Sigma * svd.matrixV();
+}
 
 } /* namespace Sai2Primitives */

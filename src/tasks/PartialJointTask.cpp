@@ -12,7 +12,6 @@
 namespace Sai2Primitives
 {
 
-
 PartialJointTask::PartialJointTask(Sai2Model::Sai2Model* robot, 
                                         const std::vector<int> selection, 
                                         const double loop_time)
