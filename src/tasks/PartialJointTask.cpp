@@ -27,9 +27,12 @@ PartialJointTask::PartialJointTask(Sai2Model::Sai2Model* robot,
 	}
 	_current_velocity.setZero(dof);
 
+	_desired_position = _current_position;
+	_desired_velocity = _current_velocity;
+
 	// default values for gains and velocity saturation
-	_kp = 50.0;
-	_kv = 14.0;
+	_kp = 100.0;
+	_kv = 20.0;
 	_ki = 0.0;
 	_use_velocity_saturation_flag = false;
 	_saturation_velocity = M_PI/3.0*Eigen::VectorXd::Ones(dof);

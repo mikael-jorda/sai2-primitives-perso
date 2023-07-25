@@ -231,12 +231,6 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	posori_task->_kv_ori = 20.0;
 	posori_task->_ki_ori = 0.0;
 
-	// posori_task->reInitializeTask();
-	// posori_task->_use_lambda_smoothing_flag = true;
-	posori_task->_use_lambda_truncation_flag = true;
-	posori_task->_e_max = 1e-1;
-	posori_task->_e_min = 5e-1;
-
 	// initial position and orientation
 	Matrix3d initial_orientation;
 	Vector3d initial_position;
@@ -282,12 +276,12 @@ void control(Sai2Model::Sai2Model* robot, Simulation::Sai2Simulation* sim) {
 	    	     0      ,      0     , 1;
 		if(controller_counter % 3000 == 2000)
 		{
-			posori_task->_desired_position(2) += 0.4;
+			posori_task->_desired_position(2) += 0.8;
 			posori_task->_desired_orientation = R*posori_task->_desired_orientation;
 		}
 		else if(controller_counter % 3000 == 500)
 		{
-			posori_task->_desired_position(2) -= 0.4;
+			posori_task->_desired_position(2) -= 0.8;
 			posori_task->_desired_orientation = R.transpose()*posori_task->_desired_orientation;
 		}
 

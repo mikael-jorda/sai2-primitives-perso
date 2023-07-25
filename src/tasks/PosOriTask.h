@@ -452,11 +452,6 @@ public:
 	// std::pair<VectorXd, int> min(const VectorXd& x, const VectorXd& y, const VectorXd& z);
 	// std::pair<VectorXd, int> max(const VectorXd& x, const VectorXd& y, const VectorXd& z);
 
-	// Lambda blending 
-	MatrixXd lambdaInterpolation(const MatrixXd& lambda_0, const MatrixXd& lambda_1, const double& theta);
-	MatrixXd lambdaReduction(const MatrixXd& A, const double& tol = 1e-1);
-	MatrixXd invLambdaReduction(const MatrixXd& A, const double& tol = 1e-1);
-
 	//-----------------------------------------------
 	//         Member variables
 	//-----------------------------------------------
@@ -603,37 +598,13 @@ public:
 	Vector3d _step_desired_acceleration;
 	Vector3d _step_desired_angular_acceleration;
 
-	// lambda singularity handling
-	bool _use_lambda_truncation_flag = true;
-	bool _use_lambda_smoothing_flag = false;
-	bool _use_lambda_interpolation_flag = false;
-	int _sing_flag = 0;
-	MatrixXd _Lambda_inv;
-	MatrixXd _Lambda_ns;
-	MatrixXd _Lambda_s;
-	// double _e_sing = 1e-1;  
-	double _e_max = 1e-1;  // bounds subject to tuning
-	double _e_min = 1e-2;
-	double _max_lambda = 20;  // saturate lambda values
-	int _n_transition_samples = 100;  // number of samples to transition torques 
-	MatrixXd _Lambda_start, _Lambda_end;
-
-	// singularity torque blending parameters
-	bool _truncated_jacobian;
-	int _transition_cnt = 0;
-	double _sing_cnt = 0;  // counter to increment through samples 
-	double _sing_samples = 50;  // N control cycles of blending
-	double _sing_blending_time = _sing_samples * (1. / 1000);
-	double _sing_blending_rate = 1e-3;  // needs to be tuned 
-	bool _sing_transition = false;
-	bool _sing_first_transition = false;
-	VectorXd _sing_start_torques;  // torque before SVD truncation
-	VectorXd _sing_end_torques;  // torque after SVD truncation 	
-	VectorXd _prev_torques;
-	double _max_torque_diff = 5;
-
+	// singularity handling
 	PartialJointTask* _sing_joint_task;  // partial joint task to move joints out of singularity
 	VectorXd _sing_joint_torques;
+	bool _truncated_jacobian;
+	VectorXd _prev_robot_dq;
+	VectorXd _prev_torques;
+	double _max_torque_diff = 10;
 
 #ifdef USING_OTG
 	double _loop_time;
