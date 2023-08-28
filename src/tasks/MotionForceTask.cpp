@@ -1,10 +1,10 @@
 /*
- * PosOriTask.cpp
+ * MotionForceTask.cpp
  *
  *      Author: Mikael Jorda
  */
 
-#include "PosOriTask.h"
+#include "MotionForceTask.h"
 
 #include <stdexcept>
 
@@ -15,19 +15,20 @@ namespace Sai2Primitives
 {
 
 
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
+MotionForceTask::MotionForceTask(Sai2Model::Sai2Model* robot, 
 			const string link_name, 
 			const Affine3d control_frame,
-			const double loop_time) :
-	PosOriTask(robot, link_name, control_frame.translation(), control_frame.linear(), loop_time) {}
+			const double loop_timestep) :
+	MotionForceTask(robot, link_name, control_frame.translation(), control_frame.linear(), loop_timestep) {}
 
-PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot, 
+MotionForceTask::MotionForceTask(Sai2Model::Sai2Model* robot, 
 			const string link_name, 
 			const Vector3d pos_in_link, 
 			const Matrix3d rot_in_link,
-			const double loop_time)
+			const double loop_timestep)
 {
 
+	_loop_timestep = loop_timestep;
 	Affine3d control_frame = Affine3d::Identity();
 	control_frame.linear() = rot_in_link;
 	control_frame.translation() = pos_in_link;
@@ -38,7 +39,10 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 
 	int dof = _robot->dof();
 
-	_T_control_to_sensor = Affine3d::Identity();  
+	_T_control_to_sensor = Affine3d::Identity();
+
+	// POPC force
+	_POPC_force.reset(new POPCExplicitForceControl(_loop_timestep));
 
 	// motion
 	_current_position = _robot->position(_link_name, _control_frame.translation());
@@ -91,12 +95,9 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	_pos_dof = 3;
 	_ori_dof = 3;
 
-	_first_iteration = true;
-
 #ifdef USING_OTG
 	_use_interpolation_flag = true; 
-	_loop_time = loop_time;
-	_otg = new OTG_posori(_current_position, _current_orientation, _loop_time);
+	_otg = new OTG_posori(_current_position, _current_orientation, _loop_timestep);
 
 	_otg->setMaxLinearVelocity(0.3);
 	_otg->setMaxLinearAcceleration(1.0);
@@ -109,7 +110,7 @@ PosOriTask::PosOriTask(Sai2Model::Sai2Model* robot,
 	reInitializeTask();
 }
 
-void PosOriTask::reInitializeTask()
+void MotionForceTask::reInitializeTask()
 {
 	int dof = _robot->dof();
 
@@ -155,34 +156,23 @@ void PosOriTask::reInitializeTask()
 	_closed_loop_force_control = false;
 	_closed_loop_moment_control = false;
 
-	_passivity_enabled = true;
-	_passivity_observer = 0;
-	_E_correction = 0;
-	_stored_energy_PO = 0;
-	_PO_buffer_window = queue<double>();
-	_PO_counter = _PO_max_counter;
-	_vc_squared_sum = 0;
-	_vc.setZero();
-	_Rc = 1.0;
-
 	_task_force.setZero(6);
 	_unit_mass_force.setZero(6);
-	_first_iteration = true;	
 
 #ifdef USING_OTG 
 	_otg->reInitialize(_current_position, _current_orientation);
 #endif
 }
 
-void PosOriTask::updateTaskModel(const MatrixXd N_prec)
+void MotionForceTask::updateTaskModel(const MatrixXd N_prec)
 {
 	if(N_prec.rows() != N_prec.cols())
 	{
-		throw invalid_argument("N_prec matrix not square in PosOriTask::updateTaskModel\n");
+		throw invalid_argument("N_prec matrix not square in MotionForceTask::updateTaskModel\n");
 	}
 	if(N_prec.rows() != _robot->dof())
 	{
-		throw invalid_argument("N_prec matrix size not consistent with robot dof in PosOriTask::updateTaskModel\n");
+		throw invalid_argument("N_prec matrix size not consistent with robot dof in MotionForceTask::updateTaskModel\n");
 	}
 
 	_N_prec = N_prec;
@@ -255,20 +245,12 @@ void PosOriTask::updateTaskModel(const MatrixXd N_prec)
 
 }
 
-void PosOriTask::computeTorques(VectorXd& task_joint_torques)
+VectorXd MotionForceTask::computeTorques()
 {
+	VectorXd task_joint_torques = VectorXd::Zero(_robot->dof());
 	_jacobian = _robot->J(_link_name, _control_frame.translation());
 	_projected_jacobian = _jacobian * _N_prec;
 
-	// get time since last call for the I term
-	_t_curr = chrono::high_resolution_clock::now();
-	if(_first_iteration)
-	{
-		_t_prev = _t_curr;
-		_first_iteration = false;
-	}
-	_t_diff = _t_curr - _t_prev;
-	
 	// update matrix gains
 	if(_use_isotropic_gains_position)
 	{
@@ -308,90 +290,21 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 	if(_closed_loop_force_control)
 	{
 		// update the integrated error
-		_integrated_force_error += (_sensed_force - _desired_force) * _t_diff.count();
+		_integrated_force_error += (_sensed_force - _desired_force) * _loop_timestep;
 
 		// compute the feedback term
 		Vector3d force_feedback_term = - _kp_force * (_sensed_force - _desired_force) - _ki_force * _integrated_force_error;
-		_vc = force_feedback_term;
-
-		// saturate the feedback term
-		if(_vc.norm() > 20.0)
+		if(force_feedback_term.norm() > 20.0)
 		{
-			_vc *= 20.0 / _vc.norm();
-		}
-
-		// implement passivity observer and controller
-		if(_passivity_enabled)
-		{
-			Vector3d vc_force_space = _sigma_force * _vc;
-			Vector3d vr_force_space = _sigma_force * _current_velocity;
-			Vector3d F_cmd = _k_ff * _desired_force + _Rc * _vc - _kv_force * vr_force_space;
-			double vc_squared = _vc.transpose() * _sigma_force * _vc;
-			Vector3d f_diff = _sensed_force - _desired_force;
-
-			// compute power input and output
-			double power_input_output = (f_diff.dot(vc_force_space) - F_cmd.dot(vr_force_space)) * _t_diff.count();
-
-			// compute stored energy (intentionally diabled)
-			// _stored_energy_PO = 0.5 * _ki_force * (double) (_integrated_force_error.transpose() * _sigma_force * _integrated_force_error);
-
-			// windowed PO
-			_passivity_observer += power_input_output;
-			_PO_buffer_window.push(power_input_output);
-
-			if(_passivity_observer + _stored_energy_PO + _E_correction > 0)
-			{
-				while(_PO_buffer_window.size() > _PO_window_size)
-				{
-					if(_passivity_observer + _E_correction + _stored_energy_PO > _PO_buffer_window.front())
-					{
-						if(_PO_buffer_window.front() > 0)
-						{
-							_passivity_observer -= _PO_buffer_window.front();
-						}
-						_PO_buffer_window.pop();
-					}
-					else
-					{
-						break;
-					}
-				}
-			}
-
-
-			// compute PC
-			if(_PO_counter <= 0)
-			{
-				_PO_counter = _PO_max_counter;
-
-				double old_Rc = _Rc;
-				if(_passivity_observer + _stored_energy_PO + _E_correction < 0)   // activity detected
-				{
-					_Rc = 1 + (_passivity_observer + _stored_energy_PO + _E_correction) / (_vc_squared_sum * _t_diff.count());
-
-					if(_Rc > 1){_Rc = 1;}
-					if(_Rc < 0){_Rc = 0;}
-
-				}
-				else    // no activity detected
-				{
-					_Rc = (1 + (0.1*_PO_max_counter-1)*_Rc)/(double)(0.1*_PO_max_counter);
-				}
-
-				_E_correction += (1 - old_Rc) * _vc_squared_sum * _t_diff.count();
-				_vc_squared_sum = 0;
-			}
-
-			_PO_counter--;
-			_vc_squared_sum += vc_squared;
-		}
-		else  // no passivity enabled
-		{
-			_Rc = 1;
+			force_feedback_term *= 20.0 / force_feedback_term.norm();
 		}
 
 		// compute the final contribution
-		force_feedback_related_force = _sigma_force * ( _Rc * _vc - _kv_force * _current_velocity);
+		force_feedback_related_force =
+			_POPC_force->computePassivitySaturatedForce(
+				_sigma_force * _desired_force, _sigma_force * _sensed_force,
+				_sigma_force * force_feedback_term,
+				_sigma_force * _current_velocity, _kv_force, _k_ff);
 	}
 	else // open loop force control
 	{
@@ -402,7 +315,7 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 	if(_closed_loop_moment_control)
 	{
 		// update the integrated error
-		_integrated_moment_error += (_sensed_moment - _desired_moment) * _t_diff.count();
+		_integrated_moment_error += (_sensed_moment - _desired_moment) * _loop_timestep;
 
 		// compute the feedback term
 		Vector3d moment_feedback_term = - _kp_moment * (_sensed_moment - _desired_moment) - _ki_moment * _integrated_moment_error;
@@ -436,7 +349,7 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 	
 	// linear motion
 	// update integrated error for I term
-	_integrated_position_error += (_current_position - _step_desired_position) * _t_diff.count();
+	_integrated_position_error += (_current_position - _step_desired_position) * _loop_timestep;
 
 	// final contribution
 	if(_use_velocity_saturation_flag)
@@ -456,7 +369,7 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 
 	// angular motion
 	// update integrated error for I term
-	_integrated_orientation_error += _step_orientation_error * _t_diff.count();
+	_integrated_orientation_error += _step_orientation_error * _loop_timestep;
 
 	// final contribution
 	if(_use_velocity_saturation_flag)
@@ -502,17 +415,18 @@ void PosOriTask::computeTorques(VectorXd& task_joint_torques)
 
 	// update previous time
 	_prev_projected_jacobian = _projected_jacobian;
-	_t_prev = _t_curr;
+
+	return task_joint_torques;
 }
 
-bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
+bool MotionForceTask::goalPositionReached(const double tolerance, const bool verbose)
 {
 	double position_error = (_desired_position - _current_position).transpose() * ( _URange_pos * _sigma_position * _URange_pos.transpose()) * (_desired_position - _current_position);
 	position_error = sqrt(position_error);
 	bool goal_reached = position_error < tolerance;
 	if(verbose)
 	{
-		cout << "position error in PosOriTask : " << position_error << endl;
+		cout << "position error in MotionForceTask : " << position_error << endl;
 		cout << "Tolerance : " << tolerance << endl;
 		cout << "Goal reached : " << goal_reached << endl << endl;
 	}
@@ -520,14 +434,14 @@ bool PosOriTask::goalPositionReached(const double tolerance, const bool verbose)
 	return goal_reached;
 }
 
-bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbose)
+bool MotionForceTask::goalOrientationReached(const double tolerance, const bool verbose)
 {
 	double orientation_error = _orientation_error.transpose() * _URange_ori * _sigma_orientation * _URange_ori.transpose() * _orientation_error;
 	orientation_error = sqrt(orientation_error);
 	bool goal_reached = orientation_error < tolerance;
 	if(verbose)
 	{
-		cout << "orientation error in PosOriTask : " << orientation_error << endl;
+		cout << "orientation error in MotionForceTask : " << orientation_error << endl;
 		cout << "Tolerance : " << tolerance << endl;
 		cout << "Goal reached : " << goal_reached << endl << endl;
 	}
@@ -535,32 +449,32 @@ bool PosOriTask::goalOrientationReached(const double tolerance, const bool verbo
 	return goal_reached;
 }
 
-void PosOriTask::setDynamicDecouplingFull()
+void MotionForceTask::setDynamicDecouplingFull()
 {
 	_dynamic_decoupling_type = FULL_DYNAMIC_DECOUPLING;
 }
 
-void PosOriTask::setDynamicDecouplingPartial()
+void MotionForceTask::setDynamicDecouplingPartial()
 {
 	_dynamic_decoupling_type = PARTIAL_DYNAMIC_DECOUPLING;
 }
 
-void PosOriTask::setDynamicDecouplingNone()
+void MotionForceTask::setDynamicDecouplingNone()
 {
 	_dynamic_decoupling_type = IMPEDANCE;
 }
 
-void PosOriTask::setDynamicDecouplingBIE()
+void MotionForceTask::setDynamicDecouplingBIE()
 {
 	_dynamic_decoupling_type = BOUNDED_INERTIA_ESTIMATES;
 }
 
-void PosOriTask::setNonIsotropicGainsPosition(const Matrix3d& frame, const Vector3d& kp, 
+void MotionForceTask::setNonIsotropicGainsPosition(const Matrix3d& frame, const Vector3d& kp, 
 	const Vector3d& kv, const Vector3d& ki)
 {
 	if( (Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
 	{
-		throw invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsPosition\n");
+		throw invalid_argument("not a valid right hand frame in MotionForceTask::setNonIsotropicGainsPosition\n");
 	}
 
 	_use_isotropic_gains_position = false;
@@ -582,12 +496,12 @@ void PosOriTask::setNonIsotropicGainsPosition(const Matrix3d& frame, const Vecto
 
 }
 
-void PosOriTask::setNonIsotropicGainsOrientation(const Matrix3d& frame, const Vector3d& kp, 
+void MotionForceTask::setNonIsotropicGainsOrientation(const Matrix3d& frame, const Vector3d& kp, 
 	const Vector3d& kv, const Vector3d& ki)
 {
 	if( (Matrix3d::Identity() - frame.transpose()*frame).norm() > 1e-3 || frame.determinant() < 0)
 	{
-		throw invalid_argument("not a valid right hand frame in PosOriTask::setNonIsotropicGainsOrientation\n");
+		throw invalid_argument("not a valid right hand frame in MotionForceTask::setNonIsotropicGainsOrientation\n");
 	}
 
 	_use_isotropic_gains_orientation = false;
@@ -608,7 +522,7 @@ void PosOriTask::setNonIsotropicGainsOrientation(const Matrix3d& frame, const Ve
 	_ki_ori_mat = frame * ki_ori_mat_tmp * frame.transpose();	
 }
 
-void PosOriTask::setIsotropicGainsPosition(const double kp, const double kv, const double ki)
+void MotionForceTask::setIsotropicGainsPosition(const double kp, const double kv, const double ki)
 {
 	_use_isotropic_gains_position = true;
 
@@ -617,7 +531,7 @@ void PosOriTask::setIsotropicGainsPosition(const double kp, const double kv, con
 	_ki_pos = ki;
 }
 
-void PosOriTask::setIsotropicGainsOrientation(const double kp, const double kv, const double ki)
+void MotionForceTask::setIsotropicGainsOrientation(const double kp, const double kv, const double ki)
 {
 	_use_isotropic_gains_orientation = true;
 
@@ -626,16 +540,16 @@ void PosOriTask::setIsotropicGainsOrientation(const double kp, const double kv, 
 	_ki_ori = ki;	
 }
 
-void PosOriTask::setForceSensorFrame(const string link_name, const Affine3d transformation_in_link)
+void MotionForceTask::setForceSensorFrame(const string link_name, const Affine3d transformation_in_link)
 {
 	if(link_name != _link_name)
 	{
-		throw invalid_argument("The link to which is attached the sensor should be the same as the link to which is attached the control frame in PosOriTask::setForceSensorFrame\n");
+		throw invalid_argument("The link to which is attached the sensor should be the same as the link to which is attached the control frame in MotionForceTask::setForceSensorFrame\n");
 	}
 	_T_control_to_sensor = _control_frame.inverse() * transformation_in_link;
 }
 
-void PosOriTask::updateSensedForceAndMoment(const Vector3d sensed_force_sensor_frame, 
+void MotionForceTask::updateSensedForceAndMoment(const Vector3d sensed_force_sensor_frame, 
 							    		    const Vector3d sensed_moment_sensor_frame)
 {
 	// find the transform from base frame to control frame
@@ -651,7 +565,7 @@ void PosOriTask::updateSensedForceAndMoment(const Vector3d sensed_force_sensor_f
 	_sensed_moment = T_base_control.rotation() * _sensed_moment;
 }
 
-void PosOriTask::setForceAxis(const Vector3d force_axis)
+void MotionForceTask::setForceAxis(const Vector3d force_axis)
 {
 	Vector3d normalized_axis = force_axis.normalized();
 
@@ -664,7 +578,7 @@ void PosOriTask::setForceAxis(const Vector3d force_axis)
 #endif
 }
 
-void PosOriTask::updateForceAxis(const Vector3d force_axis)
+void MotionForceTask::updateForceAxis(const Vector3d force_axis)
 {
 	Vector3d normalized_axis = force_axis.normalized();
 
@@ -672,7 +586,7 @@ void PosOriTask::updateForceAxis(const Vector3d force_axis)
 	_sigma_position = Matrix3d::Identity() - _sigma_force;
 }
 
-void PosOriTask::setLinearMotionAxis(const Vector3d motion_axis)
+void MotionForceTask::setLinearMotionAxis(const Vector3d motion_axis)
 {
 	Vector3d normalized_axis = motion_axis.normalized();
 
@@ -685,7 +599,7 @@ void PosOriTask::setLinearMotionAxis(const Vector3d motion_axis)
 #endif
 }
 
-void PosOriTask::updateLinearMotionAxis(const Vector3d motion_axis)
+void MotionForceTask::updateLinearMotionAxis(const Vector3d motion_axis)
 {
 	Vector3d normalized_axis = motion_axis.normalized();
 
@@ -693,7 +607,7 @@ void PosOriTask::updateLinearMotionAxis(const Vector3d motion_axis)
 	_sigma_force = Matrix3d::Identity() - _sigma_position;	
 }
 
-void PosOriTask::setFullForceControl()
+void MotionForceTask::setFullForceControl()
 {
 	_sigma_force = Matrix3d::Identity();
 	_sigma_position.setZero();
@@ -704,7 +618,7 @@ void PosOriTask::setFullForceControl()
 #endif
 }
 
-void PosOriTask::setFullLinearMotionControl()
+void MotionForceTask::setFullLinearMotionControl()
 {
 	_sigma_position = Matrix3d::Identity();
 	_sigma_force.setZero();
@@ -715,7 +629,7 @@ void PosOriTask::setFullLinearMotionControl()
 #endif
 }
 
-void PosOriTask::setMomentAxis(const Vector3d moment_axis)
+void MotionForceTask::setMomentAxis(const Vector3d moment_axis)
 {
 	Vector3d normalized_axis = moment_axis.normalized();
 
@@ -725,7 +639,7 @@ void PosOriTask::setMomentAxis(const Vector3d moment_axis)
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::updateMomentAxis(const Vector3d moment_axis)
+void MotionForceTask::updateMomentAxis(const Vector3d moment_axis)
 {
 	Vector3d normalized_axis = moment_axis.normalized();
 
@@ -733,7 +647,7 @@ void PosOriTask::updateMomentAxis(const Vector3d moment_axis)
 	_sigma_orientation = Matrix3d::Identity() - _sigma_moment;	
 }
 
-void PosOriTask::setAngularMotionAxis(const Vector3d motion_axis)
+void MotionForceTask::setAngularMotionAxis(const Vector3d motion_axis)
 {
 	Vector3d normalized_axis = motion_axis.normalized();
 
@@ -743,7 +657,7 @@ void PosOriTask::setAngularMotionAxis(const Vector3d motion_axis)
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::updateAngularMotionAxis(const Vector3d motion_axis)
+void MotionForceTask::updateAngularMotionAxis(const Vector3d motion_axis)
 {
 	Vector3d normalized_axis = motion_axis.normalized();
 
@@ -751,7 +665,7 @@ void PosOriTask::updateAngularMotionAxis(const Vector3d motion_axis)
 	_sigma_moment = Matrix3d::Identity() - _sigma_orientation;
 }
 
-void PosOriTask::setFullMomentControl()
+void MotionForceTask::setFullMomentControl()
 {
 	_sigma_moment = Matrix3d::Identity();
 	_sigma_orientation.setZero();
@@ -759,7 +673,7 @@ void PosOriTask::setFullMomentControl()
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::setFullAngularMotionControl()
+void MotionForceTask::setFullAngularMotionControl()
 {
 	_sigma_orientation = Matrix3d::Identity();
 	_sigma_moment.setZero();
@@ -767,54 +681,53 @@ void PosOriTask::setFullAngularMotionControl()
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::setClosedLoopForceControl()
+void MotionForceTask::setClosedLoopForceControl()
 {
 	_closed_loop_force_control = true;
 	resetIntegratorsLinear();
 }
 
-void PosOriTask::setOpenLoopForceControl()
+void MotionForceTask::setOpenLoopForceControl()
 {
 	_closed_loop_force_control = false;
 }
 
-void PosOriTask::setClosedLoopMomentControl()
+void MotionForceTask::setClosedLoopMomentControl()
 {
 	_closed_loop_moment_control = true;
 	resetIntegratorsAngular();
 }
 
-void PosOriTask::setOpenLoopMomentControl()
+void MotionForceTask::setOpenLoopMomentControl()
 {
 	_closed_loop_moment_control = false;
 }
 
-void PosOriTask::enablePassivity()
+void MotionForceTask::enablePassivity()
 {
-	_passivity_enabled = true;
+	_POPC_force->enable();
 }
 
-void PosOriTask::disablePassivity()
+void MotionForceTask::disablePassivity()
 {
-	_passivity_enabled = false;
+	_POPC_force->disable();
 }
 
-void PosOriTask::resetIntegrators()
+void MotionForceTask::resetIntegrators()
 {
 	_integrated_orientation_error.setZero();
 	_integrated_position_error.setZero();
 	_integrated_force_error.setZero();
 	_integrated_moment_error.setZero();
-	_first_iteration = true;	
 }
 
-void PosOriTask::resetIntegratorsLinear()
+void MotionForceTask::resetIntegratorsLinear()
 {
 	_integrated_position_error.setZero();
 	_integrated_force_error.setZero();
 }
 
-void PosOriTask::resetIntegratorsAngular()
+void MotionForceTask::resetIntegratorsAngular()
 {
 	_integrated_orientation_error.setZero();
 	_integrated_moment_error.setZero();

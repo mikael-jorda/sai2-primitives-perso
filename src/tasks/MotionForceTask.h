@@ -1,5 +1,5 @@
 /*
- * PosOriTask.h
+ * MotionForceTask.h
  *
  *      This class creates a 6Dof position + orientation hybrid controller for a robotic manipulator using operational space formulation and an underlying PID compensator.
  *      If used for hybrid position force control, assumes a force sensor is attached to the same link as the control frame and the force sensed values are given in sensor frame.
@@ -10,15 +10,16 @@
  *      Author: Mikael Jorda
  */
 
-#ifndef SAI2_PRIMITIVES_POSORI_TASK_H_
-#define SAI2_PRIMITIVES_POSORI_TASK_H_
+#ifndef SAI2_PRIMITIVES_MOTIONFORCETASK_TASK_H_
+#define SAI2_PRIMITIVES_MOTIONFORCETASK_TASK_H_
 
 #include "Sai2Model.h"
-#include "TemplateTask.h"
+#include <helper_modules/POPCExplicitForceControl.h>
 #include <Eigen/Dense>
 #include <string>
-#include <chrono>
-#include <queue> 
+// #include <chrono>
+#include <memory>
+// #include <queue> 
 
 #ifdef USING_OTG
 	#include "trajectory_generation/OTG_posori.h"
@@ -30,7 +31,15 @@ using namespace std;
 namespace Sai2Primitives
 {
 
-class PosOriTask : public TemplateTask
+struct PIDGains {
+	double kp;
+	double kv;
+	double ki;
+
+	PIDGains(double kp, double kv, double ki) : kp(kp), kv(kv), ki(ki) {}
+};
+
+class MotionForceTask
 {
 
 enum DynamicDecouplingType
@@ -58,13 +67,13 @@ public:
 	 *                            attach the control frame
 	 * @param      control_frame  The position and orientation of the control
 	 *                            frame in local link coordinates
-	 * @param[in]  loop_time      time taken by a control loop. Used only in
-	 *                            trajectory generation
+	 * @param[in]  loop_timestep      time taken by a control loop. Used in
+	 *                            trajectory generation and integral control
 	 */
-	PosOriTask(Sai2Model::Sai2Model* robot, 
+	MotionForceTask(Sai2Model::Sai2Model* robot, 
 		            const string link_name, 
 		            const Affine3d control_frame = Affine3d::Identity(),
-		            const double loop_time = 0.001);
+		            const double loop_timestep = 0.001);
 
 	/**
 	 * @brief      Constructor that takes a Vector3d for definition of the
@@ -79,15 +88,142 @@ public:
 	 *                          coordinates
 	 * @param      rot_in_link  The orientation of the control frame in local
 	 *                          link coordinates
-	 * @param[in]  loop_time    time taken by a control loop. Used only in
-	 *                          trajectory generation
+	 * @param[in]  loop_timestep    time taken by a control loop. Used in
+	 *                          trajectory generation and integral control
 	 */
-	PosOriTask(Sai2Model::Sai2Model* robot, 
+	MotionForceTask(Sai2Model::Sai2Model* robot, 
 		            const string link_name, 
 		            const Vector3d pos_in_link, 
 		            const Matrix3d rot_in_link = Matrix3d::Identity(),
-		            const double loop_time = 0.001);
+		            const double loop_timestep = 0.001);
 
+	//------------------------------------------------
+	// Getters Setters
+	//------------------------------------------------
+
+	const Vector3d& getCurrentPosition() const { return _current_position; }
+	const Vector3d& getCurrentVelocity() const { return _current_velocity; }
+
+	const Matrix3d& getCurrentOrientation() const { return _current_orientation; }
+	const Vector3d& getCurrentAngularVelocity() const { return _current_angular_velocity; }
+
+	const Vector3d& getSensedForce() const {return _sensed_force;}
+
+	const MatrixXd& getN() const {return _N;}
+
+	void setDesiredPosition(const Vector3d& desired_position) {
+		_desired_position = desired_position;
+	}
+	const Vector3d& getDesiredPosition() const { return _desired_position; }
+
+	void setDesiredOrientation(const Matrix3d& desired_orientation) {
+		_desired_orientation = desired_orientation;
+	}
+	Matrix3d getDesiredOrientation() const { return _desired_orientation; }
+
+	void setDesiredVelocity(const Vector3d& desired_velocity) {
+		_desired_velocity = desired_velocity;
+	}
+	const Vector3d& getDesiredVelocity() const { return _desired_velocity; }
+
+	void setDesiredAngularVelocity(const Vector3d& desired_angvel) {
+		_desired_angular_velocity = desired_angvel;
+	}
+	const Vector3d& getDesiredAngularVelocity() const {
+		return _desired_angular_velocity;
+	}
+
+	void setDesiredAcceleration(const Vector3d& desired_acceleration) {
+		_desired_acceleration = desired_acceleration;
+	}
+	const Vector3d& getDesiredAcceleration() const { return _desired_acceleration; }
+
+	void setDesiredAngularAcceleration(const Vector3d& desired_angaccel) {
+		_desired_angular_acceleration = desired_angaccel;
+	}
+	const Vector3d& getDesiredAngularAcceleration() const {
+		return _desired_angular_acceleration;
+	}
+
+	// Gains for motion controller
+	void setPosControlGains(const PIDGains& gains) {
+		setPosControlGains(gains.kp, gains.kv, gains.ki);
+	}
+	void setPosControlGains(double kp_pos, double kv_pos, double ki_pos = 0) {
+		_kp_pos = kp_pos;
+		_kv_pos = kv_pos;
+		_ki_pos = ki_pos;
+	}
+	PIDGains getPosControlGains() const {
+		return PIDGains(_kp_pos, _kv_pos, _ki_pos);
+	}
+
+	void setOriControlGains(const PIDGains& gains) {
+		setOriControlGains(gains.kp, gains.kv, gains.ki);
+	}
+	void setOriControlGains(double kp_ori, double kv_ori, double ki_ori = 0) {
+		_kp_ori = kp_ori;
+		_kv_ori = kv_ori;
+		_ki_ori = ki_ori;
+	}
+	PIDGains getOriControlGains() const {
+		return PIDGains(_kp_ori, _kv_ori, _ki_ori);
+	}
+
+	void setForceControlGains(const PIDGains& gains) {
+		setForceControlGains(gains.kp, gains.kv, gains.ki);
+	}
+	void setForceControlGains(double kp_force, double kv_force,
+							  double ki_force) {
+		_kp_force = kp_force;
+		_kv_force = kv_force;
+		_ki_force = ki_force;
+	}
+	PIDGains getForceControlGains() const {
+		return PIDGains(_kp_force, _kv_force, _ki_force);
+	}
+
+	void setMomentControlGains(const PIDGains& gains) {
+		setMomentControlGains(gains.kp, gains.kv, gains.ki);
+	}
+	void setMomentControlGains(double kp_moment, double kv_moment,
+							   double ki_moment) {
+		_kp_moment = kp_moment;
+		_kv_moment = kv_moment;
+		_ki_moment = ki_moment;
+	}
+	PIDGains getMomentControlGains() const {
+		return PIDGains(_kp_moment, _kv_moment, _ki_moment);
+	}
+
+	void setDesiredForce(const Vector3d& desired_force) {
+		_desired_force = desired_force;
+	}
+	const Vector3d& getDesiredForce() const { return _desired_force; }
+
+	void setDesiredMoment(const Vector3d& desired_moment) {
+		_desired_moment = desired_moment;
+	}
+	const Vector3d& getDesiredMoment() const { return _desired_moment; }
+
+	// Velocity saturation flag and saturation values
+	void enableVelocitySaturation(double linear_vel_sat,
+								  double angular_vel_sat) {
+		_use_velocity_saturation_flag = true;
+		_linear_saturation_velocity = linear_vel_sat;
+		_angular_saturation_velocity = angular_vel_sat;
+	}
+	void disableVelocitySaturation() { _use_velocity_saturation_flag = false; }
+
+	bool getVelocitySaturationEnabled() const {
+		return _use_velocity_saturation_flag;
+	}
+	double getLinearSaturationVelocity() const {
+		return _linear_saturation_velocity;
+	}
+	double getAngularSaturationVelocity() const {
+		return _angular_saturation_velocity;
+	}
 
 	//------------------------------------------------
 	// Methods
@@ -116,7 +252,7 @@ public:
 	 *                     identity of size n*n where n in the number of DoF of
 	 *                     the robot.
 	 */
-	virtual void updateTaskModel(const MatrixXd N_prec);
+	void updateTaskModel(const MatrixXd N_prec);
 
 	/**
 	 * @brief      Computes the torques associated with this task.
@@ -128,7 +264,7 @@ public:
 	 * @param      task_joint_torques  the vector to be filled with the new
 	 *                                 joint torques to apply for the task
 	 */
-	virtual void computeTorques(VectorXd& task_joint_torques);
+	VectorXd computeTorques();
 
 	/**
 	 * @brief      reinitializes the desired state to the current robot
@@ -412,7 +548,7 @@ public:
 	//-----------------------------------------------
 
 	// inputs to be defined by the user
-
+private:
 	// desired pose defaults to the configuration when the task is created
 	Vector3d _desired_position;           // in robot frame
 	Matrix3d _desired_orientation;        // in robot frame
@@ -446,10 +582,6 @@ public:
 	double _linear_saturation_velocity;   // defaults to 0.3 m/s
 	double _angular_saturation_velocity;  // defaults to PI/3 Rad/s
 
-	// Vector3d _kp_pos_vec, _kp_ori_vec;
-	// Vector3d _kv_pos_vec, _kv_ori_vec;
-	// Vector3d _ki_pos_vec, _ki_ori_vec;
-
 // trajectory generation via interpolation using Reflexxes Library
 // on by defalut
 #ifdef USING_OTG
@@ -463,6 +595,12 @@ public:
 	// Angular Acceleration  - PI    Rad/s^2
 	// Angular Jerk          - 3PI   Rad/s^3
 #endif
+
+	Sai2Model::Sai2Model* _robot;
+	double _loop_timestep;
+
+	Eigen::VectorXd _task_force;
+	Eigen::MatrixXd _N_prec;
 
 	// internal variables, not to be touched by the user
 	string _link_name;
@@ -496,22 +634,10 @@ public:
 
 	bool _closed_loop_force_control;
 	bool _closed_loop_moment_control;
-
-	// passivity related variables
-	bool _passivity_enabled;
-	double _passivity_observer;
-	double _E_correction;
-	double _stored_energy_PO;
-	queue<double> _PO_buffer_window;
-	const int _PO_window_size = 250;
-
-	const int _PO_max_counter = 50;
-	int _PO_counter = _PO_max_counter;
-	double _vc_squared_sum = 0;
-
-	Vector3d _vc;
-	double _Rc;
 	double _k_ff;
+
+	// POPC for closed loop force control
+	std::unique_ptr<POPCExplicitForceControl> _POPC_force;
 
 	// linear control inputs
 	Vector3d _linear_motion_control;
@@ -539,8 +665,6 @@ public:
 	MatrixXd _URange;
 	int _pos_dof, _ori_dof;
 
-	bool _first_iteration;
-
 	VectorXd _unit_mass_force;
 
 	Vector3d _step_desired_position;
@@ -552,7 +676,6 @@ public:
 	Vector3d _step_desired_angular_acceleration;
 
 #ifdef USING_OTG
-	double _loop_time;
 	OTG_posori* _otg;
 #endif
 
@@ -560,5 +683,5 @@ public:
 
 } /* namespace Sai2Primitives */
 
-/* SAI2_PRIMITIVES_POSORI_TASK_H_ */
+/* SAI2_PRIMITIVES_MOTIONFORCETASK_TASK_H_ */
 #endif
