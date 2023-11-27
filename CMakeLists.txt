@@ -27,11 +27,12 @@ set(RUCKIG_INCLUDE_DIR ${RUCKIG_LOCAL_DIR}/include/)
 FIND_LIBRARY(RUCKIG_LIBRARIES ruckig PATHS ${RUCKIG_LOCAL_DIR}/build NO_DEFAULT_PATH)
 
 # add tasks
-SET(TASKS_SOURCE 
+SET(CONTROLLERS_SOURCE 
 	${PROJECT_SOURCE_DIR}/src/RobotController.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/MotionForceTask.cpp
 	${PROJECT_SOURCE_DIR}/src/tasks/JointTask.cpp
-	# ${PROJECT_SOURCE_DIR}/src/tasks/TwoHandTwoRobotsTask.cpp
+	${PROJECT_SOURCE_DIR}/src/HapticDeviceController.cpp
+	${PROJECT_SOURCE_DIR}/src/POPCBilateralTeleoperation.cpp
 	)
 
 # add helper modules
@@ -40,15 +41,6 @@ SET(HELPER_MODULES_SOURCE
 	${PROJECT_SOURCE_DIR}/src/helper_modules/OTG_joints.cpp
 	${PROJECT_SOURCE_DIR}/src/helper_modules/OTG_6dof_cartesian.cpp
 	)
-
-# # add haptic_tasks
-# SET(HAPTIC_TASKS_SOURCE
-# 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/OpenLoopTeleop.cpp
-# 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/HapticController.cpp
-# 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/BilateralPassivityController.cpp
-# 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/ImpedanceControl.cpp
-# 	${PROJECT_SOURCE_DIR}/src/haptic_tasks/PositionControl.cpp
-# 	)
 
 # add header files
 SET(SAI2-PRIMITIVES_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src ${RUCKIG_LOCAL_DIR}/include/)
@@ -63,14 +55,12 @@ INCLUDE_DIRECTORIES (
 
 # Create the library
 ADD_LIBRARY (sai2-primitives STATIC
-	${TASKS_SOURCE}
+	${CONTROLLERS_SOURCE}
 	${HELPER_MODULES_SOURCE}
-	# ${HAPTIC_TASKS_SOURCE}
 	)
 
 SET(SAI2-PRIMITIVES_LIBRARIES
 	sai2-primitives
-	# ${SAI2-MODEL_LIBRARIES}
 	${RUCKIG_LIBRARIES}
 	)
 
