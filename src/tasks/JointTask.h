@@ -80,8 +80,7 @@ public:
 	 * @brief      Computes the torques associated with this task.
 	 * @details    Computes the torques taking into account the last model
 	 *             update and updated values for the robot joint
-	 *             positions/velocities assumes the desired position and
-	 *             velocity has been updated
+	 *             positions/velocities
 	 *
 	 * @param      task_joint_torques  the vector to be filled with the new
 	 *                                 joint torques to apply for the task
@@ -89,7 +88,7 @@ public:
 	VectorXd computeTorques() override;
 
 	/**
-	 * @brief      reinitializes the desired state to the current robot
+	 * @brief      reinitializes the desired and goal states to the current robot
 	 *             configuration as well as the integrator terms
 	 */
 	void reInitializeTask() override;
@@ -114,47 +113,47 @@ public:
 	const VectorXd& getCurrentPosition() { return _current_position; }
 
 	/**
-	 * @brief Set the Desired Position
+	 * @brief Set the Goal Position
 	 *
-	 * @param desired_position
+	 * @param goal_position
 	 */
-	void setDesiredPosition(const VectorXd& desired_position);
+	void setGoalPosition(const VectorXd& goal_position);
 
 	/**
-	 * @brief Get the Desired Position
+	 * @brief Get the Goal Position
 	 *
-	 * @return desired position as a VectorXd
+	 * @return goal position as a VectorXd
 	 */
-	const VectorXd& getDesiredPosition() const { return _desired_position; }
+	const VectorXd& getGoalPosition() const { return _goal_position; }
 
 	/**
-	 * @brief Set the Desired Velocity
+	 * @brief Set the Goal Velocity
 	 *
-	 * @param desired_velocity
+	 * @param goal_velocity
 	 */
-	void setDesiredVelocity(const VectorXd& desired_velocity);
+	void setGoalVelocity(const VectorXd& goal_velocity);
 
 	/**
-	 * @brief Get the Desired Velocity
+	 * @brief Get the Goal Velocity
 	 *
-	 * @return desired velocity as a VectorXd
+	 * @return goal velocity as a VectorXd
 	 */
-	const VectorXd& getDesiredVelocity() const { return _desired_velocity; }
+	const VectorXd& getGoalVelocity() const { return _goal_velocity; }
 
 	/**
-	 * @brief Set the Desired Acceleration
+	 * @brief Set the Goal Acceleration
 	 *
-	 * @param desired_acceleration
+	 * @param goal_acceleration
 	 */
-	void setDesiredAcceleration(const VectorXd& desired_acceleration);
+	void setGoalAcceleration(const VectorXd& goal_acceleration);
 
 	/**
-	 * @brief Get the Desired Acceleration
+	 * @brief Get the Goal Acceleration
 	 *
-	 * @return desired acceleration as a VectorXd
+	 * @return goal acceleration as a VectorXd
 	 */
-	const VectorXd& getDesiredAcceleration() const {
-		return _desired_acceleration;
+	const VectorXd& getGoalAcceleration() const {
+		return _goal_acceleration;
 	}
 
 	/**
@@ -271,7 +270,7 @@ public:
 
 	/**
 	 * @brief      Disables the internal trajectory generation and uses the
-	 * desired position, velocity and acceleration directly
+	 * goal position, velocity and acceleration directly
 	 */
 	void disableInternalOtg() { _use_internal_otg_flag = false; }
 
@@ -330,10 +329,10 @@ private:
 	 */
 	void initialSetup();
 
-	// desired controller state
-	VectorXd _desired_position;
-	VectorXd _desired_velocity;
-	VectorXd _desired_acceleration;
+	// goal controller state
+	VectorXd _goal_position;
+	VectorXd _goal_velocity;
+	VectorXd _goal_acceleration;
 
 	// current state from robot model
 	VectorXd _current_position;

@@ -121,8 +121,8 @@ void MotionForceTask::initialSetup() {
 
 	_k_ff = 0.95;
 
-	parametrizeForceMotionSpaces(0);
-	parametrizeMomentRotMotionSpaces(0);
+	_force_space_dimension = 0;
+	_moment_space_dimension = 0;
 	setClosedLoopForceControl(false);
 	setClosedLoopMomentControl(false);
 
@@ -173,25 +173,25 @@ void MotionForceTask::reInitializeTask() {
 	// motion
 	_current_position = getConstRobotModel()->positionInWorld(
 		_link_name, _compliant_frame.translation());
-	_desired_position = _current_position;
+	_goal_position = _current_position;
 	_current_orientation = getConstRobotModel()->rotationInWorld(
 		_link_name, _compliant_frame.rotation());
-	_desired_orientation = _current_orientation;
+	_goal_orientation = _current_orientation;
 
-	_current_velocity.setZero();
-	_desired_velocity.setZero();
+	_current_linear_velocity.setZero();
+	_goal_linear_velocity.setZero();
 	_current_angular_velocity.setZero();
-	_desired_angular_velocity.setZero();
-	_desired_acceleration.setZero();
-	_desired_angular_acceleration.setZero();
+	_goal_angular_velocity.setZero();
+	_goal_linear_acceleration.setZero();
+	_goal_angular_acceleration.setZero();
 
 	_orientation_error.setZero();
 	_integrated_position_error.setZero();
 	_integrated_orientation_error.setZero();
 
-	_desired_force.setZero();
+	_goal_force.setZero();
 	_sensed_force.setZero();
-	_desired_moment.setZero();
+	_goal_moment.setZero();
 	_sensed_moment.setZero();
 
 	resetIntegrators();
@@ -319,8 +319,8 @@ VectorXd MotionForceTask::computeTorques() {
 		_link_name, _compliant_frame.rotation());
 
 	_orientation_error =
-		Sai2Model::orientationError(_desired_orientation, _current_orientation);
-	_current_velocity =
+		Sai2Model::orientationError(_goal_orientation, _current_orientation);
+	_current_linear_velocity =
 		_projected_jacobian.block(0, 0, 3, getConstRobotModel()->dof()) *
 		getConstRobotModel()->dq();
 	_current_angular_velocity =
@@ -338,8 +338,8 @@ VectorXd MotionForceTask::computeTorques() {
 	Matrix3d sigma_position = sigmaPosition();
 	Matrix3d sigma_orientation = sigmaOrientation();
 
-	Vector3d desired_force = getDesiredForce();
-	Vector3d desired_moment = getDesiredMoment();
+	Vector3d goal_force = getGoalForce();
+	Vector3d goal_moment = getGoalMoment();
 
 	Vector3d force_feedback_related_force = Vector3d::Zero();
 	Vector3d position_related_force = Vector3d::Zero();
@@ -357,11 +357,11 @@ VectorXd MotionForceTask::computeTorques() {
 	if (_closed_loop_force_control) {
 		// update the integrated error
 		_integrated_force_error +=
-			sigma_force * (_sensed_force - desired_force) * getLoopTimestep();
+			sigma_force * (_sensed_force - goal_force) * getLoopTimestep();
 
 		// compute the feedback term and saturate it
 		Vector3d force_feedback_term =
-			sigma_force * (-_kp_force * (_sensed_force - desired_force) -
+			sigma_force * (-_kp_force * (_sensed_force - goal_force) -
 						   _ki_force * _integrated_force_error);
 		if (force_feedback_term.norm() > MAX_FEEDBACK_FORCE_FORCE_CONTROLLER) {
 			force_feedback_term *= MAX_FEEDBACK_FORCE_FORCE_CONTROLLER /
@@ -371,25 +371,25 @@ VectorXd MotionForceTask::computeTorques() {
 		// compute the final contribution
 		force_feedback_related_force =
 			_POPC_force->computePassivitySaturatedForce(
-				sigma_force * desired_force, sigma_force * _sensed_force,
+				sigma_force * goal_force, sigma_force * _sensed_force,
 				sigma_force * force_feedback_term,
-				sigma_force * _current_velocity, _kv_force, _k_ff);
+				sigma_force * _current_linear_velocity, _kv_force, _k_ff);
 	} else	// open loop force control
 	{
 		force_feedback_related_force =
-			sigma_force * (-_kv_force * _current_velocity);
+			sigma_force * (-_kv_force * _current_linear_velocity);
 	}
 
 	// moment related terms
 	if (_closed_loop_moment_control) {
 		// update the integrated error
 		_integrated_moment_error += sigma_moment *
-									(_sensed_moment - desired_moment) *
+									(_sensed_moment - goal_moment) *
 									getLoopTimestep();
 
 		// compute the feedback term
 		Vector3d moment_feedback_term =
-			sigma_moment * (-_kp_moment * (_sensed_moment - desired_moment) -
+			sigma_moment * (-_kp_moment * (_sensed_moment - goal_moment) -
 							_ki_moment * _integrated_moment_error);
 
 		// saturate the feedback term
@@ -411,22 +411,22 @@ VectorXd MotionForceTask::computeTorques() {
 
 	// motion related terms
 	// compute next state from trajectory generation
-	Vector3d tmp_desired_position = _desired_position;
-	Matrix3d tmp_desired_orientation = _desired_orientation;
-	Vector3d tmp_desired_velocity = _desired_velocity;
-	Vector3d tmp_desired_angular_velocity = _desired_angular_velocity;
-	Vector3d tmp_desired_acceleration = _desired_acceleration;
-	Vector3d tmp_desired_angular_acceleration = _desired_angular_acceleration;
+	Vector3d tmp_desired_position = _goal_position;
+	Matrix3d tmp_desired_orientation = _goal_orientation;
+	Vector3d tmp_desired_linear_velocity = _goal_linear_velocity;
+	Vector3d tmp_desired_angular_velocity = _goal_angular_velocity;
+	Vector3d tmp_desired_acceleration = _goal_linear_acceleration;
+	Vector3d tmp_desired_angular_acceleration = _goal_angular_acceleration;
 
 	if (_use_internal_otg_flag) {
-		_otg->setGoalPositionAndLinearVelocity(_desired_position,
-											   _desired_velocity);
-		_otg->setGoalOrientationAndAngularVelocity(_desired_orientation,
-												   _desired_angular_velocity);
+		_otg->setGoalPositionAndLinearVelocity(_goal_position,
+											   _goal_linear_velocity);
+		_otg->setGoalOrientationAndAngularVelocity(_goal_orientation,
+												   _goal_angular_velocity);
 		_otg->update();
 
 		tmp_desired_position = _otg->getNextPosition();
-		tmp_desired_velocity = _otg->getNextLinearVelocity();
+		tmp_desired_linear_velocity = _otg->getNextLinearVelocity();
 		tmp_desired_acceleration = _otg->getNextLinearAcceleration();
 		tmp_desired_orientation = _otg->getNextOrientation();
 		tmp_desired_angular_velocity = _otg->getNextAngularVelocity();
@@ -441,24 +441,24 @@ VectorXd MotionForceTask::computeTorques() {
 
 	// final contribution
 	if (_use_velocity_saturation_flag) {
-		tmp_desired_velocity =
+		tmp_desired_linear_velocity =
 			-_kp_pos * _kv_pos.inverse() * sigma_position *
 				(_current_position - tmp_desired_position) -
 			_ki_pos * _kv_pos.inverse() * _integrated_position_error;
-		if (tmp_desired_velocity.norm() > _linear_saturation_velocity) {
-			tmp_desired_velocity *=
-				_linear_saturation_velocity / tmp_desired_velocity.norm();
+		if (tmp_desired_linear_velocity.norm() > _linear_saturation_velocity) {
+			tmp_desired_linear_velocity *=
+				_linear_saturation_velocity / tmp_desired_linear_velocity.norm();
 		}
 		position_related_force =
 			sigma_position *
 			(tmp_desired_acceleration -
-			 _kv_pos * (_current_velocity - tmp_desired_velocity));
+			 _kv_pos * (_current_linear_velocity - tmp_desired_linear_velocity));
 	} else {
 		position_related_force =
 			sigma_position *
 			(tmp_desired_acceleration -
 			 _kp_pos * (_current_position - tmp_desired_position) -
-			 _kv_pos * (_current_velocity - tmp_desired_velocity) -
+			 _kv_pos * (_current_linear_velocity - tmp_desired_linear_velocity) -
 			 _ki_pos * _integrated_position_error);
 	}
 
@@ -505,8 +505,8 @@ VectorXd MotionForceTask::computeTorques() {
 	_unit_mass_force = position_orientation_contribution;
 
 	VectorXd feedforward_force_moment = VectorXd::Zero(6);
-	feedforward_force_moment.head(3) = sigma_force * desired_force;
-	feedforward_force_moment.tail(3) = sigma_moment * desired_moment;
+	feedforward_force_moment.head(3) = sigma_force * goal_force;
+	feedforward_force_moment.tail(3) = sigma_moment * goal_moment;
 
 	if (_closed_loop_force_control) {
 		feedforward_force_moment *= _k_ff;
@@ -536,6 +536,9 @@ void MotionForceTask::enableInternalOtgAccelerationLimited(
 	_otg->setMaxAngularVelocity(max_angular_velocity);
 	_otg->setMaxAngularAcceleration(max_angular_acceleration);
 	_otg->disableJerkLimits();
+	if (!_use_internal_otg_flag) {
+		_otg->reInitialize(_current_position, _current_orientation);
+	}
 	_use_internal_otg_flag = true;
 }
 
@@ -548,11 +551,14 @@ void MotionForceTask::enableInternalOtgJerkLimited(
 	_otg->setMaxAngularVelocity(max_angular_velocity);
 	_otg->setMaxAngularAcceleration(max_angular_acceleration);
 	_otg->setMaxJerk(max_linear_jerk, max_angular_jerk);
+	if (!_use_internal_otg_flag) {
+		_otg->reInitialize(_current_position, _current_orientation);
+	}
 	_use_internal_otg_flag = true;
 }
 
 Vector3d MotionForceTask::getPositionError() const {
-	return sigmaPosition() * (_desired_position - _current_position);
+	return sigmaPosition() * (_goal_position - _current_position);
 }
 
 Vector3d MotionForceTask::getOrientationError() const {
@@ -562,8 +568,8 @@ Vector3d MotionForceTask::getOrientationError() const {
 bool MotionForceTask::goalPositionReached(const double tolerance,
 										  const bool verbose) {
 	double position_error =
-		(_desired_position - _current_position).transpose() * sigmaPosition() *
-		(_desired_position - _current_position);
+		(_goal_position - _current_position).transpose() * sigmaPosition() *
+		(_goal_position - _current_position);
 	position_error = sqrt(position_error);
 	bool goal_reached = position_error < tolerance;
 	if (verbose) {
@@ -734,20 +740,20 @@ vector<PIDGains> MotionForceTask::getOriControlGains() const {
 				 aniso_ki_robot_base(2))};
 }
 
-Vector3d MotionForceTask::getDesiredForce() const {
+Vector3d MotionForceTask::getGoalForce() const {
 	Matrix3d rotation = _is_force_motion_parametrization_in_compliant_frame
 							? getConstRobotModel()->rotationInWorld(
 								  _link_name, _compliant_frame.rotation())
 							: Matrix3d::Identity();
-	return rotation * _desired_force;
+	return rotation * _goal_force;
 }
 
-Vector3d MotionForceTask::getDesiredMoment() const {
+Vector3d MotionForceTask::getGoalMoment() const {
 	Matrix3d rotation = _is_force_motion_parametrization_in_compliant_frame
 							? getConstRobotModel()->rotationInWorld(
 								  _link_name, _compliant_frame.rotation())
 							: Matrix3d::Identity();
-	return rotation * _desired_moment;
+	return rotation * _goal_moment;
 }
 
 void MotionForceTask::enableVelocitySaturation(const double linear_vel_sat,
@@ -801,7 +807,7 @@ void MotionForceTask::updateSensedForceAndMoment(
 	_sensed_moment = T_world_compliant_frame.rotation() * _sensed_moment;
 }
 
-void MotionForceTask::parametrizeForceMotionSpaces(
+bool MotionForceTask::parametrizeForceMotionSpaces(
 	const int force_space_dimension,
 	const Vector3d& force_or_motion_single_axis) {
 	if (force_space_dimension < 0 || force_space_dimension > 3) {
@@ -809,6 +815,7 @@ void MotionForceTask::parametrizeForceMotionSpaces(
 			"Force space dimension should be between 0 and 3 in "
 			"MotionForceTask::parametrizeForceMotionSpaces\n");
 	}
+	bool reset = force_space_dimension != _force_space_dimension;
 	_force_space_dimension = force_space_dimension;
 	if (force_space_dimension == 1 || force_space_dimension == 2) {
 		if (force_or_motion_single_axis.norm() < 1e-2) {
@@ -816,12 +823,21 @@ void MotionForceTask::parametrizeForceMotionSpaces(
 				"Force or motion axis should be a non singular vector in "
 				"MotionForceTask::parametrizeForceMotionSpaces\n");
 		}
+		reset = reset || !force_or_motion_single_axis.normalized().isApprox(
+							 _force_or_motion_axis);
 		_force_or_motion_axis = force_or_motion_single_axis.normalized();
 	}
-	resetIntegratorsLinear();
+	if (reset) {
+		_goal_position = _current_position;
+		_goal_linear_velocity.setZero();
+		_goal_linear_acceleration.setZero();
+		_otg->reInitializeLinear(_current_position);
+		resetIntegratorsLinear();
+	}
+	return reset;
 }
 
-void MotionForceTask::parametrizeMomentRotMotionSpaces(
+bool MotionForceTask::parametrizeMomentRotMotionSpaces(
 	const int moment_space_dimension,
 	const Vector3d& moment_or_rot_motion_single_axis) {
 	if (moment_space_dimension < 0 || moment_space_dimension > 3) {
@@ -829,6 +845,7 @@ void MotionForceTask::parametrizeMomentRotMotionSpaces(
 			"Moment space dimension should be between 0 and 3 in "
 			"MotionForceTask::parametrizeMomentRotMotionSpaces\n");
 	}
+	bool reset = moment_space_dimension != _moment_space_dimension;
 	_moment_space_dimension = moment_space_dimension;
 	if (moment_space_dimension == 1 || moment_space_dimension == 2) {
 		if (moment_or_rot_motion_single_axis.norm() < 1e-2) {
@@ -836,10 +853,20 @@ void MotionForceTask::parametrizeMomentRotMotionSpaces(
 				"Moment or rot motion axis should be a non singular vector in "
 				"MotionForceTask::parametrizeMomentRotMotionSpaces\n");
 		}
+		reset =
+			reset || !moment_or_rot_motion_single_axis.normalized().isApprox(
+						 _moment_or_rotmotion_axis);
 		_moment_or_rotmotion_axis =
 			moment_or_rot_motion_single_axis.normalized();
 	}
-	resetIntegratorsAngular();
+	if (reset) {
+		_goal_orientation = _current_orientation;
+		_goal_angular_velocity.setZero();
+		_goal_angular_acceleration.setZero();
+		_otg->reInitializeAngular(_current_orientation);
+		resetIntegratorsAngular();
+	}
+	return reset;
 }
 
 Matrix3d MotionForceTask::sigmaForce() const {

@@ -140,7 +140,7 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 	// no gains setting here, using the default task values
 	const Matrix3d initial_orientation = robot->rotation(link_name);
 	const Vector3d initial_position = robot->position(link_name, pos_in_link);
-	Vector3d desired_position = initial_position;
+	Vector3d goal_position = initial_position;
 	VectorXd initial_q = robot->q();
 
 	// robot controller
@@ -173,9 +173,9 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 		// -------- set task goals in the state machine and compute control
 		// torques
 		if (state == GO_TO_CONTACT) {
-			desired_position(2) -=
+			goal_position(2) -=
 				0.00003;  // go down at 30 cm/s until contact is detected
-			motion_force_task->setDesiredPosition(desired_position);
+			motion_force_task->setGoalPosition(goal_position);
 
 			if (motion_force_task->getSensedForce()(2) <= -1.0) {
 				// switch the local z axis to be force controlled and the local
@@ -189,8 +189,8 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 				motion_force_task->setClosedLoopMomentControl();
 
 				// set the force and moment control set points and gains
-				motion_force_task->setDesiredForce(10.0 * Vector3d::UnitZ());
-				motion_force_task->setDesiredMoment(Vector3d::Zero());
+				motion_force_task->setGoalForce(10.0 * Vector3d::UnitZ());
+				motion_force_task->setGoalMoment(Vector3d::Zero());
 
 				motion_force_task->setForceControlGains(0.7, 5.0, 1.5);
 				motion_force_task->setMomentControlGains(0.7, 4.0, 1.5);
@@ -199,20 +199,17 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 				state = CONTACT_CONTROL;
 			}
 		} else if (state == CONTACT_CONTROL) {
-			// Vector3d local_z =
-			// motion_force_task->getCurrentOrientation().col(2);
-			// motion_force_task->setDesiredForce(10.0*local_z);
 			if (timer.elapsedCycles() % 1000 == 0) {
 				cout << "Current force: "
 					 << motion_force_task->getSensedForce().transpose() << endl;
 				cout << "Current moment: "
 					 << motion_force_task->getSensedMoment().transpose()
 					 << endl;
-				cout << "Desired force: "
-					 << motion_force_task->getDesiredForce().transpose()
+				cout << "Goal force: "
+					 << motion_force_task->getGoalForce().transpose()
 					 << endl;
-				cout << "Desired moment: "
-					 << motion_force_task->getDesiredMoment().transpose()
+				cout << "Goal moment: "
+					 << motion_force_task->getGoalMoment().transpose()
 					 << endl;
 				cout << endl;
 			}

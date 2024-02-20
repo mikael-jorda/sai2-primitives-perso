@@ -120,7 +120,7 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 	auto joint_task = make_shared<Sai2Primitives::JointTask>(robot);
 	// set the gains to get a PD controller with critical damping
 	joint_task->setGains(100, 20);
-	Eigen::VectorXd desired_position = joint_task->getDesiredPosition();
+	Eigen::VectorXd goal_position = joint_task->getGoalPosition();
 	// internal otg is on by default with acceleration limited trajectory
 	// generation with max velocity PI/3 and max acceleration PI
 	// joint_task->enableInternalOtgAccelerationLimited(PI/3, PI);
@@ -144,18 +144,18 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 		joint_task->updateTaskModel(N_prec);
 
 		// -------- set task goals and compute control torques
-		// set the desired position (step every second)
+		// set the goal position (step every second)
 		if (timer.elapsedCycles() % 4000 == 1000) {
-			desired_position(1) -= 0.2;
-			desired_position(2) += 0.4;
-			desired_position(3) -= 0.6;
+			goal_position(1) -= 0.2;
+			goal_position(2) += 0.4;
+			goal_position(3) -= 0.6;
 		}
 		if (timer.elapsedCycles() % 4000 == 3000) {
-			desired_position(1) += 0.2;
-			desired_position(2) -= 0.4;
-			desired_position(3) += 0.6;
+			goal_position(1) += 0.2;
+			goal_position(2) -= 0.4;
+			goal_position(3) += 0.6;
 		}
-		joint_task->setDesiredPosition(desired_position);
+		joint_task->setGoalPosition(goal_position);
 
 		// increase velocity and acceleration limits after 5 seconds
 		if (timer.elapsedCycles() == 5000) {
@@ -184,12 +184,12 @@ void control(shared_ptr<Sai2Model::Sai2Model> robot,
 		// display robot state every half second
 		if (timer.elapsedCycles() % 500 == 0) {
 			cout << timer.elapsedSimTime() << endl;
-			cout << "desired position : "
-				 << joint_task->getDesiredPosition().transpose() << endl;
+			cout << "goal position : "
+				 << joint_task->getGoalPosition().transpose() << endl;
 			cout << "current position : "
 				 << joint_task->getCurrentPosition().transpose() << endl;
 			cout << "position error : "
-				 << (joint_task->getDesiredPosition() -
+				 << (joint_task->getGoalPosition() -
 					 joint_task->getCurrentPosition())
 						.norm()
 				 << endl;
