@@ -132,6 +132,27 @@ void JointTask::setGoalAcceleration(const VectorXd& goal_acceleration) {
 	_goal_acceleration = goal_acceleration;
 }
 
+void JointTask::setGainsUnsafe(const VectorXd& kp, const VectorXd& kv,
+						 const VectorXd& ki) {
+	if (kp.size() == 1 && kv.size() == 1 && ki.size() == 1) {
+		_are_gains_isotropic = true;
+		_kp = kp(0) * MatrixXd::Identity(_task_dof, _task_dof);
+		_kv = kv(0) * MatrixXd::Identity(_task_dof, _task_dof);
+		_ki = ki(0) * MatrixXd::Identity(_task_dof, _task_dof);
+	}
+
+	if (kp.size() != _task_dof || kv.size() != _task_dof ||
+		ki.size() != _task_dof) {
+		throw std::invalid_argument(
+			"size of gain vectors inconsistent with number of task dofs in "
+			"JointTask::setGains\n");
+	}
+	_are_gains_isotropic = false;
+	_kp = kp.asDiagonal();
+	_kv = kv.asDiagonal();
+	_ki = ki.asDiagonal();
+}
+
 void JointTask::setGains(const VectorXd& kp, const VectorXd& kv,
 						 const VectorXd& ki) {
 	if (kp.size() == 1 && kv.size() == 1 && ki.size() == 1) {
@@ -150,11 +171,12 @@ void JointTask::setGains(const VectorXd& kp, const VectorXd& kv,
 			"gains must be positive or zero in "
 			"JointTask::setGains\n");
 	}
-	if (kv.maxCoeff() < 1e-3 && _use_velocity_saturation_flag) {
-		throw std::invalid_argument(
-			"cannot set singular kv if using velocity saturation in "
-			"JointTask::setGains\n");
-	}
+	// TODO: print warning if kv is too small
+	// if (kv.maxCoeff() < 1e-3 && _use_velocity_saturation_flag) {
+	// 	throw std::invalid_argument(
+	// 		"cannot set singular kv if using velocity saturation in "
+	// 		"JointTask::setGains\n");
+	// }
 
 	_are_gains_isotropic = false;
 	_kp = kp.asDiagonal();
@@ -167,11 +189,12 @@ void JointTask::setGains(const double kp, const double kv, const double ki) {
 		throw std::invalid_argument(
 			"gains must be positive or zero in JointTask::setGains\n");
 	}
-	if (kv < 1e-3 && _use_velocity_saturation_flag) {
-		throw std::invalid_argument(
-			"cannot set singular kv if using velocity saturation in "
-			"JointTask::setGains\n");
-	}
+	// TODO: print warning if kv is too small
+	// if (kv < 1e-3 && _use_velocity_saturation_flag) {
+	// 	throw std::invalid_argument(
+	// 		"cannot set singular kv if using velocity saturation in "
+	// 		"JointTask::setGains\n");
+	// }
 
 	_are_gains_isotropic = true;
 	_kp = kp * MatrixXd::Identity(_task_dof, _task_dof);
@@ -301,9 +324,10 @@ VectorXd JointTask::computeTorques() {
 
 	// compute task force (with velocity saturation if asked)
 	if (_use_velocity_saturation_flag) {
+		const MatrixXd kv_inverse = Sai2Model::computePseudoInverse(_kv);
 		_desired_velocity =
-			-_kp * _kv.inverse() * (_current_position - _desired_position) -
-			_ki * _kv.inverse() * _integrated_position_error;
+			-_kp * kv_inverse * (_current_position - _desired_position) -
+			_ki * kv_inverse * _integrated_position_error;
 		for (int i = 0; i < getConstRobotModel()->dof(); i++) {
 			if (_desired_velocity(i) > _saturation_velocity(i)) {
 				_desired_velocity(i) = _saturation_velocity(i);
@@ -379,6 +403,16 @@ void JointTask::enableInternalOtgJerkLimited(const VectorXd& max_velocity,
 	_use_internal_otg_flag = true;
 }
 
+void JointTask::enableVelocitySaturation(const double saturation_velocity) {
+	if (saturation_velocity <= 0) {
+		throw std::invalid_argument(
+			"saturation velocity must be positive in "
+			"JointTask::enableVelocitySaturation\n");
+	}
+	_use_velocity_saturation_flag = true;
+	_saturation_velocity = VectorXd::Constant(_task_dof, saturation_velocity);
+}
+
 void JointTask::enableVelocitySaturation(const VectorXd& saturation_velocity) {
 	if (saturation_velocity.size() == 1) {
 		enableVelocitySaturation(saturation_velocity(0));
@@ -387,6 +421,11 @@ void JointTask::enableVelocitySaturation(const VectorXd& saturation_velocity) {
 	if (saturation_velocity.size() != _task_dof) {
 		throw std::invalid_argument(
 			"saturation velocity vector size not consistent with task dof in "
+			"JointTask::enableVelocitySaturation\n");
+	}
+	if (saturation_velocity.minCoeff() <= 0) {
+		throw std::invalid_argument(
+			"saturation velocity must be positive in "
 			"JointTask::enableVelocitySaturation\n");
 	}
 	_use_velocity_saturation_flag = true;
