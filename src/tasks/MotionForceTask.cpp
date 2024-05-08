@@ -290,25 +290,6 @@ void MotionForceTask::updateTaskModel(const MatrixXd& N_prec) {
 			break;
 		}
 
-		case PARTIAL_DYNAMIC_DECOUPLING: {
-			_Lambda_modified = _Lambda;
-			if (_ori_range > 0) {
-				_Lambda_modified.block(_pos_range, _pos_range, _ori_range,
-									   _ori_range) =
-					MatrixXd::Identity(_ori_range, _ori_range);
-				if (_pos_range > 0) {
-					_Lambda_modified.block(0, _pos_range, _pos_range,
-										   _ori_range) =
-						MatrixXd::Zero(_pos_range, _ori_range);
-					_Lambda_modified.block(_pos_range, 0, _ori_range,
-										   _pos_range) =
-						MatrixXd::Zero(_ori_range, _pos_range);
-				}
-			}
-
-			break;
-		}
-
 		case IMPEDANCE: {
 			_Lambda_modified = MatrixXd::Identity(_pos_range + _ori_range,
 												  _pos_range + _ori_range);
@@ -318,8 +299,8 @@ void MotionForceTask::updateTaskModel(const MatrixXd& N_prec) {
 		case BOUNDED_INERTIA_ESTIMATES: {
 			MatrixXd M_BIE = getConstRobotModel()->M();
 			for (int i = 0; i < getConstRobotModel()->dof(); i++) {
-				if (M_BIE(i, i) < 0.1) {
-					M_BIE(i, i) = 0.1;
+				if (M_BIE(i, i) < BIE_SATURATION_VALUE) {
+					M_BIE(i, i) = BIE_SATURATION_VALUE;
 				}
 			}
 			MatrixXd M_inv_BIE = M_BIE.inverse();
