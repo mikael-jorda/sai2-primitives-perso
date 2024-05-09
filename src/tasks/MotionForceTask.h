@@ -28,6 +28,7 @@
 
 #include "Sai2Model.h"
 #include "TemplateTask.h"
+#include "SingularityHandler.h"
 
 using namespace Eigen;
 using namespace std;
@@ -509,17 +510,6 @@ public:
 	bool goalOrientationReached(const double tolerance,
 								const bool verbose = false);
 
-	/**
-	 * @brief Set the Dynamic Decoupling Type. See the definition of the
-	 * DynamicDecouplingType enum for more details
-	 *
-	 *
-	 * @param type
-	 */
-	void setDynamicDecouplingType(const DynamicDecouplingType type) {
-		_dynamic_decoupling_type = type;
-	}
-
 	// -------- force control related methods --------
 
 	/**
@@ -664,6 +654,76 @@ public:
 		return _partial_task_projection.block<3, 3>(3, 3);
 	}
 
+	// -------- singularity handling methods --------
+
+	/**
+	 * @brief 	Set the Dynamic Decoupling Type. See the definition of the
+	 * DynamicDecouplingType enum for more details
+	 *
+	 * @param type Dynamic decoupling type 
+	 */
+	void setDynamicDecouplingType(const DynamicDecouplingType type) {
+		_singularity_handler->setDynamicDecouplingType(type);
+	}
+
+    /**
+     * @brief Enforces type 1 handling behavior if set to true, otherwise handle 
+     * type 1 or type 2 as usual
+     * 
+     * @param flag true to enforce type 1 handling behavior 
+     */
+	void handleAllSingularitiesAsType1(const bool flag) {
+		_singularity_handler->handleAllSingularitiesAsType1(flag);
+	}
+	
+	/**
+	 * @brief Set the desired posture for type 1 singularity handling  
+	 * 
+	 * @param q_des desired posture 
+	 */
+	void setType1Posture(const VectorXd& q_des) {
+		_singularity_handler->setType1Posture(q_des);
+	}
+
+	/**
+	 * @brief Enables singularity handling 
+	 * 
+	 */
+	void enableSingularityHandling() {
+		_singularity_handler->enableSingularityHandling();
+	}
+
+	/**
+	 * @brief Disables singularity handling 
+	 * 
+	 */
+	void disableSingularityHandling() {
+		_singularity_handler->disableSingularityHandling();
+	}
+
+    /**
+     * @brief Set the singularity bounds for torque blending based on the inverse of the condition number
+     * The linear blending coefficient \alpha is computed as \alpha = (s - _s_min) / (_s_max - _s_min),
+     * and is clamped between 0 and 1.
+     * 
+     * @param s_min lower bound
+     * @param s_max upper bound 
+     */
+	void setSingularityHandlingBounds(const double& s_min, const double& s_max) {
+		_singularity_handler->setSingularityHandlingBounds(s_min, s_max);
+	}
+
+    /**
+     * @brief Set the gains for the partial joint task for the singularity strategy
+     * 
+     * @param kp_type_1 position gain for type 1 strategy
+     * @param kv_type_1 velocity damping gain for type 1 strategy
+     * @param kv_type_2 velocity damping gain for type 2 strategy
+     */
+	void setSingularityHandlingGains(const double& kp_type_1, const double& kv_type_1, const double& kv_type_2) {
+		_singularity_handler->setSingularityHandlingGains(kp_type_1, kv_type_1, kv_type_2);
+	}
+
 private:
 	/**
 	 * @brief Initial setup of the task, called in the constructor to avoid
@@ -794,6 +854,9 @@ private:
 	Matrix<double, 6, 6> _partial_task_projection;
 
 	VectorXd _unit_mass_force;
+
+	// singularity handler
+	std::unique_ptr<SingularityHandler> _singularity_handler;
 };
 
 } /* namespace Sai2Primitives */
